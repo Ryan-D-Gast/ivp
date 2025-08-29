@@ -2,20 +2,6 @@
 
 use crate::Float;
 
-/// Return flags for [`SolOut`].
-///
-/// - `Continue`: proceed with integration as normal.
-/// - `Interrupt`: stop integration and return control to the caller.
-/// - `ModifiedSolution`: the callback changed the solution `y` in-place; the
-///   integrator will re-evaluate derivatives at the modified state before
-///   continuing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ControlFlag {
-    Continue,
-    Interrupt,
-    ModifiedSolution,
-}
-
 /// Callback hook executed after each accepted step.
 ///
 /// `SolOut` is intended for user code that wants to observe (or modify) the
@@ -26,12 +12,12 @@ pub enum ControlFlag {
 /// - `xold`: the previous abscissa (left end of the last accepted step),
 /// - `x`: the new abscissa after the accepted step (xold + h),
 /// - `y`: the integrator's current solution at `x`,
-/// - `cont`: dense-output coefficient table (8 coefficient vectors per state),
+/// - `interpolator`: an object that can interpolate the solution between xold and x,
 /// - `h`: the step size used for the accepted step.
 ///
 /// Typical uses:
 /// - print or log the solution at equidistant output points by using the
-///   `contd5` helper to interpolate inside [xold, x];
+///   `interpolator` to interpolate inside [xold, x];
 /// - detect events; or modify the solution in-place and return
 ///   `ControlFlag::ModifiedSolution` to ask the integrator to re-evaluate
 ///   derivatives at the changed state.
@@ -50,14 +36,13 @@ pub enum ControlFlag {
 ///     dx: f64,
 /// }
 /// impl SolOut<2> for Printer {
-///     fn solout(&mut self, nstep, xold, x, y, cont, h) -> ControlFlag {
+///     fn solout(&mut self, xold, x, y, interpolator) -> ControlFlag {
 ///         if nstep == 1 {
 ///             println!("x = {}, y = {:?}", xold, y);
 ///             self.xout = xold + self.dx;
 ///         }
-///         let mut yi = y.clone();
 ///         while self.xout <= x {
-///             contd5(cont, xold, h, self.xout, &mut yi);
+///             let yi = interpolator.interpolate(self.xout);
 ///             println!("x = {}, y = {:?}", self.xout, yi);
 ///             self.xout += self.dx;
 ///         }
@@ -66,13 +51,31 @@ pub enum ControlFlag {
 /// }
 /// ```
 pub trait SolOut<const N: usize> {
-    fn solout(
+    fn solout<I: Interpolate<N>>(
         &mut self,
-        nstep: usize,
         xold: Float,
         x: Float,
         y: &[Float; N],
-        cont: &[[Float; N]; 5],
-        h: Float,
+        interpolator: &I,
     ) -> ControlFlag;
+}
+
+/// Return flags for [`SolOut`].
+///
+/// - `Continue`: proceed with integration as normal.
+/// - `Interrupt`: stop integration and return control to the caller.
+/// - `ModifiedSolution`: the callback changed the solution `y` in-place; the
+///   integrator will re-evaluate derivatives at the modified state before
+///   continuing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControlFlag {
+    Continue,
+    Interrupt,
+    ModifiedSolution,
+}
+
+/// Trait for interpolating the solution within a step.
+pub trait Interpolate<const N: usize> {
+    /// Interpolate the solution at the given abscissa `xi`.
+    fn interpolate(&self, xi: Float) -> [Float; N];
 }

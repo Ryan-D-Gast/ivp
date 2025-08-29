@@ -23,4 +23,3 @@ use crate::Float;
 pub trait ODE<const N: usize> {
     fn ode(&mut self, x: Float, y: &[Float; N], dydx: &mut [Float; N]);
 }
-

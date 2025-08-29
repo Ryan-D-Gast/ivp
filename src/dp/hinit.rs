@@ -1,12 +1,8 @@
 //! Compute an initial step size guess
 
-use crate::{
-    Float,
-    ode::ODE,
-    tolerance::Tolerance,
-};
+use crate::{Float, ode::ODE, tolerance::Tolerance};
 
-/// Compute an initial step size guess
+/// Compute an initial step size guess for Dormand-Prince methods
 pub fn hinit<const N: usize, F>(
     f: &mut F,
     x: Float,

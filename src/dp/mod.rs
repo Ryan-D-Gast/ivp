@@ -1,9 +1,18 @@
-//! Settings for Dormand–Prince Runge-Kutta methods
+//! Dormand-Prince Runge Kutta methods
 
-use crate::Float;
+mod dop853;
+mod dopri5;
+mod hinit;
+
+use hinit::hinit;
+
+pub use dop853::dop853;
+pub use dopri5::dopri5;
+
+use crate::{Float, status::Status};
 
 #[derive(Clone, Debug)]
-/// Settings for the DOPRI5 integrator
+/// Settings for the Dormand-Prince integrators
 ///
 /// # Settings
 /// - `uround`  — rounding unit. Default ~ 2.3e-16.
@@ -45,7 +54,7 @@ pub struct DPSettings<const N: usize> {
 }
 
 impl<const N: usize> DPSettings<N> {
-    fn dopri5() -> Self {
+    pub fn dopri5() -> Self {
         Self {
             uround: 2.3e-16,
             safety_factor: 0.9,
@@ -56,9 +65,9 @@ impl<const N: usize> DPSettings<N> {
             nmax: 100_000,
             nstiff: 1000,
         }
-    }    
-    
-    fn dop853() -> Self {
+    }
+
+    pub fn dop853() -> Self {
         Self {
             uround: 2.3e-16,
             safety_factor: 0.9,
@@ -70,4 +79,16 @@ impl<const N: usize> DPSettings<N> {
             nstiff: 1000,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct DPResult<const N: usize> {
+    pub x: Float,
+    pub y: [Float; N],
+    pub h: Float,
+    pub status: Status,
+    pub nfcns: usize,
+    pub nstep: usize,
+    pub naccpt: usize,
+    pub nrejct: usize,
 }

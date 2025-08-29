@@ -16,25 +16,15 @@
 //!
 //! Original Fortran implementation and supporting material
 //! - https://www.unige.ch/~hairer/software.html
-//! 
-//! # Contains
-//! - [`dopri5`] - The main function for the DOPRI5 integrator
-//! - [`ODE<N>`] - Trait for defining the ODE system
-//! - [`SolOut<N>`] - Trait for handling solution output
-//! - [`DPSettings`] - Struct for configuring the integrator
-//! - [`DPResult`] - Struct for holding the integration result
-//! - [`contd5`] - Function for dense output interpolation
-//! 
+//!
 
 use crate::{
     Float,
-    solout::{ControlFlag, SolOut},
-    tolerance::Tolerance,
+    dp::{DPResult, DPSettings, hinit},
     ode::ODE,
-    hinit::hinit,
-    settings::DPSettings,
+    solout::{ControlFlag, Interpolate, SolOut},
     status::Status,
-    result::DPResult
+    tolerance::Tolerance,
 };
 
 /// Numerical solution of a system of first order
@@ -89,7 +79,7 @@ use crate::{
 ///     let x0 = 0.0;
 ///     let xend = 2.0;
 ///     let y0 = [2.0f64, 0.0f64];
-///     let settings = DPSettings::default();
+///     let settings = DPSettings::dopri5();
 ///     let mut printer = Printer::new();
 ///     let rtol = 1e-9;
 ///     let atol = 1e-9;
@@ -263,10 +253,12 @@ where
     f.ode(x, &y, &mut k1);
     nfcns += 1;
     if h == 0.0 {
-        h = hinit(f, x, &y, posneg, &k1, &mut k2, &mut y1, iord, hmax, &atol, &rtol);
+        h = hinit(
+            f, x, &y, posneg, &k1, &mut k2, &mut y1, iord, hmax, &atol, &rtol,
+        );
         nfcns += 1;
     }
-    solout.solout(naccpt + 1, xold, x, &y, &cont, h);
+    solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h));
 
     // Main integration loop
     loop {
@@ -316,21 +308,24 @@ where
 
         // Stage 6 (ysti)
         for i in 0..N {
-            y1[i] = y[i] + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
+            y1[i] =
+                y[i] + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
         }
         let xph = x + h;
         f.ode(xph, &y1, &mut k6);
 
         // Final stage
         for i in 0..N {
-            y1[i] = y[i] + h * (A71 * k1[i] + A73 * k3[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
+            y1[i] =
+                y[i] + h * (A71 * k1[i] + A73 * k3[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
         }
         f.ode(xph, &y1, &mut k2);
         nfcns += 6;
 
         // K4 scaled for error estimate
         for i in 0..N {
-            k4[i] = (E1 * k1[i] + E3 * k3[i] + E4 * k4[i] + E5 * k5[i] + E6 * k6[i] + E7 * k2[i]) * h;
+            k4[i] =
+                (E1 * k1[i] + E3 * k3[i] + E4 * k4[i] + E5 * k5[i] + E6 * k6[i] + E7 * k2[i]) * h;
         }
 
         // Error estimation
@@ -361,7 +356,8 @@ where
                 let mut stden = 0.0_f64;
                 for i in 0..N {
                     let d1 = k2[i] - k6[i];
-                    let ysti = y[i] + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
+                    let ysti = y[i]
+                        + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
                     let d2 = y1[i] - ysti;
                     stnum += d1 * d1;
                     stden += d2 * d2;
@@ -393,7 +389,8 @@ where
                 cont[1][i] = ydiff;
                 cont[2][i] = bspl;
                 cont[3][i] = -h * k2[i] + ydiff - bspl;
-                cont[4][i] = h * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
+                cont[4][i] = h
+                    * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
             }
 
             // Update state variables
@@ -404,7 +401,7 @@ where
             xold = x;
             x = xph;
 
-            match solout.solout(naccpt + 1, xold, x, &y, &cont, h) {
+            match solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h)) {
                 ControlFlag::Interrupt => {
                     status = Status::Interrupted;
                     break;
@@ -458,12 +455,33 @@ where
     }
 }
 
-/// Evaluate DOPRI5 dense output polynomial for a single abscissa.
-pub fn contd5<const N: usize>(cont: &[[Float; N]; 5], xold: Float, h: Float, xi: Float, yi: &mut [Float; N]) {
-    let theta = (xi - xold) / h;
-    let theta1 = 1.0 - theta;
-    for i in 0..N {
-        yi[i] = cont[0][i] + theta * (cont[1][i] + theta1 * (cont[2][i] + theta * (cont[3][i] + theta1 * cont[4][i])));
+/// Dense output interpolator for DOPRI5
+struct DenseOutput<'a, const N: usize> {
+    cont: &'a [[Float; N]; 5],
+    xold: &'a Float,
+    h: &'a Float,
+}
+
+impl<'a, const N: usize> DenseOutput<'a, N> {
+    fn new(cont: &'a [[Float; N]; 5], xold: &'a Float, h: &'a Float) -> Self {
+        Self { cont, xold, h }
+    }
+}
+
+impl<'a, const N: usize> Interpolate<N> for DenseOutput<'a, N> {
+    fn interpolate(&self, xi: Float) -> [Float; N] {
+        let mut yi = [0.0; N];
+        let theta = (xi - *self.xold) / *self.h;
+        let theta1 = 1.0 - theta;
+        for i in 0..N {
+            yi[i] = self.cont[0][i]
+                + theta
+                    * (self.cont[1][i]
+                        + theta1
+                            * (self.cont[2][i]
+                                + theta * (self.cont[3][i] + theta1 * self.cont[4][i])));
+        }
+        yi
     }
 }
 

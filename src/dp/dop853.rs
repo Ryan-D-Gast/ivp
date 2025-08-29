@@ -16,25 +16,15 @@
 //!
 //! Original Fortran implementation and supporting material
 //! - https://www.unige.ch/~hairer/software.html
-//! 
-//! # Contains
-//! - [`dop853`] - The main function for the DOP853 integrator
-//! - [`ODE<N>`] - Trait for defining the ODE system
-//! - [`SolOut<N>`] - Trait for handling solution output
-//! - [`DPSettings`] - Struct for configuring the integrator
-//! - [`DPResult`] - Struct for holding the integration result
-//! - [`contd8`] - Function for dense output interpolation
-//! 
+//!
 
 use crate::{
     Float,
-    solout::{ControlFlag, SolOut},
-    tolerance::Tolerance,
+    dp::{DPResult, DPSettings, hinit},
     ode::ODE,
-    hinit::hinit,
-    settings::DPSettings,
+    solout::{ControlFlag, Interpolate, SolOut},
     status::Status,
-    result::DPResult
+    tolerance::Tolerance,
 };
 
 /// Numerical solution of a system of first order
@@ -42,61 +32,6 @@ use crate::{
 /// `y' = f(x, y)`. This is an explicit Runge-Kutta
 /// method of order 8(5,3) due to dormand & prince
 /// (with stepsize control and dense output).
-///
-/// # Summary
-/// - Implement the [`ODE<N>`] trait for your system y' = f(x, y).
-/// - Provide an implementation of [`SolOut<N>`] if you want to receive
-///   callbacks after each accepted step. The callback receives the dense-output
-///   coefficients (`cont`) and the step size `h`, so you can interpolate
-///   inside the step using [`contd8`].
-/// - Settings can be adjusted using the [`DPSettings`] struct.
-/// - Call [`dop853`] to perform the integration; it returns a
-///   [`DPResult`] containing the final solution and statistics.
-///
-/// # Example
-/// ```ignore
-/// use dop853::{dop853, ODE, SolOut, DPSettings, contd8, ControlFlag};
-/// // Van der Pol system
-/// struct VanDerPol { eps: f64 }
-/// impl ODE<2> for VanDerPol {
-///     fn ode(&mut self, _x: f64, y: &[f64;2], dydx: &mut [f64;2]) {
-///         dydx[0] = y[1];
-///         dydx[1] = ((1.0 - y[0].powi(2)) * y[1] - y[0]) / self.eps;
-///     }
-/// }
-///
-/// // Prints evenly spaced points
-/// struct Printer { xout: f64, dx: f64 }
-/// impl Printer { fn new() -> Self { Self { xout: 0.0, dx: 0.1 } } }
-/// impl SolOut<2> for Printer {
-///     fn solout(&mut self, nr: usize, xold: f64, x: f64, y: &[f64;2], cont: &[[f64;2];8], h: f64) -> ControlFlag {
-///         if nr == 1 {
-///             println!("x = {:>5.2}, y = {:?}", xold, y);
-///             self.xout = xold + self.dx;
-///         }
-///         while self.xout <= x {
-///             let mut yi = [0.0f64; 2];
-///             contd8(cont, xold, h, self.xout, &mut yi);
-///             println!("x = {:>5.2}, y = {:?}", self.xout, yi);
-///             self.xout += self.dx;
-///         }
-///         ControlFlag::Continue
-///     }
-/// }
-///
-/// fn main() {
-///     let mut vdp = VanDerPol { eps: 1e-3 };
-///     let x0 = 0.0;
-///     let xend = 2.0;
-///     let y0 = [2.0f64, 0.0f64];
-///     let settings = DPSettings::default();
-///     let mut printer = Printer::new();
-///     let rtol = 1e-9;
-///     let atol = 1e-9;
-///     let res = dop853(&mut vdp, x0, y0, xend, rtol, atol, &mut printer, settings).unwrap();
-///     println!("finished: {:?}", res.status);
-/// }
-/// ```
 pub fn dop853<const N: usize, F, S, R, A>(
     f: &mut F,
     x: Float,
@@ -271,9 +206,7 @@ where
         nfcns += 1;
     }
     xold = x;
-    // Before the first step no dense-output is available; pass `cont` (zeroed)
-    // and the current h so callbacks that ignore cont will still work.
-    solout.solout(naccpt + 1, xold, x, &y, &cont, h);
+    solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h));
 
     // Main integration loop
     loop {
@@ -329,11 +262,7 @@ where
 
         // Stage 7
         for i in 0..N {
-            y1[i] = y[i]
-                + h * (A71 * k[0][i]
-                    + A74 * k[3][i]
-                    + A75 * k[4][i]
-                    + A76 * k[5][i]);
+            y1[i] = y[i] + h * (A71 * k[0][i] + A74 * k[3][i] + A75 * k[4][i] + A76 * k[5][i]);
         }
         f.ode(x + C7 * h, &y1, &mut k[6]);
 
@@ -614,7 +543,7 @@ where
             xold = x;
             x = xph;
 
-            match solout.solout(naccpt + 1, xold, x, &y, &cont, h) {
+            match solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h)) {
                 ControlFlag::Interrupt => {
                     status = Status::Interrupted;
                     break;
@@ -668,26 +597,33 @@ where
     }
 }
 
-/// Evaluate the DOP853 dense-output polynomial for a single abscissa.
-///
-/// The integrator computes a table of dense-output coefficients `cont`
-/// (8 coefficient vectors for every state component). Call `contd8` to
-/// evaluate the interpolated solution y(xi) inside the last accepted
-/// step [xold, xold + h].
-pub fn contd8<const N: usize>(
-    cont: &[[Float; N]; 8],
-    xold: Float,
-    h: Float,
-    xi: Float,
-    yi: &mut [Float; N],
-) {
-    let s = (xi - xold) / h;
-    let s1 = 1.0 - s;
-    for i in 0..N {
-        let conpar = cont[4][i] + s * (cont[5][i] + s1 * (cont[6][i] + s * cont[7][i]));
-        let contd8 =
-            cont[0][i] + s * (cont[1][i] + s1 * (cont[2][i] + s * (cont[3][i] + s1 * conpar)));
-        yi[i] = contd8;
+/// Dense output interpolator for DOP853
+struct DenseOutput<'a, const N: usize> {
+    cont: &'a [[Float; N]; 8],
+    xold: &'a Float,
+    h: &'a Float,
+}
+
+impl<'a, const N: usize> DenseOutput<'a, N> {
+    fn new(cont: &'a [[Float; N]; 8], xold: &'a Float, h: &'a Float) -> Self {
+        Self { cont, xold, h }
+    }
+}
+
+impl<'a, const N: usize> Interpolate<N> for DenseOutput<'a, N> {
+    fn interpolate(&self, xi: Float) -> [Float; N] {
+        let mut yi = [0.0; N];
+        let s = (xi - *self.xold) / *self.h;
+        let s1 = 1.0 - s;
+        for i in 0..N {
+            let conpar = self.cont[4][i]
+                + s * (self.cont[5][i] + s1 * (self.cont[6][i] + s * self.cont[7][i]));
+            let contd8 = self.cont[0][i]
+                + s * (self.cont[1][i]
+                    + s1 * (self.cont[2][i] + s * (self.cont[3][i] + s1 * conpar)));
+            yi[i] = contd8;
+        }
+        yi
     }
 }
 

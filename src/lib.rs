@@ -1,22 +1,22 @@
 //! A library of numerical methods for solving initial value problems (IVPs) for ordinary differential equations (ODEs).
 
-//mod dop853;
-mod dopri5;
-mod solout;
-mod tolerance;
 mod ode;
-mod hinit;
-mod settings;
+mod solout;
 mod status;
-mod result;
+mod tolerance;
 
-//pub use dop853::dop853;
-pub use dopri5::dopri5;
-pub use solout::{SolOut, ControlFlag};
-pub use tolerance::Tolerance;
-pub use result::DPResult;
+pub mod dp;
+
 pub use ode::ODE;
-pub use settings::DPSettings;
+pub use solout::{ControlFlag, Interpolate, SolOut};
+pub use tolerance::Tolerance;
+
+// Prevent selecting two incompatible float precision features at once.
+#[cfg(all(feature = "f32", feature = "f64"))]
+compile_error!("features 'f32' and 'f64' cannot both be enabled; pick exactly one Float precision feature");
 
 /// Change this to f128, f64, f32 as desired.
-type Float = f64;
+#[cfg(feature = "f32")]
+pub type Float = f32;
+#[cfg(feature = "f64")]
+pub type Float = f64;
