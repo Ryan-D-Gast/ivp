@@ -20,7 +20,7 @@
 
 use crate::{
     Float,
-    dp::{DPResult, DPSettings, hinit},
+    dp::{DPResult, DPSettings, hinit, DPInputError},
     ode::ODE,
     solout::{ControlFlag, Interpolate, SolOut},
     status::Status,
@@ -41,7 +41,7 @@ pub fn dopri5<const N: usize, F, S, R, A>(
     atol: A,
     solout: &mut S,
     settings: DPSettings<N>,
-) -> Result<DPResult<N>, Vec<String>>
+) -> Result<DPResult<N>, Vec<DPInputError>>
 where
     F: ODE<N>,
     S: SolOut<N>,
@@ -55,30 +55,30 @@ where
     let nrejct: usize = 0;
 
     // --- Input Validation ---
-    let mut errors = Vec::new();
+    let mut errors: Vec<DPInputError> = Vec::new();
 
     // Maximum Number of Steps
     let nmax = settings.nmax;
     if nmax <= 0 {
-        errors.push("nmax must be positive".to_string());
+        errors.push(DPInputError::NMaxMustBePositive(nmax));
     }
 
     // Parameter for stiffness detection
     let nstiff = settings.nstiff;
     if nstiff <= 0 {
-        errors.push("nstiff must be positive".to_string());
+        errors.push(DPInputError::NStiffMustBePositive(nstiff));
     }
 
     // Rounding Unit
     let uround = settings.uround;
     if uround <= 1e-35 || uround >= 1.0 {
-        errors.push("uround must be in (1e-35, 1.0)".to_string());
+        errors.push(DPInputError::URoundOutOfRange(uround));
     }
 
     // Safety Factor
     let safety_factor = settings.safety_factor;
     if safety_factor >= 1.0 || safety_factor <= 1e-4 {
-        errors.push("safety_factor must be in (1e-4, 1.0)".to_string());
+        errors.push(DPInputError::SafetyFactorOutOfRange(safety_factor));
     }
 
     // Parameters for step size selection
@@ -96,7 +96,7 @@ where
         beta = 0.0;
     }
     if beta > 0.2 {
-        errors.push("beta must be <= 0.2".to_string());
+        errors.push(DPInputError::BetaTooLarge(beta));
     }
 
     // Maximum step size
