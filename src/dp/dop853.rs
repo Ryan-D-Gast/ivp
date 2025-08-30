@@ -169,13 +169,20 @@ where
     S: SolOut<N>,
 {
     // --- Initializations ---
-    let mut k = [[0.0; N]; 10];
     let mut y1 = [0.0; N];
+    let mut k1 = [0.0; N];
+    let mut k2 = [0.0; N];
+    let mut k3 = [0.0; N];
+    let mut k4 = [0.0; N];
+    let mut k5 = [0.0; N];
+    let mut k6 = [0.0; N];
+    let mut k7 = [0.0; N];
+    let mut k8 = [0.0; N];
+    let mut k9 = [0.0; N];
+    let mut k10 = [0.0; N];
     let mut cont = [[0.0; N]; 8];
     let mut nonstiff = 0;
     let mut facold: Float = 1e-4;
-    let mut last = false;
-    let mut reject = false;
     let mut hlamb = 0.0;
     let mut iasti = 0;
     let mut xold;
@@ -188,6 +195,8 @@ where
     let mut sk;
     let mut erri;
     let mut xph;
+    let mut last = false;
+    let mut reject = false;
     let status;
     let expo1 = 1.0 / 8.0 - beta * 0.2;
     let facc1 = 1.0 / fac1;
@@ -196,13 +205,10 @@ where
     let iord = 8;
 
     // Initial preparation
-    f.ode(x, &y, &mut k[0]);
+    f.ode(x, &y, &mut k1);
     nfcns += 1;
     if h == 0.0 {
-        let (kl, kr) = k.split_at_mut(1);
-        let k0 = &mut kl[0];
-        let k1 = &mut kr[0];
-        h = hinit(f, x, &y, posneg, k0, k1, &mut y1, iord, hmax, &atol, &rtol);
+        h = hinit(f, x, &y, posneg, &k1, &mut k2, &mut y1, iord, hmax, &atol, &rtol);
         nfcns += 1;
     }
     xold = x;
@@ -233,139 +239,139 @@ where
         // --- The twelve stages ---
         // Stage 2
         for i in 0..N {
-            y1[i] = y[i] + h * A21 * k[0][i];
+            y1[i] = y[i] + h * A21 * k1[i];
         }
-        f.ode(x + C2 * h, &y1, &mut k[1]);
+        f.ode(x + C2 * h, &y1, &mut k2);
         // Stage 3
         for i in 0..N {
-            y1[i] = y[i] + h * (A31 * k[0][i] + A32 * k[1][i]);
+            y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
         }
-        f.ode(x + C3 * h, &y1, &mut k[2]);
+        f.ode(x + C3 * h, &y1, &mut k3);
 
         // Stage 4
         for i in 0..N {
-            y1[i] = y[i] + h * (A41 * k[0][i] + A43 * k[2][i]);
+            y1[i] = y[i] + h * (A41 * k1[i] + A43 * k3[i]);
         }
-        f.ode(x + C4 * h, &y1, &mut k[3]);
+        f.ode(x + C4 * h, &y1, &mut k4);
 
         // Stage 5
         for i in 0..N {
-            y1[i] = y[i] + h * (A51 * k[0][i] + A53 * k[2][i] + A54 * k[3][i]);
+            y1[i] = y[i] + h * (A51 * k1[i] + A53 * k3[i] + A54 * k4[i]);
         }
-        f.ode(x + C5 * h, &y1, &mut k[4]);
+        f.ode(x + C5 * h, &y1, &mut k5);
 
         // Stage 6
         for i in 0..N {
-            y1[i] = y[i] + h * (A61 * k[0][i] + A64 * k[3][i] + A65 * k[4][i]);
+            y1[i] = y[i] + h * (A61 * k1[i] + A64 * k4[i] + A65 * k5[i]);
         }
-        f.ode(x + C6 * h, &y1, &mut k[5]);
+        f.ode(x + C6 * h, &y1, &mut k6);
 
         // Stage 7
         for i in 0..N {
-            y1[i] = y[i] + h * (A71 * k[0][i] + A74 * k[3][i] + A75 * k[4][i] + A76 * k[5][i]);
+            y1[i] = y[i] + h * (A71 * k1[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
         }
-        f.ode(x + C7 * h, &y1, &mut k[6]);
+        f.ode(x + C7 * h, &y1, &mut k7);
 
         // Stage 8
         for i in 0..N {
             y1[i] = y[i]
-                + h * (A81 * k[0][i]
-                    + A84 * k[3][i]
-                    + A85 * k[4][i]
-                    + A86 * k[5][i]
-                    + A87 * k[6][i]);
+                + h * (A81 * k1[i]
+                    + A84 * k4[i]
+                    + A85 * k5[i]
+                    + A86 * k6[i]
+                    + A87 * k7[i]);
         }
-        f.ode(x + C8 * h, &y1, &mut k[7]);
+        f.ode(x + C8 * h, &y1, &mut k8);
 
         // Stage 9
         for i in 0..N {
             y1[i] = y[i]
-                + h * (A91 * k[0][i]
-                    + A94 * k[3][i]
-                    + A95 * k[4][i]
-                    + A96 * k[5][i]
-                    + A97 * k[6][i]
-                    + A98 * k[7][i]);
+                + h * (A91 * k1[i]
+                    + A94 * k4[i]
+                    + A95 * k5[i]
+                    + A96 * k6[i]
+                    + A97 * k7[i]
+                    + A98 * k8[i]);
         }
-        f.ode(x + C9 * h, &y1, &mut k[8]);
+        f.ode(x + C9 * h, &y1, &mut k9);
 
         // Stage 10
         for i in 0..N {
             y1[i] = y[i]
-                + h * (A101 * k[0][i]
-                    + A104 * k[3][i]
-                    + A105 * k[4][i]
-                    + A106 * k[5][i]
-                    + A107 * k[6][i]
-                    + A108 * k[7][i]
-                    + A109 * k[8][i]);
+                + h * (A101 * k1[i]
+                    + A104 * k4[i]
+                    + A105 * k5[i]
+                    + A106 * k6[i]
+                    + A107 * k7[i]
+                    + A108 * k8[i]
+                    + A109 * k9[i]);
         }
-        f.ode(x + C10 * h, &y1, &mut k[9]);
+        f.ode(x + C10 * h, &y1, &mut k10);
 
         // Stage 11
         for i in 0..N {
             y1[i] = y[i]
-                + h * (A111 * k[0][i]
-                    + A114 * k[3][i]
-                    + A115 * k[4][i]
-                    + A116 * k[5][i]
-                    + A117 * k[6][i]
-                    + A118 * k[7][i]
-                    + A119 * k[8][i]
-                    + A1110 * k[9][i]);
+                + h * (A111 * k1[i]
+                    + A114 * k4[i]
+                    + A115 * k5[i]
+                    + A116 * k6[i]
+                    + A117 * k7[i]
+                    + A118 * k8[i]
+                    + A119 * k9[i]
+                    + A1110 * k10[i]);
         }
-        f.ode(x + C11 * h, &y1, &mut k[1]);
+        f.ode(x + C11 * h, &y1, &mut k2);
 
         // Stage 12
         xph = x + h;
         for i in 0..N {
             y1[i] = y[i]
-                + h * (A121 * k[0][i]
-                    + A124 * k[3][i]
-                    + A125 * k[4][i]
-                    + A126 * k[5][i]
-                    + A127 * k[6][i]
-                    + A128 * k[7][i]
-                    + A129 * k[8][i]
-                    + A1210 * k[9][i]
-                    + A1211 * k[1][i]);
+                + h * (A121 * k1[i]
+                    + A124 * k4[i]
+                    + A125 * k5[i]
+                    + A126 * k6[i]
+                    + A127 * k7[i]
+                    + A128 * k8[i]
+                    + A129 * k9[i]
+                    + A1210 * k10[i]
+                    + A1211 * k2[i]);
         }
-        f.ode(xph, &y1, &mut k[2]);
+        f.ode(xph, &y1, &mut k3);
         nfcns += 11;
 
         for i in 0..N {
-            k[3][i] = B1 * k[0][i]
-                + B6 * k[5][i]
-                + B7 * k[6][i]
-                + B8 * k[7][i]
-                + B9 * k[8][i]
-                + B10 * k[9][i]
-                + B11 * k[1][i]
-                + B12 * k[2][i];
-            k[4][i] = y[i] + h * k[3][i];
+            k4[i] = B1 * k1[i]
+                + B6 * k6[i]
+                + B7 * k7[i]
+                + B8 * k8[i]
+                + B9 * k9[i]
+                + B10 * k10[i]
+                + B11 * k2[i]
+                + B12 * k3[i];
+            k5[i] = y[i] + h * k4[i];
         }
 
         // Error estimation
         err = 0.0;
         err2 = 0.0;
-        for i in 0..N {
-            sk = atol[i] + rtol[i] * y[i].abs().max(k[4][i].abs());
+            for i in 0..N {
+                sk = atol[i] + rtol[i] * y[i].abs().max(k5[i].abs());
 
-            // ERR2 uses K4 - BHH1*K1 - BHH2*K9 - BHH3*K3
-            erri = k[3][i] - BH1 * k[0][i] - BH2 * k[8][i] - BH3 * k[2][i];
-            err2 += (erri / sk).powi(2);
+                // ERR2 uses K4 - BHH1*K1 - BHH2*K9 - BHH3*K3
+                erri = k4[i] - BH1 * k1[i] - BH2 * k9[i] - BH3 * k3[i];
+                err2 += (erri / sk).powi(2);
 
-            // ERRI = er1*K1 + er6*K6 + er7*K7 + er8*K8 + er9*K9 + er10*K10 + er11*K2 + er12*K3
-            erri = ER1 * k[0][i]
-                + ER6 * k[5][i]
-                + ER7 * k[6][i]
-                + ER8 * k[7][i]
-                + ER9 * k[8][i]
-                + ER10 * k[9][i]
-                + ER11 * k[1][i]
-                + ER12 * k[2][i];
-            err += (erri / sk).powi(2);
-        }
+                // ERRI = er1*K1 + er6*K6 + er7*K7 + er8*K8 + er9*K9 + er10*K10 + er11*K2 + er12*K3
+                erri = ER1 * k1[i]
+                    + ER6 * k6[i]
+                    + ER7 * k7[i]
+                    + ER8 * k8[i]
+                    + ER9 * k9[i]
+                    + ER10 * k10[i]
+                    + ER11 * k2[i]
+                    + ER12 * k3[i];
+                err += (erri / sk).powi(2);
+            }
         deno = err + 0.01 * err2;
         if deno <= 0.0 {
             deno = 1.0;
@@ -385,9 +391,7 @@ where
             // Step accepted
             facold = err.max(1.0e-4);
             naccpt += 1;
-            let (kl, kr) = k.split_at_mut(4);
-            // kl[3] is K4, kr[0] is K5
-            f.ode(xph, &kr[0], &mut kl[3]);
+            f.ode(xph, &k5, &mut k4);
             nfcns += 1;
 
             // Stiffness detection
@@ -395,8 +399,8 @@ where
                 let mut stnum: Float = 0.0;
                 let mut stden: Float = 0.0;
                 for i in 0..N {
-                    let d1 = k[3][i] - k[2][i];
-                    let d2 = k[4][i] - y1[i];
+                    let d1 = k4[i] - k3[i];
+                    let d2 = k5[i] - y1[i];
                     stnum += d1 * d1;
                     stden += d2 * d2;
                 }
@@ -419,126 +423,126 @@ where
             }
 
             // Dense output coefficient computation
-            for i in 0..N {
+                for i in 0..N {
                 cont[0][i] = y[i];
-                let ydiff = k[4][i] - y[i];
+                let ydiff = k5[i] - y[i];
                 cont[1][i] = ydiff;
-                let bspl = h * k[0][i] - ydiff;
+                let bspl = h * k1[i] - ydiff;
                 cont[2][i] = bspl;
-                cont[3][i] = ydiff - h * k[3][i] - bspl;
-                cont[4][i] = D41 * k[0][i]
-                    + D46 * k[5][i]
-                    + D47 * k[6][i]
-                    + D48 * k[7][i]
-                    + D49 * k[8][i]
-                    + D410 * k[9][i]
-                    + D411 * k[1][i]
-                    + D412 * k[2][i];
+                cont[3][i] = ydiff - h * k4[i] - bspl;
+                cont[4][i] = D41 * k1[i]
+                    + D46 * k6[i]
+                    + D47 * k7[i]
+                    + D48 * k8[i]
+                    + D49 * k9[i]
+                    + D410 * k10[i]
+                    + D411 * k2[i]
+                    + D412 * k3[i];
 
-                cont[5][i] = D51 * k[0][i]
-                    + D56 * k[5][i]
-                    + D57 * k[6][i]
-                    + D58 * k[7][i]
-                    + D59 * k[8][i]
-                    + D510 * k[9][i]
-                    + D511 * k[1][i]
-                    + D512 * k[2][i];
+                cont[5][i] = D51 * k1[i]
+                    + D56 * k6[i]
+                    + D57 * k7[i]
+                    + D58 * k8[i]
+                    + D59 * k9[i]
+                    + D510 * k10[i]
+                    + D511 * k2[i]
+                    + D512 * k3[i];
 
-                cont[6][i] = D61 * k[0][i]
-                    + D66 * k[5][i]
-                    + D67 * k[6][i]
-                    + D68 * k[7][i]
-                    + D69 * k[8][i]
-                    + D610 * k[9][i]
-                    + D611 * k[1][i]
-                    + D612 * k[2][i];
+                cont[6][i] = D61 * k1[i]
+                    + D66 * k6[i]
+                    + D67 * k7[i]
+                    + D68 * k8[i]
+                    + D69 * k9[i]
+                    + D610 * k10[i]
+                    + D611 * k2[i]
+                    + D612 * k3[i];
 
-                cont[7][i] = D71 * k[0][i]
-                    + D76 * k[5][i]
-                    + D77 * k[6][i]
-                    + D78 * k[7][i]
-                    + D79 * k[8][i]
-                    + D710 * k[9][i]
-                    + D711 * k[1][i]
-                    + D712 * k[2][i];
+                cont[7][i] = D71 * k1[i]
+                    + D76 * k6[i]
+                    + D77 * k7[i]
+                    + D78 * k8[i]
+                    + D79 * k9[i]
+                    + D710 * k10[i]
+                    + D711 * k2[i]
+                    + D712 * k3[i];
             }
 
             // Next three function evaluations
             for i in 0..N {
                 y1[i] = y[i]
-                    + h * (A141 * k[0][i]
-                        + A147 * k[6][i]
-                        + A148 * k[7][i]
-                        + A149 * k[8][i]
-                        + A1410 * k[9][i]
-                        + A1411 * k[1][i]
-                        + A1412 * k[2][i]
-                        + A1413 * k[3][i]);
+                    + h * (A141 * k1[i]
+                        + A147 * k7[i]
+                        + A148 * k8[i]
+                        + A149 * k9[i]
+                        + A1410 * k10[i]
+                        + A1411 * k2[i]
+                        + A1412 * k3[i]
+                        + A1413 * k4[i]);
             }
-            f.ode(x + C14 * h, &y1, &mut k[9]);
+            f.ode(x + C14 * h, &y1, &mut k10);
 
             for i in 0..N {
                 y1[i] = y[i]
-                    + h * (A151 * k[0][i]
-                        + A156 * k[5][i]
-                        + A157 * k[6][i]
-                        + A158 * k[7][i]
-                        + A1511 * k[1][i]
-                        + A1512 * k[2][i]
-                        + A1513 * k[3][i]
-                        + A1514 * k[9][i]);
+                    + h * (A151 * k1[i]
+                        + A156 * k6[i]
+                        + A157 * k7[i]
+                        + A158 * k8[i]
+                        + A1511 * k2[i]
+                        + A1512 * k3[i]
+                        + A1513 * k4[i]
+                        + A1514 * k10[i]);
             }
-            f.ode(x + C15 * h, &y1, &mut k[1]);
+            f.ode(x + C15 * h, &y1, &mut k2);
 
             for i in 0..N {
                 y1[i] = y[i]
-                    + h * (A161 * k[0][i]
-                        + A166 * k[5][i]
-                        + A167 * k[6][i]
-                        + A168 * k[7][i]
-                        + A169 * k[8][i]
-                        + A1613 * k[3][i]
-                        + A1614 * k[9][i]
-                        + A1615 * k[1][i]);
+                    + h * (A161 * k1[i]
+                        + A166 * k6[i]
+                        + A167 * k7[i]
+                        + A168 * k8[i]
+                        + A169 * k9[i]
+                        + A1613 * k4[i]
+                        + A1614 * k10[i]
+                        + A1615 * k2[i]);
             }
-            f.ode(x + C16 * h, &y1, &mut k[2]);
+            f.ode(x + C16 * h, &y1, &mut k3);
             nfcns += 3;
 
             // Final dense output coefficients
             for i in 0..N {
                 cont[4][i] = h
                     * (cont[4][i]
-                        + D413 * k[3][i]
-                        + D414 * k[9][i]
-                        + D415 * k[1][i]
-                        + D416 * k[2][i]);
+                        + D413 * k4[i]
+                        + D414 * k10[i]
+                        + D415 * k2[i]
+                        + D416 * k3[i]);
 
                 cont[5][i] = h
                     * (cont[5][i]
-                        + D513 * k[3][i]
-                        + D514 * k[9][i]
-                        + D515 * k[1][i]
-                        + D516 * k[2][i]);
+                        + D513 * k4[i]
+                        + D514 * k10[i]
+                        + D515 * k2[i]
+                        + D516 * k3[i]);
 
                 cont[6][i] = h
                     * (cont[6][i]
-                        + D613 * k[3][i]
-                        + D614 * k[9][i]
-                        + D615 * k[1][i]
-                        + D616 * k[2][i]);
+                        + D613 * k4[i]
+                        + D614 * k10[i]
+                        + D615 * k2[i]
+                        + D616 * k3[i]);
 
                 cont[7][i] = h
                     * (cont[7][i]
-                        + D713 * k[3][i]
-                        + D714 * k[9][i]
-                        + D715 * k[1][i]
-                        + D716 * k[2][i]);
+                        + D713 * k4[i]
+                        + D714 * k10[i]
+                        + D715 * k2[i]
+                        + D716 * k3[i]);
             }
 
             // Update state variables
             for i in 0..N {
-                k[0][i] = k[3][i];
-                y[i] = k[4][i];
+                k1[i] = k4[i];
+                y[i] = k5[i];
             }
             xold = x;
             x = xph;
@@ -549,7 +553,7 @@ where
                     break;
                 }
                 ControlFlag::ModifiedSolution => {
-                    f.ode(x, &y, &mut k[0]);
+                    f.ode(x, &y, &mut k1);
                     nfcns += 1;
                 }
                 ControlFlag::Continue => {}
