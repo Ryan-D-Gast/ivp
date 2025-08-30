@@ -32,61 +32,6 @@ use crate::{
 /// `y' = f(x, y)`. This is an explicit Runge-Kutta
 /// method of order 8(5,3) due to dormand & prince
 /// (with stepsize control and dense output).
-///
-/// # Summary
-/// - Implement the [`ODE<N>`] trait for your system y' = f(x, y).
-/// - Provide an implementation of [`SolOut<N>`] if you want to receive
-///   callbacks after each accepted step. The callback receives the dense-output
-///   coefficients (`cont`) and the step size `h`, so you can interpolate
-///   inside the step using [`contd5`].
-/// - Settings can be adjusted using the [`DPSettings`] struct.
-/// - Call [`dopri5`] to perform the integration; it returns a
-///   [`DPResult`] containing the final solution and statistics.
-///
-/// # Example
-/// ```ignore
-/// use dopri5::{dopri5, ODE, SolOut, DPSettings, contd5, ControlFlag};
-/// // Van der Pol system
-/// struct VanDerPol { eps: f64 }
-/// impl ODE<2> for VanDerPol {
-///     fn ode(&mut self, _x: f64, y: &[f64;2], dydx: &mut [f64;2]) {
-///         dydx[0] = y[1];
-///         dydx[1] = ((1.0 - y[0].powi(2)) * y[1] - y[0]) / self.eps;
-///     }
-/// }
-///
-/// // Prints evenly spaced points
-/// struct Printer { xout: f64, dx: f64 }
-/// impl Printer { fn new() -> Self { Self { xout: 0.0, dx: 0.1 } } }
-/// impl SolOut<2> for Printer {
-///     fn solout(&mut self, nr: usize, xold: f64, x: f64, y: &[f64;2], cont: &[[f64;2];8], h: f64) -> ControlFlag {
-///         if nr == 1 {
-///             println!("x = {:>5.2}, y = {:?}", xold, y);
-///             self.xout = xold + self.dx;
-///         }
-///         while self.xout <= x {
-///             let mut yi = [0.0f64; 2];
-///             contd5(cont, xold, h, self.xout, &mut yi);
-///             println!("x = {:>5.2}, y = {:?}", self.xout, yi);
-///             self.xout += self.dx;
-///         }
-///         ControlFlag::Continue
-///     }
-/// }
-///
-/// fn main() {
-///     let mut vdp = VanDerPol { eps: 1e-3 };
-///     let x0 = 0.0;
-///     let xend = 2.0;
-///     let y0 = [2.0f64, 0.0f64];
-///     let settings = DPSettings::dopri5();
-///     let mut printer = Printer::new();
-///     let rtol = 1e-9;
-///     let atol = 1e-9;
-///     let res = dopri5(&mut vdp, x0, y0, xend, rtol, atol, &mut printer, settings).unwrap();
-///     println!("finished: {:?}", res.status);
-/// }
-/// ```
 pub fn dopri5<const N: usize, F, S, R, A>(
     f: &mut F,
     x: Float,
