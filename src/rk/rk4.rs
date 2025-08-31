@@ -141,7 +141,6 @@ where
     }
 }
 
-
 // Classical RK4 coefficients
 const C2: Float = 0.5;
 const C3: Float = 0.5;

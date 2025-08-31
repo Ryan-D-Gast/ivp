@@ -179,7 +179,7 @@ where
     let mut k5 = vec![0.0; n];
     let mut k6 = vec![0.0; n];
     let mut y1 = vec![0.0; n];
-    let mut cont = vec![vec![0.0; n]; 5];
+    let mut cont = vec![0.0; n * 5];
     let mut facold: Float = 1e-4;
     let mut last = false;
     let mut reject = false;
@@ -332,11 +332,11 @@ where
                 let yd0 = y[i];
                 let ydiff = y1[i] - yd0;
                 let bspl = h * k1[i] - ydiff;
-                cont[0][i] = yd0;
-                cont[1][i] = ydiff;
-                cont[2][i] = bspl;
-                cont[3][i] = -h * k2[i] + ydiff - bspl;
-                cont[4][i] = h
+                cont[i] = yd0;
+                cont[n + i] = ydiff;
+                cont[2 * n + i] = bspl;
+                cont[3 * n + i] = -h * k2[i] + ydiff - bspl;
+                cont[4 * n + i] = h
                     * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
             }
 
@@ -404,29 +404,30 @@ where
 
 /// Dense output interpolator for DOPRI5
 struct DenseOutput<'a> {
-    cont: &'a Vec<Vec<Float>>,
+    cont: &'a Vec<Float>,
     xold: &'a Float,
     h: &'a Float,
 }
 
 impl<'a> DenseOutput<'a> {
-    fn new(cont: &'a Vec<Vec<Float>>, xold: &'a Float, h: &'a Float) -> Self {
+    fn new(cont: &'a Vec<Float>, xold: &'a Float, h: &'a Float) -> Self {
         Self { cont, xold, h }
     }
 }
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float) -> Vec<Float> {
-        let mut yi = vec![0.0; self.cont[0].len()];
+        let n = self.cont.len() / 5;
+        let mut yi = vec![0.0; n];
         let theta = (xi - *self.xold) / *self.h;
         let theta1 = 1.0 - theta;
-        for i in 0..self.cont[0].len() {
-            yi[i] = self.cont[0][i]
+        for i in 0..n {
+            yi[i] = self.cont[i]
                 + theta
-                    * (self.cont[1][i]
+                    * (self.cont[n + i]
                         + theta1
-                            * (self.cont[2][i]
-                                + theta * (self.cont[3][i] + theta1 * self.cont[4][i])));
+                            * (self.cont[2 * n + i]
+                                + theta * (self.cont[3 * n + i] + theta1 * self.cont[4 * n + i])));
         }
         yi
     }

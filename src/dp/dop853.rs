@@ -183,7 +183,7 @@ where
     let mut k8 = vec![0.0; n];
     let mut k9 = vec![0.0; n];
     let mut k10 = vec![0.0; n];
-    let mut cont = vec![vec![0.0; n]; 8];
+    let mut cont = vec![0.0; n * 8];
     let mut nonstiff = 0;
     let mut facold: Float = 1e-4;
     let mut hlamb = 0.0;
@@ -426,13 +426,13 @@ where
 
             // Dense output coefficient computation
             for i in 0..n {
-                cont[0][i] = y[i];
+                cont[i] = y[i];
                 let ydiff = k5[i] - y[i];
-                cont[1][i] = ydiff;
+                cont[n + i] = ydiff;
                 let bspl = h * k1[i] - ydiff;
-                cont[2][i] = bspl;
-                cont[3][i] = ydiff - h * k4[i] - bspl;
-                cont[4][i] = D41 * k1[i]
+                cont[2 * n + i] = bspl;
+                cont[3 * n + i] = ydiff - h * k4[i] - bspl;
+                cont[4 * n + i] = D41 * k1[i]
                     + D46 * k6[i]
                     + D47 * k7[i]
                     + D48 * k8[i]
@@ -441,7 +441,7 @@ where
                     + D411 * k2[i]
                     + D412 * k3[i];
 
-                cont[5][i] = D51 * k1[i]
+                cont[5 * n + i] = D51 * k1[i]
                     + D56 * k6[i]
                     + D57 * k7[i]
                     + D58 * k8[i]
@@ -450,7 +450,7 @@ where
                     + D511 * k2[i]
                     + D512 * k3[i];
 
-                cont[6][i] = D61 * k1[i]
+                cont[6 * n + i] = D61 * k1[i]
                     + D66 * k6[i]
                     + D67 * k7[i]
                     + D68 * k8[i]
@@ -459,7 +459,7 @@ where
                     + D611 * k2[i]
                     + D612 * k3[i];
 
-                cont[7][i] = D71 * k1[i]
+                cont[7 * n + i] = D71 * k1[i]
                     + D76 * k6[i]
                     + D77 * k7[i]
                     + D78 * k8[i]
@@ -512,29 +512,29 @@ where
 
             // Final dense output coefficients
             for i in 0..n {
-                cont[4][i] = h
-                    * (cont[4][i]
+                cont[4 * n + i] = h
+                    * (cont[4 * n + i]
                         + D413 * k4[i]
                         + D414 * k10[i]
                         + D415 * k2[i]
                         + D416 * k3[i]);
 
-                cont[5][i] = h
-                    * (cont[5][i]
+                cont[5 * n + i] = h
+                    * (cont[5 * n + i]
                         + D513 * k4[i]
                         + D514 * k10[i]
                         + D515 * k2[i]
                         + D516 * k3[i]);
 
-                cont[6][i] = h
-                    * (cont[6][i]
+                cont[6 * n + i] = h
+                    * (cont[6 * n + i]
                         + D613 * k4[i]
                         + D614 * k10[i]
                         + D615 * k2[i]
                         + D616 * k3[i]);
 
-                cont[7][i] = h
-                    * (cont[7][i]
+                cont[7 * n + i] = h
+                    * (cont[7 * n + i]
                         + D713 * k4[i]
                         + D714 * k10[i]
                         + D715 * k2[i]
@@ -605,28 +605,29 @@ where
 
 /// Dense output interpolator for DOP853
 struct DenseOutput<'a> {
-    cont: &'a Vec<Vec<Float>>,
+    cont: &'a Vec<Float>,
     xold: &'a Float,
     h: &'a Float,
 }
 
 impl<'a> DenseOutput<'a> {
-    fn new(cont: &'a Vec<Vec<Float>>, xold: &'a Float, h: &'a Float) -> Self {
+    fn new(cont: &'a Vec<Float>, xold: &'a Float, h: &'a Float) -> Self {
         Self { cont, xold, h }
     }
 }
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float) -> Vec<Float> {
-        let mut yi = vec![0.0; self.cont[0].len()];
+        let n = self.cont.len() / 8;
+        let mut yi = vec![0.0; n];
         let s = (xi - *self.xold) / *self.h;
         let s1 = 1.0 - s;
-        for i in 0..self.cont[0].len() {
-            let conpar = self.cont[4][i]
-                + s * (self.cont[5][i] + s1 * (self.cont[6][i] + s * self.cont[7][i]));
-            let contd8 = self.cont[0][i]
-                + s * (self.cont[1][i]
-                    + s1 * (self.cont[2][i] + s * (self.cont[3][i] + s1 * conpar)));
+        for i in 0..n {
+            let conpar = self.cont[4 * n + i]
+                + s * (self.cont[5 * n + i] + s1 * (self.cont[6 * n + i] + s * self.cont[7 * n + i]));
+            let contd8 = self.cont[i]
+                + s * (self.cont[n + i]
+                    + s1 * (self.cont[2 * n + i] + s * (self.cont[3 * n + i] + s1 * conpar)));
             yi[i] = contd8;
         }
         yi
