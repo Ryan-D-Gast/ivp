@@ -87,7 +87,7 @@ pub struct DPResult {
     pub y: Vec<Float>,
     pub h: Float,
     pub status: Status,
-    pub nfcns: usize,
+    pub nfev: usize,
     pub nstep: usize,
     pub naccpt: usize,
     pub nrejct: usize,

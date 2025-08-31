@@ -92,8 +92,8 @@ fn main() {
         Ok(r) => {
             println!("Finished status: {:?}", r.status);
             println!(
-                "nfcns: {}, nstep: {}, naccpt: {}, nrejct: {}",
-                r.nfcns, r.nstep, r.naccpt, r.nrejct
+                "nfev: {}, nstep: {}, naccpt: {}, nrejct: {}",
+                r.nfev, r.nstep, r.naccpt, r.nrejct
             );
         }
         Err(e) => eprintln!("dop853 failed: {:?}", e),

@@ -5,9 +5,7 @@ use crate::status::Status;
 use crate::error::Error;
 
 /// Classical explicit Runge-Kutta 4 (RK4) fixed-step integrator.
-/// This implementation takes a single fixed step of size `h` from `x` to `x+h`.
-/// It follows the library interface and provides a simple interpolator (cubic)
-/// for the `SolOut` callback.
+/// Provides a dense output via cubic Hermite interpolation.
 pub fn rk4<F, S>(
     f: &F,
     x: Float,
@@ -54,7 +52,7 @@ where
     let mut k3 = vec![0.0; n];
     let mut k4 = vec![0.0; n];
     let mut yt = vec![0.0; n];
-    let mut nfcn = 0;
+    let mut nfev = 0;
     let mut nstep = 0;
     let mut status = Status::Success;
     let mut xold = x;
@@ -96,9 +94,7 @@ where
 
         // Store previous state
         xold = x;
-        for i in 0..n {
-            yt[i] = y[i];
-        }
+        yt.copy_from_slice(&y);
 
         // Update state
         x += h;
@@ -107,7 +103,7 @@ where
         }
         f.ode(x, &y, &mut k1);
 
-        nfcn += 4;
+        nfev += 4;
         nstep += 1;
 
         // Interpolator
@@ -121,7 +117,7 @@ where
             ControlFlag::ModifiedSolution => {
                 // Recompute derivative
                 f.ode(x + h, &y, &mut k1);
-                nfcn += 1;
+                nfev += 1;
             }
             ControlFlag::Continue => {}
         }
@@ -135,7 +131,7 @@ where
         x,
         y: y.to_vec(),
         h,
-        nfcn,
+        nfev,
         nstep,
         status,
     }

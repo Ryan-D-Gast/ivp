@@ -51,7 +51,7 @@ where
     A: Into<Tolerance<'a>>,
 {
     // --- Declarations ---
-    let nfcns: usize = 0;
+    let nfev: usize = 0;
     let nstep: usize = 0;
     let naccpt: usize = 0;
     let nrejct: usize = 0;
@@ -134,7 +134,7 @@ where
         beta,
         fac1,
         fac2,
-        nfcns,
+        nfev,
         nstep,
         naccpt,
         nrejct,
@@ -161,7 +161,7 @@ fn dp5co<F, S>(
     beta: Float,
     fac1: Float,
     fac2: Float,
-    mut nfcns: usize,
+    mut nfev: usize,
     mut nstep: usize,
     mut naccpt: usize,
     mut nrejct: usize,
@@ -199,12 +199,12 @@ where
 
     // Initial call
     f.ode(x, &y, &mut k1);
-    nfcns += 1;
+    nfev += 1;
     if h == 0.0 {
         h = hinit(
             f, x, &y, posneg, &k1, &mut k2, &mut y1, iord, hmax, &atol, &rtol,
         );
-        nfcns += 1;
+        nfev += 1;
     }
     solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h));
 
@@ -268,7 +268,7 @@ where
                 y[i] + h * (A71 * k1[i] + A73 * k3[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
         }
         f.ode(xph, &y1, &mut k2);
-        nfcns += 6;
+        nfev += 6;
 
         // K4 scaled for error estimate
         for i in 0..n {
@@ -355,7 +355,7 @@ where
                 }
                 ControlFlag::ModifiedSolution => {
                     f.ode(x, &y, &mut k1);
-                    nfcns += 1;
+                    nfev += 1;
                 }
                 ControlFlag::Continue => {}
             }
@@ -395,7 +395,7 @@ where
         y: y.to_vec(),
         h,
         status,
-        nfcns,
+        nfev,
         nstep,
         naccpt,
         nrejct,

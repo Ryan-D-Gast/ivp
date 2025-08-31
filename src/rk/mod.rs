@@ -31,18 +31,18 @@ pub struct RKResult {
     pub x: Float,
     pub y: Vec<Float>,
     pub h: Float,
-    pub nfcn: usize,
+    pub nfev: usize,
     pub nstep: usize,
     pub status: Status,
 }
 
 impl RKResult {
-    pub fn new(x: Float, y: &[Float], h: Float, nfcn: usize, nstep: usize, status: Status) -> Self {
+    pub fn new(x: Float, y: &[Float], h: Float, nfev: usize, nstep: usize, status: Status) -> Self {
         Self {
             x,
             y: y.to_vec(),
             h,
-            nfcn,
+            nfev,
             nstep,
             status,
         }

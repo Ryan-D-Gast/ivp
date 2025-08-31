@@ -51,7 +51,7 @@ where
     A: Into<Tolerance<'a>>,
 {
     // --- Declarations ---
-    let nfcns: usize = 0;
+    let nfev: usize = 0;
     let nstep: usize = 0;
     let naccpt: usize = 0;
     let nrejct: usize = 0;
@@ -134,7 +134,7 @@ where
         beta,
         fac1,
         fac2,
-        nfcns,
+        nfev,
         nstep,
         naccpt,
         nrejct,
@@ -161,7 +161,7 @@ fn dp853co<F, S>(
     beta: Float,
     fac1: Float,
     fac2: Float,
-    mut nfcns: usize,
+    mut nfev: usize,
     mut nstep: usize,
     mut naccpt: usize,
     mut nrejct: usize,
@@ -209,10 +209,10 @@ where
 
     // Initial preparation
     f.ode(x, &y, &mut k1);
-    nfcns += 1;
+    nfev += 1;
     if h == 0.0 {
         h = hinit(f, x, &y, posneg, &k1, &mut k2, &mut y1, iord, hmax, &atol, &rtol);
-        nfcns += 1;
+        nfev += 1;
     }
     xold = x;
     solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h));
@@ -340,7 +340,7 @@ where
                     + A1211 * k2[i]);
         }
         f.ode(xph, &y1, &mut k3);
-        nfcns += 11;
+        nfev += 11;
 
         for i in 0..n {
             k4[i] = B1 * k1[i]
@@ -394,7 +394,7 @@ where
             facold = err.max(1.0e-4);
             naccpt += 1;
             f.ode(xph, &k5, &mut k4);
-            nfcns += 1;
+            nfev += 1;
 
             // Stiffness detection
             if (naccpt % nstiff == 0) || (iasti > 0) {
@@ -508,7 +508,7 @@ where
                         + A1615 * k2[i]);
             }
             f.ode(x + C16 * h, &y1, &mut k3);
-            nfcns += 3;
+            nfev += 3;
 
             // Final dense output coefficients
             for i in 0..n {
@@ -556,7 +556,7 @@ where
                 }
                 ControlFlag::ModifiedSolution => {
                     f.ode(x, &y, &mut k1);
-                    nfcns += 1;
+                    nfev += 1;
                 }
                 ControlFlag::Continue => {}
             }
@@ -596,7 +596,7 @@ where
         y,
         h,
         status,
-        nfcns,
+        nfev,
         nstep,
         naccpt,
         nrejct,
