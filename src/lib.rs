@@ -6,6 +6,7 @@ mod status;
 mod tolerance;
 
 pub mod dp;
+pub mod rk;
 
 pub use ode::ODE;
 pub use solout::{ControlFlag, Interpolate, SolOut};

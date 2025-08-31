@@ -376,7 +376,7 @@ where
                 reject = false;
             }
         } else {
-            // step rejected
+            // Step rejected
             hnew = h / facc1.min(fac11 / safety_factor);
             reject = true;
             if naccpt > 1 {
