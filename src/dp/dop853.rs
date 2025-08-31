@@ -34,7 +34,7 @@ use crate::{
 /// `y' = f(x, y)`. This is an explicit Runge-Kutta
 /// method of order 8(5,3) due to dormand & prince
 /// (with stepsize control and dense output).
-pub fn dop853<F, S, R, A>(
+pub fn dop853<'a, F, S, R, A>(
     f: &mut F,
     x: Float,
     y: &[Float],
@@ -47,8 +47,8 @@ pub fn dop853<F, S, R, A>(
 where
     F: ODE,
     S: SolOut,
-    R: Into<Tolerance>,
-    A: Into<Tolerance>,
+    R: Into<Tolerance<'a>>,
+    A: Into<Tolerance<'a>>,
 {
     // --- Declarations ---
     let nfcns: usize = 0;
@@ -617,9 +617,8 @@ impl<'a> DenseOutput<'a> {
 }
 
 impl<'a> Interpolate for DenseOutput<'a> {
-    fn interpolate(&self, xi: Float) -> Vec<Float> {
+    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
         let n = self.cont.len() / 8;
-        let mut yi = vec![0.0; n];
         let s = (xi - *self.xold) / *self.h;
         let s1 = 1.0 - s;
         for i in 0..n {
@@ -630,7 +629,6 @@ impl<'a> Interpolate for DenseOutput<'a> {
                     + s1 * (self.cont[2 * n + i] + s * (self.cont[3 * n + i] + s1 * conpar)));
             yi[i] = contd8;
         }
-        yi
     }
 }
 

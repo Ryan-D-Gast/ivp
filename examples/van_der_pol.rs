@@ -57,7 +57,8 @@ impl SolOut for Printer {
 
         let tol = 1e-12;
         while self.xout <= x + tol {
-            let yi = interpolator.interpolate(self.xout);
+            let mut yi = [0.0; 2];
+            interpolator.interpolate(self.xout, &mut yi);
             println!("x = {:>8.5}, y = {:?}", self.xout, yi);
             self.xout += self.dx;
         }

@@ -34,7 +34,7 @@ use crate::{
 /// `y' = f(x, y)`. This is an explicit Runge-Kutta
 /// method of order 5(4) due to dormand & prince
 /// (with stepsize control and dense output).
-pub fn dopri5<F, S, R, A>(
+pub fn dopri5<'a, F, S, R, A>(
     f: &mut F,
     x: Float,
     y: &[Float],
@@ -47,8 +47,8 @@ pub fn dopri5<F, S, R, A>(
 where
     F: ODE,
     S: SolOut,
-    R: Into<Tolerance>,
-    A: Into<Tolerance>,
+    R: Into<Tolerance<'a>>,
+    A: Into<Tolerance<'a>>,
 {
     // --- Declarations ---
     let nfcns: usize = 0;
@@ -416,9 +416,8 @@ impl<'a> DenseOutput<'a> {
 }
 
 impl<'a> Interpolate for DenseOutput<'a> {
-    fn interpolate(&self, xi: Float) -> Vec<Float> {
+    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
         let n = self.cont.len() / 5;
-        let mut yi = vec![0.0; n];
         let theta = (xi - *self.xold) / *self.h;
         let theta1 = 1.0 - theta;
         for i in 0..n {
@@ -429,7 +428,6 @@ impl<'a> Interpolate for DenseOutput<'a> {
                             * (self.cont[2 * n + i]
                                 + theta * (self.cont[3 * n + i] + theta1 * self.cont[4 * n + i])));
         }
-        yi
     }
 }
 
