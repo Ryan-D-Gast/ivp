@@ -3,26 +3,27 @@
 use crate::{Float, ode::ODE, tolerance::Tolerance};
 
 /// Compute an initial step size guess for Dormand-Prince methods
-pub fn hinit<const N: usize, F>(
+pub fn hinit<F>(
     f: &mut F,
     x: Float,
-    y: &[Float; N],
+    y: &[Float],
     posneg: Float,
-    f0: &[Float; N],
-    f1: &mut [Float; N],
-    y1: &mut [Float; N],
+    f0: &[Float],
+    f1: &mut [Float],
+    y1: &mut [Float],
     iord: usize,
     hmax: Float,
-    atol: &Tolerance<N>,
-    rtol: &Tolerance<N>,
+    atol: &Tolerance,
+    rtol: &Tolerance,
 ) -> Float
 where
-    F: ODE<N>,
+    F: ODE,
 {
+    let n = y.len();
     let mut dnf: Float = 0.0;
     let mut dny: Float = 0.0;
 
-    for i in 0..N {
+    for i in 0..n {
         let sk = atol[i] + rtol[i] * y[i].abs();
         dnf += (f0[i] / sk) * (f0[i] / sk);
         dny += (y[i] / sk) * (y[i] / sk);
@@ -41,7 +42,7 @@ where
     h = h.abs() * posneg.signum();
 
     // Explicit Euler step: y1 = y + h * f0
-    for i in 0..N {
+    for i in 0..n {
         y1[i] = y[i] + h * f0[i];
     }
     // Evaluate f at x+h
@@ -49,7 +50,7 @@ where
 
     // Estimate second derivative
     let mut der2: Float = 0.0;
-    for i in 0..N {
+    for i in 0..n {
         let sk = atol[i] + rtol[i] * y[i].abs();
         let df = (f1[i] - f0[i]) / sk;
         der2 += df * df;

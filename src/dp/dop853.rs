@@ -20,9 +20,11 @@
 
 use crate::{
     Float,
-    dp::{DPResult, DPSettings, hinit, DPInputError},
+    dp::{DPResult, DPSettings, hinit},
+    error::Error,
     ode::ODE,
-    solout::{ControlFlag, Interpolate, SolOut},
+    solout::{ControlFlag, SolOut},
+    interpolate::Interpolate,
     status::Status,
     tolerance::Tolerance,
 };
@@ -32,21 +34,21 @@ use crate::{
 /// `y' = f(x, y)`. This is an explicit Runge-Kutta
 /// method of order 8(5,3) due to dormand & prince
 /// (with stepsize control and dense output).
-pub fn dop853<const N: usize, F, S, R, A>(
+pub fn dop853<F, S, R, A>(
     f: &mut F,
     x: Float,
-    y: [Float; N],
+    y: &[Float],
     xend: Float,
     rtol: R,
     atol: A,
     solout: &mut S,
-    settings: DPSettings<N>,
-) -> Result<DPResult<N>, Vec<DPInputError>>
+    settings: DPSettings,
+) -> Result<DPResult, Vec<Error>>
 where
-    F: ODE<N>,
-    S: SolOut<N>,
-    R: Into<Tolerance<N>>,
-    A: Into<Tolerance<N>>,
+    F: ODE,
+    S: SolOut,
+    R: Into<Tolerance>,
+    A: Into<Tolerance>,
 {
     // --- Declarations ---
     let nfcns: usize = 0;
@@ -55,30 +57,30 @@ where
     let nrejct: usize = 0;
 
     // --- Input Validation ---
-    let mut errors: Vec<DPInputError> = Vec::new();
+    let mut errors: Vec<Error> = Vec::new();
 
     // Maximum Number of Steps
     let nmax = settings.nmax;
     if nmax <= 0 {
-        errors.push(DPInputError::NMaxMustBePositive(nmax));
+        errors.push(Error::NMaxMustBePositive(nmax));
     }
 
     // Parameter for stiffness detection
     let nstiff = settings.nstiff;
     if nstiff <= 0 {
-        errors.push(DPInputError::NStiffMustBePositive(nstiff));
+        errors.push(Error::NStiffMustBePositive(nstiff));
     }
 
     // Rounding Unit
     let uround = settings.uround;
     if uround <= 1e-35 || uround >= 1.0 {
-        errors.push(DPInputError::URoundOutOfRange(uround));
+        errors.push(Error::URoundOutOfRange(uround));
     }
 
     // Safety Factor
     let safety_factor = settings.safety_factor;
     if safety_factor >= 1.0 || safety_factor <= 1e-4 {
-        errors.push(DPInputError::SafetyFactorOutOfRange(safety_factor));
+        errors.push(Error::SafetyFactorOutOfRange(safety_factor));
     }
 
     // Parameters for step size selection
@@ -96,7 +98,7 @@ where
         beta = 0.0;
     }
     if beta > 0.2 {
-        errors.push(DPInputError::BetaTooLarge(beta));
+        errors.push(Error::BetaTooLarge(beta));
     }
 
     // Maximum step size
@@ -115,10 +117,10 @@ where
     // --- Call DOP853 Core Solver ---
     let rtol = rtol.into();
     let atol = atol.into();
-    let result = dp853co::<N, F, S>(
+    let result = dp853co::<F, S>(
         f,
         x,
-        y,
+        y.to_vec(),
         xend,
         hmax,
         h,
@@ -142,15 +144,15 @@ where
 }
 
 /// DOP853 core solver
-fn dp853co<const N: usize, F, S>(
+fn dp853co<F, S>(
     f: &mut F,
     mut x: Float,
-    mut y: [Float; N],
+    mut y: Vec<Float>,
     xend: Float,
     hmax: Float,
     mut h: Float,
-    rtol: Tolerance<N>,
-    atol: Tolerance<N>,
+    rtol: Tolerance,
+    atol: Tolerance,
     solout: &mut S,
     nmax: usize,
     uround: Float,
@@ -163,24 +165,25 @@ fn dp853co<const N: usize, F, S>(
     mut nstep: usize,
     mut naccpt: usize,
     mut nrejct: usize,
-) -> DPResult<N>
+) -> DPResult
 where
-    F: ODE<N>,
-    S: SolOut<N>,
+    F: ODE,
+    S: SolOut,
 {
     // --- Initializations ---
-    let mut y1 = [0.0; N];
-    let mut k1 = [0.0; N];
-    let mut k2 = [0.0; N];
-    let mut k3 = [0.0; N];
-    let mut k4 = [0.0; N];
-    let mut k5 = [0.0; N];
-    let mut k6 = [0.0; N];
-    let mut k7 = [0.0; N];
-    let mut k8 = [0.0; N];
-    let mut k9 = [0.0; N];
-    let mut k10 = [0.0; N];
-    let mut cont = [[0.0; N]; 8];
+    let n = y.len();
+    let mut y1 = vec![0.0; n];
+    let mut k1 = vec![0.0; n];
+    let mut k2 = vec![0.0; n];
+    let mut k3 = vec![0.0; n];
+    let mut k4 = vec![0.0; n];
+    let mut k5 = vec![0.0; n];
+    let mut k6 = vec![0.0; n];
+    let mut k7 = vec![0.0; n];
+    let mut k8 = vec![0.0; n];
+    let mut k9 = vec![0.0; n];
+    let mut k10 = vec![0.0; n];
+    let mut cont = vec![vec![0.0; n]; 8];
     let mut nonstiff = 0;
     let mut facold: Float = 1e-4;
     let mut hlamb = 0.0;
@@ -238,42 +241,42 @@ where
 
         // --- The twelve stages ---
         // Stage 2
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i] + h * A21 * k1[i];
         }
         f.ode(x + C2 * h, &y1, &mut k2);
         // Stage 3
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
         }
         f.ode(x + C3 * h, &y1, &mut k3);
 
         // Stage 4
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i] + h * (A41 * k1[i] + A43 * k3[i]);
         }
         f.ode(x + C4 * h, &y1, &mut k4);
 
         // Stage 5
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i] + h * (A51 * k1[i] + A53 * k3[i] + A54 * k4[i]);
         }
         f.ode(x + C5 * h, &y1, &mut k5);
 
         // Stage 6
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i] + h * (A61 * k1[i] + A64 * k4[i] + A65 * k5[i]);
         }
         f.ode(x + C6 * h, &y1, &mut k6);
 
         // Stage 7
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i] + h * (A71 * k1[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
         }
         f.ode(x + C7 * h, &y1, &mut k7);
 
         // Stage 8
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i]
                 + h * (A81 * k1[i]
                     + A84 * k4[i]
@@ -284,7 +287,7 @@ where
         f.ode(x + C8 * h, &y1, &mut k8);
 
         // Stage 9
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i]
                 + h * (A91 * k1[i]
                     + A94 * k4[i]
@@ -296,7 +299,7 @@ where
         f.ode(x + C9 * h, &y1, &mut k9);
 
         // Stage 10
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i]
                 + h * (A101 * k1[i]
                     + A104 * k4[i]
@@ -309,7 +312,7 @@ where
         f.ode(x + C10 * h, &y1, &mut k10);
 
         // Stage 11
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i]
                 + h * (A111 * k1[i]
                     + A114 * k4[i]
@@ -324,7 +327,7 @@ where
 
         // Stage 12
         xph = x + h;
-        for i in 0..N {
+        for i in 0..n {
             y1[i] = y[i]
                 + h * (A121 * k1[i]
                     + A124 * k4[i]
@@ -339,7 +342,7 @@ where
         f.ode(xph, &y1, &mut k3);
         nfcns += 11;
 
-        for i in 0..N {
+        for i in 0..n {
             k4[i] = B1 * k1[i]
                 + B6 * k6[i]
                 + B7 * k7[i]
@@ -354,30 +357,29 @@ where
         // Error estimation
         err = 0.0;
         err2 = 0.0;
-            for i in 0..N {
-                sk = atol[i] + rtol[i] * y[i].abs().max(k5[i].abs());
+        for i in 0..n {
+            sk = atol[i] + rtol[i] * y[i].abs().max(k5[i].abs());
 
-                // ERR2 uses K4 - BHH1*K1 - BHH2*K9 - BHH3*K3
-                erri = k4[i] - BH1 * k1[i] - BH2 * k9[i] - BH3 * k3[i];
-                err2 += (erri / sk).powi(2);
+            // ERR2 uses K4 - BHH1*K1 - BHH2*K9 - BHH3*K3
+            erri = k4[i] - BH1 * k1[i] - BH2 * k9[i] - BH3 * k3[i];
+            err2 += (erri / sk).powi(2);
 
-                // ERRI = er1*K1 + er6*K6 + er7*K7 + er8*K8 + er9*K9 + er10*K10 + er11*K2 + er12*K3
-                erri = ER1 * k1[i]
-                    + ER6 * k6[i]
-                    + ER7 * k7[i]
-                    + ER8 * k8[i]
-                    + ER9 * k9[i]
-                    + ER10 * k10[i]
-                    + ER11 * k2[i]
-                    + ER12 * k3[i];
-                err += (erri / sk).powi(2);
-            }
+            // ERRI = er1*K1 + er6*K6 + er7*K7 + er8*K8 + er9*K9 + er10*K10 + er11*K2 + er12*K3
+            erri = ER1 * k1[i]
+                + ER6 * k6[i]
+                + ER7 * k7[i]
+                + ER8 * k8[i]
+                + ER9 * k9[i]
+                + ER10 * k10[i]
+                + ER11 * k2[i]
+                + ER12 * k3[i];
+            err += (erri / sk).powi(2);
+        }
         deno = err + 0.01 * err2;
         if deno <= 0.0 {
             deno = 1.0;
         }
-        let n = N as f64;
-        err = h.abs() * err * (1.0 / (n * deno)).sqrt();
+        err = h.abs() * err * (1.0 / (n as f64 * deno)).sqrt();
 
         // Computation of hnew
         fac11 = err.powf(expo1);
@@ -398,7 +400,7 @@ where
             if (naccpt % nstiff == 0) || (iasti > 0) {
                 let mut stnum: Float = 0.0;
                 let mut stden: Float = 0.0;
-                for i in 0..N {
+                for i in 0..n {
                     let d1 = k4[i] - k3[i];
                     let d2 = k5[i] - y1[i];
                     stnum += d1 * d1;
@@ -423,7 +425,7 @@ where
             }
 
             // Dense output coefficient computation
-                for i in 0..N {
+            for i in 0..n {
                 cont[0][i] = y[i];
                 let ydiff = k5[i] - y[i];
                 cont[1][i] = ydiff;
@@ -468,7 +470,7 @@ where
             }
 
             // Next three function evaluations
-            for i in 0..N {
+            for i in 0..n {
                 y1[i] = y[i]
                     + h * (A141 * k1[i]
                         + A147 * k7[i]
@@ -481,7 +483,7 @@ where
             }
             f.ode(x + C14 * h, &y1, &mut k10);
 
-            for i in 0..N {
+            for i in 0..n {
                 y1[i] = y[i]
                     + h * (A151 * k1[i]
                         + A156 * k6[i]
@@ -494,7 +496,7 @@ where
             }
             f.ode(x + C15 * h, &y1, &mut k2);
 
-            for i in 0..N {
+            for i in 0..n {
                 y1[i] = y[i]
                     + h * (A161 * k1[i]
                         + A166 * k6[i]
@@ -509,7 +511,7 @@ where
             nfcns += 3;
 
             // Final dense output coefficients
-            for i in 0..N {
+            for i in 0..n {
                 cont[4][i] = h
                     * (cont[4][i]
                         + D413 * k4[i]
@@ -540,7 +542,7 @@ where
             }
 
             // Update state variables
-            for i in 0..N {
+            for i in 0..n {
                 k1[i] = k4[i];
                 y[i] = k5[i];
             }
@@ -602,24 +604,24 @@ where
 }
 
 /// Dense output interpolator for DOP853
-struct DenseOutput<'a, const N: usize> {
-    cont: &'a [[Float; N]; 8],
+struct DenseOutput<'a> {
+    cont: &'a Vec<Vec<Float>>,
     xold: &'a Float,
     h: &'a Float,
 }
 
-impl<'a, const N: usize> DenseOutput<'a, N> {
-    fn new(cont: &'a [[Float; N]; 8], xold: &'a Float, h: &'a Float) -> Self {
+impl<'a> DenseOutput<'a> {
+    fn new(cont: &'a Vec<Vec<Float>>, xold: &'a Float, h: &'a Float) -> Self {
         Self { cont, xold, h }
     }
 }
 
-impl<'a, const N: usize> Interpolate<N> for DenseOutput<'a, N> {
-    fn interpolate(&self, xi: Float) -> [Float; N] {
-        let mut yi = [0.0; N];
+impl<'a> Interpolate for DenseOutput<'a> {
+    fn interpolate(&self, xi: Float) -> Vec<Float> {
+        let mut yi = vec![0.0; self.cont[0].len()];
         let s = (xi - *self.xold) / *self.h;
         let s1 = 1.0 - s;
-        for i in 0..N {
+        for i in 0..self.cont[0].len() {
             let conpar = self.cont[4][i]
                 + s * (self.cont[5][i] + s1 * (self.cont[6][i] + s * self.cont[7][i]));
             let contd8 = self.cont[0][i]

@@ -16,8 +16,8 @@ struct VanDerPol {
     eps: f64,
 }
 
-impl ODE<2> for VanDerPol {
-    fn ode(&mut self, _x: f64, y: &[f64; 2], dydx: &mut [f64; 2]) {
+impl ODE for VanDerPol {
+    fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = ((1.0 - y[0] * y[0]) * y[1] - y[0]) / self.eps;
     }
@@ -41,12 +41,12 @@ impl Printer {
     }
 }
 
-impl SolOut<2> for Printer {
-    fn solout<I: Interpolate<2>>(
+impl SolOut for Printer {
+    fn solout<I: Interpolate>(
         &mut self,
         xold: f64,
         x: f64,
-        y: &[f64; 2],
+        y: &[f64],
         interpolator: &I,
     ) -> ControlFlag {
         if self.first_call {
@@ -75,17 +75,17 @@ impl SolOut<2> for Printer {
 
 fn main() {
     let mut vdp = VanDerPol { eps: 1e-3 };
-    let x0: f64 = 0.0;
-    let xend: f64 = 2.0;
-    let y0: [f64; 2] = [2.0, 0.0];
+    let x0 = 0.0;
+    let xend = 2.0;
+    let y0 = [2.0, 0.0];
 
-    let settings = DPSettings::<2>::dop853();
+    let settings = DPSettings::dop853();
     let mut printer = Printer::new(0.1, xend);
 
-    let rtol = 1e-9f64;
-    let atol = 1e-9f64;
+    let rtol = 1e-9;
+    let atol = 1e-9;
 
-    let res = dop853(&mut vdp, x0, y0, xend, rtol, atol, &mut printer, settings);
+    let res = dop853(&mut vdp, x0, &y0, xend, rtol, atol, &mut printer, settings);
 
     match res {
         Ok(r) => {

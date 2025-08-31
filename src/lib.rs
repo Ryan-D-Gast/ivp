@@ -4,13 +4,17 @@ mod ode;
 mod solout;
 mod status;
 mod tolerance;
+mod interpolate;
+mod error;
 
 pub mod dp;
 pub mod rk;
 
 pub use ode::ODE;
-pub use solout::{ControlFlag, Interpolate, SolOut};
+pub use interpolate::Interpolate;
+pub use solout::{ControlFlag, SolOut};
 pub use tolerance::Tolerance;
+pub use error::Error;
 
 // Prevent selecting two incompatible float precision features at once.
 #[cfg(all(feature = "f32", feature = "f64"))]

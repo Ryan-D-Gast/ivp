@@ -11,28 +11,6 @@ pub use dopri5::dopri5;
 
 use crate::{Float, status::Status};
 
-/// Validation errors returned by the Dormand-Prince entry points.
-#[derive(Debug, Clone)]
-pub enum DPInputError {
-    NMaxMustBePositive(usize),
-    NStiffMustBePositive(usize),
-    URoundOutOfRange(Float),
-    SafetyFactorOutOfRange(Float),
-    BetaTooLarge(Float),
-}
-
-impl std::fmt::Display for DPInputError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DPInputError::NMaxMustBePositive(v) => write!(f, "nmax must be positive (got {})", v),
-            DPInputError::NStiffMustBePositive(v) => write!(f, "nstiff must be positive (got {})", v),
-            DPInputError::URoundOutOfRange(v) => write!(f, "uround must be in (1e-35, 1.0) (got {})", v),
-            DPInputError::SafetyFactorOutOfRange(v) => write!(f, "safety_factor must be in (1e-4, 1.0) (got {})", v),
-            DPInputError::BetaTooLarge(v) => write!(f, "beta must be <= 0.2 (got {})", v),
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 /// Settings for the Dormand-Prince integrators
 ///
@@ -52,7 +30,7 @@ impl std::fmt::Display for DPInputError {
 ///   `100_000`.
 /// - `nstiff` — controls when the stiffness test is activated; default `1000`.
 ///
-pub struct DPSettings<const N: usize> {
+pub struct DPSettings {
     /// The rounding unit, typically machine epsilon
     pub uround: Float,
     /// safety factor in step-size prediction. Default is 0.9.
@@ -75,7 +53,7 @@ pub struct DPSettings<const N: usize> {
     pub nstiff: usize,
 }
 
-impl<const N: usize> DPSettings<N> {
+impl DPSettings {
     pub fn dopri5() -> Self {
         Self {
             uround: 2.3e-16,
@@ -104,9 +82,9 @@ impl<const N: usize> DPSettings<N> {
 }
 
 #[derive(Debug, Clone)]
-pub struct DPResult<const N: usize> {
+pub struct DPResult {
     pub x: Float,
-    pub y: [Float; N],
+    pub y: Vec<Float>,
     pub h: Float,
     pub status: Status,
     pub nfcns: usize,

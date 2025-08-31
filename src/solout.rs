@@ -1,6 +1,6 @@
 //! User defined callback hook executed after each accepted step.
 
-use crate::Float;
+use crate::{Float, Interpolate};
 
 /// Callback hook executed after each accepted step.
 ///
@@ -35,7 +35,7 @@ use crate::Float;
 ///     xout: f64,
 ///     dx: f64,
 /// }
-/// impl SolOut<2> for Printer {
+/// impl SolOut for Printer {
 ///     fn solout(&mut self, xold, x, y, interpolator) -> ControlFlag {
 ///         if nstep == 1 {
 ///             println!("x = {}, y = {:?}", xold, y);
@@ -50,12 +50,12 @@ use crate::Float;
 ///     }
 /// }
 /// ```
-pub trait SolOut<const N: usize> {
-    fn solout<I: Interpolate<N>>(
+pub trait SolOut {
+    fn solout<I: Interpolate>(
         &mut self,
         xold: Float,
         x: Float,
-        y: &[Float; N],
+        y: &[Float],
         interpolator: &I,
     ) -> ControlFlag;
 }
@@ -74,8 +74,3 @@ pub enum ControlFlag {
     ModifiedSolution,
 }
 
-/// Trait for interpolating the solution within a step.
-pub trait Interpolate<const N: usize> {
-    /// Interpolate the solution at the given abscissa `xi`.
-    fn interpolate(&self, xi: Float) -> [Float; N];
-}

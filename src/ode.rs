@@ -13,13 +13,13 @@ use crate::Float;
 ///
 /// ```ignore
 /// struct VanDerPol { eps: f64 }
-/// impl ODE<2> for VanDerPol {
-///     fn ode(&mut self, x: f64, y: &[f64;2], dydx: &mut [f64;2]) {
+/// impl ODE for VanDerPol {
+///     fn ode(&self, x: f64, y: &[f64; 2], dydx: &mut [f64;2]) {
 ///         dydx[0] = y[1];
 ///         dydx[1] = ((1.0 - y[0]*y[0])*y[1] - y[0]) / self.eps;
 ///     }
 /// }
 /// ```
-pub trait ODE<const N: usize> {
-    fn ode(&mut self, x: Float, y: &[Float; N], dydx: &mut [Float; N]);
+pub trait ODE {
+    fn ode(&self, x: Float, y: &[Float], dydx: &mut [Float]);
 }
