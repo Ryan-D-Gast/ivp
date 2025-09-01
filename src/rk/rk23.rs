@@ -115,7 +115,7 @@ where
 
     // Calculate initial step size if not provided
     if h == 0.0 {
-        h = hinit(f, x, &y, direction, &k1, &mut k2, &mut yt, 3, hmax, &atol, &rtol);
+        h = hinit(f, x, &y, direction, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol);
         nfev += 1;
     }
 
