@@ -29,12 +29,12 @@ where
         return Err(Error::InvalidStepSize(h));
     }
 
-    let result = rk4_core(f, x, y.to_vec(), xend, h, solout, settings.nmax);
+    let result = rk4co(f, x, y.to_vec(), xend, h, solout, settings.nmax);
 
     Ok(result)
 }
 
-fn rk4_core<F, S>(
+fn rk4co<F, S>(
     f: &F,
     mut x: Float,
     mut y: Vec<Float>,

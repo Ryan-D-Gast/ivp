@@ -62,7 +62,7 @@ where
     let rtol = rtol.into();
     let atol = atol.into();
 
-    let result = rk23_core(
+    let result = rk23co(
         f,
         x,
         y.to_vec(),
@@ -82,13 +82,13 @@ where
     Ok(result)
 }
 
-fn rk23_core<'a, F, S>(
+fn rk23co<F, S>(
     f: &F,
     mut x: Float,
     mut y: Vec<Float>,
     xend: Float,
-    rtol: Tolerance<'a>,
-    atol: Tolerance<'a>,
+    rtol: Tolerance,
+    atol: Tolerance,
     solout: &mut S,
     mut h: Float,
     safety_factor: Float,
