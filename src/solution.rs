@@ -5,15 +5,29 @@ use crate::{
     status::Status,
 };
 
+/// The output of a numerical integrator
+/// 
+/// This struct contains the results of the integration process,
+/// including the final values of the independent and dependent
+/// variables, as well as diagnostic information about the
+/// integration process.
 #[derive(Clone, Debug)]
 pub struct Solution {
+    /// The current value of the independent variable
     pub x: Float,
+    /// The current value(s) of the dependent variable
     pub y: Vec<Float>,
+    /// The step size of the next integration step
     pub h: Float,
+    /// The number of function evaluations
     pub nfev: usize,
+    /// The number of steps taken
     pub nstep: usize,
+    /// The number of accepted steps
     pub naccpt: usize,
+    /// The number of rejected steps
     pub nrejct: usize,
+    /// The status of the integration process
     pub status: Status,
 }
 
