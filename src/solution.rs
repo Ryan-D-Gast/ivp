@@ -13,9 +13,9 @@ use crate::{
 /// integration process.
 #[derive(Clone, Debug)]
 pub struct Solution {
-    /// The current value of the independent variable
+    /// The final value of the independent variable
     pub x: Float,
-    /// The current value(s) of the dependent variable
+    /// The final value(s) of the dependent variable(s)
     pub y: Vec<Float>,
     /// The step size of the next integration step
     pub h: Float,
