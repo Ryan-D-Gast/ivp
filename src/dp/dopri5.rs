@@ -388,7 +388,6 @@ where
             last = false;
         }
         h = hnew;
-        continue;
     }
 
     Solution {
