@@ -21,7 +21,8 @@
 use crate::{
     Float,
     hinit::hinit,
-    dp::{DPResult, DPSettings},
+    dp::DPSettings,
+    solution::Solution,
     error::Error,
     ode::ODE,
     solout::{ControlFlag, SolOut},
@@ -44,7 +45,7 @@ pub fn dopri5<'a, F, S, R, A>(
     atol: A,
     solout: &mut S,
     settings: DPSettings,
-) -> Result<DPResult, Vec<Error>>
+) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
@@ -166,7 +167,7 @@ fn dp5co<F, S>(
     mut nstep: usize,
     mut naccpt: usize,
     mut nrejct: usize,
-) -> DPResult
+) -> Solution
 where
     F: ODE,
     S: SolOut,
@@ -390,7 +391,7 @@ where
         continue;
     }
 
-    DPResult {
+    Solution {
         x,
         y: y.to_vec(),
         h,

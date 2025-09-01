@@ -6,7 +6,7 @@ mod dopri5;
 pub use dop853::dop853;
 pub use dopri5::dopri5;
 
-use crate::{Float, status::Status};
+use crate::Float;
 
 #[derive(Clone, Debug)]
 /// Settings for the Dormand-Prince integrators
@@ -76,16 +76,4 @@ impl DPSettings {
             nstiff: 1000,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct DPResult {
-    pub x: Float,
-    pub y: Vec<Float>,
-    pub h: Float,
-    pub status: Status,
-    pub nfev: usize,
-    pub nstep: usize,
-    pub naccpt: usize,
-    pub nrejct: usize,
 }

@@ -3,7 +3,8 @@
 use crate::{
     Float, ODE, SolOut, ControlFlag,
     interpolate::CubicHermite,
-    rk::{RKSettings, RKResult},
+    rk::RKSettings,
+    solution::Solution,
     status::Status,
     error::Error,
 };
@@ -18,7 +19,7 @@ pub fn rk4<F, S>(
     h: Float,
     solout: &mut S,
     settings: RKSettings,
-) -> Result<RKResult, Error>
+) -> Result<Solution, Error>
 where
     F: ODE,
     S: SolOut,
@@ -45,7 +46,7 @@ fn rk4_core<F, S>(
     h: Float,
     solout: &mut S,
     nmax: usize,
-) -> RKResult
+) -> Solution
 where
     F: ODE,
     S: SolOut,
@@ -131,7 +132,7 @@ where
         }
     }
 
-    RKResult {
+    Solution {
         x,
         y: y.to_vec(),
         h,

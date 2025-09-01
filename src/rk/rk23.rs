@@ -2,7 +2,8 @@
 
 use crate::{
     Float, ODE, SolOut, ControlFlag, Tolerance,
-    rk::{RKSettings, RKResult},
+    rk::RKSettings,
+    solution::Solution,
     hinit::hinit,
     status::Status,
     error::Error,
@@ -21,7 +22,7 @@ pub fn rk23<'a, F, S, R, A>(
     atol: A,
     solout: &mut S,
     settings: RKSettings,
-) -> Result<RKResult, Vec<Error>>
+) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
@@ -86,7 +87,7 @@ fn rk23_core<'a, F, S>(
     scale_max: Float,
     nmax: usize,
     hmax: Float,
-) -> RKResult
+) -> Solution
 where
     F: ODE,
     S: SolOut,
@@ -214,7 +215,7 @@ where
         }
     }
 
-    RKResult {
+    Solution {
         x,
         y,
         h,

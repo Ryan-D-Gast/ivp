@@ -14,7 +14,7 @@ use crate::Float;
 /// ```ignore
 /// struct VanDerPol { eps: f64 }
 /// impl ODE for VanDerPol {
-///     fn ode(&self, x: f64, y: &[f64; 2], dydx: &mut [f64;2]) {
+///     fn ode(&self, x: f64, y: &[f64], dydx: &mut [f64]) {
 ///         dydx[0] = y[1];
 ///         dydx[1] = ((1.0 - y[0]*y[0])*y[1] - y[0]) / self.eps;
 ///     }

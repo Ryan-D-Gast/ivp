@@ -7,7 +7,6 @@ pub use rk4::rk4;
 pub use rk23::rk23;
 
 use crate::Float;
-use crate::status::Status;
 
 #[derive(Clone, Debug)]
 pub struct RKSettings {
@@ -30,33 +29,6 @@ impl RKSettings {
             scale_min: 0.2,
             scale_max: 5.0,
             error_exponent: -1.0 / 3.0,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RKResult {
-    pub x: Float,
-    pub y: Vec<Float>,
-    pub h: Float,
-    pub nfev: usize,
-    pub nstep: usize,
-    pub naccpt: usize,
-    pub nrejct: usize,
-    pub status: Status,
-}
-
-impl RKResult {
-    pub fn new(x: Float, y: &[Float], h: Float, nfev: usize, nstep: usize, naccpt: usize, nrejct: usize, status: Status) -> Self {
-        Self {
-            x,
-            y: y.to_vec(),
-            h,
-            nfev,
-            nstep,
-            naccpt,
-            nrejct,
-            status,
         }
     }
 }

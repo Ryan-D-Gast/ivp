@@ -7,11 +7,13 @@ mod tolerance;
 mod interpolate;
 mod error;
 mod hinit;
+mod solution;
 
 pub mod dp;
 pub mod rk;
 
 pub use ode::ODE;
+pub use solution::Solution;
 pub use interpolate::Interpolate;
 pub use solout::{ControlFlag, SolOut};
 pub use tolerance::Tolerance;
