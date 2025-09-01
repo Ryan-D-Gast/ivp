@@ -1,13 +1,8 @@
 //! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
 
 use crate::{
-    Float, ODE, SolOut, ControlFlag, Tolerance,
-    rk::RKSettings,
-    solution::Solution,
-    hinit::hinit,
-    status::Status,
-    error::Error,
-    interpolate::Interpolate,
+    ControlFlag, Float, ODE, SolOut, Tolerance, error::Error, hinit::hinit,
+    interpolate::Interpolate, rk::RKSettings, solution::Solution, status::Status,
 };
 
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
@@ -67,7 +62,22 @@ where
     let rtol = rtol.into();
     let atol = atol.into();
 
-    let result = rk23_core(f, x, y.to_vec(), xend, rtol, atol, solout, h, safety_factor, error_exponent, scale_min, scale_max, nmax, hmax);
+    let result = rk23_core(
+        f,
+        x,
+        y.to_vec(),
+        xend,
+        rtol,
+        atol,
+        solout,
+        h,
+        safety_factor,
+        error_exponent,
+        scale_min,
+        scale_max,
+        nmax,
+        hmax,
+    );
 
     Ok(result)
 }
@@ -116,7 +126,9 @@ where
 
     // Calculate initial step size if not provided
     if h == 0.0 {
-        h = hinit(f, x, &y, direction, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol);
+        h = hinit(
+            f, x, &y, direction, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
+        );
         nfev += 1;
     }
 
@@ -204,14 +216,18 @@ where
             }
 
             // Adjust step size
-            h *= (safety_factor * err.powf(error_exponent)).min(scale_max).max(scale_min);
+            h *= (safety_factor * err.powf(error_exponent))
+                .min(scale_max)
+                .max(scale_min);
             if h > hmax {
                 h = hmax;
             }
         } else {
             // Step rejected
             nrejct += 1;
-            h *= (safety_factor * err.powf(error_exponent)).min(1.0).max(scale_min);
+            h *= (safety_factor * err.powf(error_exponent))
+                .min(1.0)
+                .max(scale_min);
         }
     }
 
@@ -246,7 +262,14 @@ impl<'a> Rk23DenseOutput<'a> {
         q2: &'a [Float],
         q3: &'a [Float],
     ) -> Self {
-        Self { t_old, y_old, q1, q2, q3, h }
+        Self {
+            t_old,
+            y_old,
+            q1,
+            q2,
+            q3,
+            h,
+        }
     }
 }
 

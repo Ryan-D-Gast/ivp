@@ -1,7 +1,7 @@
 //! Example demonstrating the use of RK23 for solving a harmonic oscillator.
 
-use ivp::{Float, ODE, rk::RKSettings, rk::rk23};
 use ivp::{ControlFlag, SolOut};
+use ivp::{Float, ODE, rk::RKSettings, rk::rk23};
 use std::f64::consts::PI;
 
 struct HarmonicOscillator;

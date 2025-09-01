@@ -73,4 +73,3 @@ pub enum ControlFlag {
     Interrupt,
     ModifiedSolution,
 }
-

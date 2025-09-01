@@ -6,10 +6,10 @@
 //! dy/dx = -y
 //!
 //! Initial condition: y(0) = 1.0
-//! 
+//!
 
-use ivp::rk::{rk4, RKSettings};
-use ivp::{Float, ODE, SolOut, ControlFlag, Interpolate};
+use ivp::rk::{RKSettings, rk4};
+use ivp::{ControlFlag, Float, Interpolate, ODE, SolOut};
 
 struct SimpleODE;
 

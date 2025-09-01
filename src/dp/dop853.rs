@@ -20,13 +20,13 @@
 
 use crate::{
     Float,
-    hinit::hinit,
     dp::DPSettings,
-    solution::Solution,
     error::Error,
+    hinit::hinit,
+    interpolate::Interpolate,
     ode::ODE,
     solout::{ControlFlag, SolOut},
-    interpolate::Interpolate,
+    solution::Solution,
     status::Status,
     tolerance::Tolerance,
 };
@@ -212,7 +212,9 @@ where
     f.ode(x, &y, &mut k1);
     nfev += 1;
     if h == 0.0 {
-        h = hinit(f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, hmax, &atol, &rtol);
+        h = hinit(
+            f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, hmax, &atol, &rtol,
+        );
         nfev += 1;
     }
     xold = x;
@@ -278,12 +280,8 @@ where
 
         // Stage 8
         for i in 0..n {
-            y1[i] = y[i]
-                + h * (A81 * k1[i]
-                    + A84 * k4[i]
-                    + A85 * k5[i]
-                    + A86 * k6[i]
-                    + A87 * k7[i]);
+            y1[i] =
+                y[i] + h * (A81 * k1[i] + A84 * k4[i] + A85 * k5[i] + A86 * k6[i] + A87 * k7[i]);
         }
         f.ode(x + C8 * h, &y1, &mut k8);
 
@@ -623,7 +621,8 @@ impl<'a> Interpolate for DenseOutput<'a> {
         let s1 = 1.0 - s;
         for i in 0..n {
             let conpar = self.cont[4 * n + i]
-                + s * (self.cont[5 * n + i] + s1 * (self.cont[6 * n + i] + s * self.cont[7 * n + i]));
+                + s * (self.cont[5 * n + i]
+                    + s1 * (self.cont[6 * n + i] + s * self.cont[7 * n + i]));
             let contd8 = self.cont[i]
                 + s * (self.cont[n + i]
                     + s1 * (self.cont[2 * n + i] + s * (self.cont[3 * n + i] + s1 * conpar)));

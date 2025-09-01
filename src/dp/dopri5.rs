@@ -20,13 +20,13 @@
 
 use crate::{
     Float,
-    hinit::hinit,
     dp::DPSettings,
-    solution::Solution,
     error::Error,
+    hinit::hinit,
+    interpolate::Interpolate,
     ode::ODE,
     solout::{ControlFlag, SolOut},
-    interpolate::Interpolate,
+    solution::Solution,
     status::Status,
     tolerance::Tolerance,
 };

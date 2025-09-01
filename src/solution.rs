@@ -1,12 +1,9 @@
 //! A struct representing the outputted result of a numerical integrator.
 
-use crate::{
-    Float,
-    status::Status,
-};
+use crate::{Float, status::Status};
 
 /// The output of a numerical integrator
-/// 
+///
 /// This struct contains the results of the integration process,
 /// including the final values of the independent and dependent
 /// variables, as well as diagnostic information about the
@@ -32,7 +29,16 @@ pub struct Solution {
 }
 
 impl Solution {
-    pub fn new(x: Float, y: &[Float], h: Float, nfev: usize, nstep: usize, naccpt: usize, nrejct: usize, status: Status) -> Self {
+    pub fn new(
+        x: Float,
+        y: &[Float],
+        h: Float,
+        nfev: usize,
+        nstep: usize,
+        naccpt: usize,
+        nrejct: usize,
+        status: Status,
+    ) -> Self {
         Self {
             x,
             y: y.to_vec(),

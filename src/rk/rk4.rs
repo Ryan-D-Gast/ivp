@@ -1,12 +1,8 @@
 //! Classic explicit Runge-Kutta 4 (RK4) fixed-step integrator.
 
 use crate::{
-    Float, ODE, SolOut, ControlFlag,
-    interpolate::CubicHermite,
-    rk::RKSettings,
-    solution::Solution,
-    status::Status,
-    error::Error,
+    ControlFlag, Float, ODE, SolOut, error::Error, interpolate::CubicHermite, rk::RKSettings,
+    solution::Solution, status::Status,
 };
 
 /// Classical explicit Runge-Kutta 4 (RK4) fixed-step integrator.
