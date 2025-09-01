@@ -14,6 +14,10 @@ pub struct RKSettings {
     pub h0: Option<Float>,
     pub h_max: Option<Float>,
     pub nmax: usize,
+    pub safety_factor: Float,
+    pub error_exponent: Float,
+    pub scale_min: Float,
+    pub scale_max: Float,
 }
 
 impl RKSettings {
@@ -22,6 +26,10 @@ impl RKSettings {
             h0: None,
             h_max: None,
             nmax: 100_000,
+            safety_factor: 0.9,
+            scale_min: 0.2,
+            scale_max: 5.0,
+            error_exponent: -1.0 / 3.0,
         }
     }
 }
@@ -33,17 +41,21 @@ pub struct RKResult {
     pub h: Float,
     pub nfev: usize,
     pub nstep: usize,
+    pub naccpt: usize,
+    pub nrejct: usize,
     pub status: Status,
 }
 
 impl RKResult {
-    pub fn new(x: Float, y: &[Float], h: Float, nfev: usize, nstep: usize, status: Status) -> Self {
+    pub fn new(x: Float, y: &[Float], h: Float, nfev: usize, nstep: usize, naccpt: usize, nrejct: usize, status: Status) -> Self {
         Self {
             x,
             y: y.to_vec(),
             h,
             nfev,
             nstep,
+            naccpt,
+            nrejct,
             status,
         }
     }

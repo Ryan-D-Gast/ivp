@@ -20,7 +20,8 @@
 
 use crate::{
     Float,
-    dp::{DPResult, DPSettings, hinit},
+    hinit::hinit,
+    dp::{DPResult, DPSettings},
     error::Error,
     ode::ODE,
     solout::{ControlFlag, SolOut},
@@ -195,14 +196,13 @@ where
     let facc1 = 1.0 / fac1;
     let facc2 = 1.0 / fac2;
     let posneg = (xend - x).signum();
-    let iord = 5;
 
     // Initial call
     f.ode(x, &y, &mut k1);
     nfev += 1;
     if h == 0.0 {
         h = hinit(
-            f, x, &y, posneg, &k1, &mut k2, &mut y1, iord, hmax, &atol, &rtol,
+            f, x, &y, posneg, &k1, &mut k2, &mut y1, 5, hmax, &atol, &rtol,
         );
         nfev += 1;
     }

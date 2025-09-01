@@ -6,6 +6,7 @@ mod status;
 mod tolerance;
 mod interpolate;
 mod error;
+mod hinit;
 
 pub mod dp;
 pub mod rk;

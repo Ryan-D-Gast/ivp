@@ -91,10 +91,11 @@ fn main() {
     match res {
         Ok(r) => {
             println!("Finished status: {:?}", r.status);
-            println!(
-                "nfev: {}, nstep: {}, naccpt: {}, nrejct: {}",
-                r.nfev, r.nstep, r.naccpt, r.nrejct
-            );
+            println!("Final State: x = {:.5}, y = {:?}", r.x, r.y);
+            println!("Number of function evaluations: {}", r.nfev);
+            println!("Number of steps taken: {}", r.nstep);
+            println!("Number of accepted steps: {}", r.naccpt);
+            println!("Number of rejected steps: {}", r.nrejct);
         }
         Err(e) => eprintln!("dop853 failed: {:?}", e),
     }

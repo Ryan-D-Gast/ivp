@@ -11,6 +11,7 @@ pub enum Error {
     SafetyFactorOutOfRange(Float),
     BetaTooLarge(Float),
     InvalidStepSize(Float),
+    InvalidScaleFactors(Float, Float),
 }
 
 impl std::fmt::Display for Error {
@@ -22,6 +23,7 @@ impl std::fmt::Display for Error {
             Error::URoundOutOfRange(v) => write!(f, "uround must be in (1e-35, 1.0) (got {})", v),
             Error::SafetyFactorOutOfRange(v) => write!(f, "safety_factor must be in (1e-4, 1.0) (got {})", v),
             Error::BetaTooLarge(v) => write!(f, "beta must be <= 0.2 (got {})", v),
+            Error::InvalidScaleFactors(min, max) => write!(f, "scale_min must be > 0 and scale_max > scale_min (got min={}, max={})", min, max),
         }
     }
 }

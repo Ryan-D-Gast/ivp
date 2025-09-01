@@ -4,7 +4,7 @@ use crate::{Float, ode::ODE, tolerance::Tolerance};
 
 /// Compute an initial step size guess for Dormand-Prince methods
 pub fn hinit<F>(
-    f: &mut F,
+    f: &F,
     x: Float,
     y: &[Float],
     posneg: Float,

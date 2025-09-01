@@ -67,8 +67,8 @@ impl SolOut for EvenOutput {
 fn main() {
     let mut ode = HarmonicOscillator;
     let x0 = 0.0;
-    let y0 = vec![1.0, 0.0]; // Initial conditions: y[0] = position, y[1] = velocity
-    let xend = 2.0 * PI; // One full period of the oscillator
+    let y0 = vec![1.0, 0.0];
+    let xend = 2.0 * PI;
     let rtol = 1e-3;
     let atol = 1e-3;
     let mut solout = EvenOutput::new(PI / 10.0, xend);
@@ -76,7 +76,12 @@ fn main() {
 
     match rk23(&mut ode, x0, &y0, xend, rtol, atol, &mut solout, settings) {
         Ok(result) => {
-            println!("Integration successful: x = {:.5}, y = {:?}", result.x, result.y);
+            println!("Final status: {:?}", result.status);
+            println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);
+            println!("Number of function evaluations: {}", result.nfev);
+            println!("Number of steps taken: {}", result.nstep);
+            println!("Number of accepted steps: {}", result.naccpt);
+            println!("Number of rejected steps: {}", result.nrejct);
         }
         Err(err) => {
             eprintln!("Integration failed: {:?}", err);

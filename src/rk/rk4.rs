@@ -1,8 +1,12 @@
-use crate::{Float, ODE, SolOut, ControlFlag};
-use crate::interpolate::CubicHermite;
-use crate::rk::{RKSettings, RKResult};
-use crate::status::Status;
-use crate::error::Error;
+//! Classic explicit Runge-Kutta 4 (RK4) fixed-step integrator.
+
+use crate::{
+    Float, ODE, SolOut, ControlFlag,
+    interpolate::CubicHermite,
+    rk::{RKSettings, RKResult},
+    status::Status,
+    error::Error,
+};
 
 /// Classical explicit Runge-Kutta 4 (RK4) fixed-step integrator.
 /// Provides a dense output via cubic Hermite interpolation.
@@ -133,6 +137,8 @@ where
         h,
         nfev,
         nstep,
+        naccpt: nstep,
+        nrejct: 0,
         status,
     }
 }

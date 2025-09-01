@@ -50,8 +50,12 @@ fn main() {
 
     match rk4(&f, x0, &y0, xend, h, &mut solout, settings) {
         Ok(result) => {
-            println!("Integration successful: x = {:.4}, y = {:?}", result.x, result.y);
-            println!("Function evaluations: {}", result.nfev);
+            println!("Final status: {:?}", result.status);
+            println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);
+            println!("Number of function evaluations: {}", result.nfev);
+            println!("Number of steps taken: {}", result.nstep);
+            println!("Number of accepted steps: {}", result.naccpt);
+            println!("Number of rejected steps: {}", result.nrejct);
         }
         Err(e) => {
             println!("Integration failed: {}", e);

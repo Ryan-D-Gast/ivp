@@ -2,9 +2,6 @@
 
 mod dop853;
 mod dopri5;
-mod hinit;
-
-use hinit::hinit;
 
 pub use dop853::dop853;
 pub use dopri5::dopri5;
