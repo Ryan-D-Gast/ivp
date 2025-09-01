@@ -55,7 +55,7 @@ where
     let error_exponent = settings.error_exponent;
 
     // Maximum step size
-    let hmax = settings.h_max.map(|h| h.abs()).unwrap_or((xend - x).abs());
+    let hmax = settings.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
 
     // Initial step size: when not provided, use 0.0 so the core solver can set it
     let h = settings.h0.unwrap_or(0.0);

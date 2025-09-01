@@ -104,7 +104,7 @@ where
     }
 
     // Maximum step size
-    let hmax = match settings.h_max {
+    let hmax = match settings.hmax {
         Some(h) => h.abs(),
         None => (xend - x).abs(),
     };

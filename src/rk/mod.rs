@@ -11,7 +11,7 @@ use crate::Float;
 #[derive(Clone, Debug)]
 pub struct RKSettings {
     pub h0: Option<Float>,
-    pub h_max: Option<Float>,
+    pub hmax: Option<Float>,
     pub nmax: usize,
     pub safety_factor: Float,
     pub error_exponent: Float,
@@ -23,7 +23,7 @@ impl RKSettings {
     pub fn new() -> Self {
         Self {
             h0: None,
-            h_max: None,
+            hmax: None,
             nmax: 100_000,
             safety_factor: 0.9,
             scale_min: 0.2,

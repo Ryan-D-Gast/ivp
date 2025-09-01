@@ -20,7 +20,7 @@ use crate::Float;
 /// - `beta` — stabilization parameter for step-size control.
 ///   Positive values (<= 0.04) stabilize control; negative inputs are treated
 ///   as zero. Default `0.04`.
-/// - `h_max` — maximal step size; default is `xend - x0`.
+/// - `hmax` — maximal step size; default is `xend - x0`.
 /// - `h0` — initial step size; `None` triggers the
 ///   `hinit` heuristic to compute a starting guess.
 /// - `nmax` — maximal number of allowed steps; default
@@ -40,7 +40,7 @@ pub struct DPSettings {
     /// are not accepted. Default is 0.04.
     pub beta: Float,
     /// Maximal step size. Default is xend - x0.
-    pub h_max: Option<Float>,
+    pub hmax: Option<Float>,
     /// Initial step size. None will result in an initial guess
     /// provided by the [`hinit`] function.
     pub h0: Option<Float>,
@@ -57,7 +57,7 @@ impl DPSettings {
             safety_factor: 0.9,
             fac: (0.2, 10.0),
             beta: 0.04,
-            h_max: None,
+            hmax: None,
             h0: None,
             nmax: 100_000,
             nstiff: 1000,
@@ -70,7 +70,7 @@ impl DPSettings {
             safety_factor: 0.9,
             fac: (0.3333333333333333, 6.0),
             beta: 0.0,
-            h_max: None,
+            hmax: None,
             h0: None,
             nmax: 100_000,
             nstiff: 1000,
