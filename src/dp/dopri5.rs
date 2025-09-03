@@ -30,11 +30,8 @@ use crate::{
     status::Status,
 };
 
-/// Numerical solution of a system of first order
-/// ordinary differential equations in the form
-/// `y' = f(x, y)`. This is an explicit Runge-Kutta
-/// method of order 5(4) due to dormand & prince
-/// (with stepsize control and dense output).
+/// Explicit Runge-Kutta method of order 5(4) due to 
+/// dormand & prince (with stepsize control and dense output).
 pub fn dopri5<'a, F, S>(
     f: &F,
     mut x: Float,
