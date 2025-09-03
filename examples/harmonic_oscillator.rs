@@ -1,7 +1,7 @@
 //! Example demonstrating the use of RK23 for solving a harmonic oscillator.
 
 use ivp::{ControlFlag, SolOut};
-use ivp::{Float, ODE, Settings, rk::rk23};
+use ivp::{Float, ODE, Args, rk::rk23};
 use std::f64::consts::PI;
 
 struct HarmonicOscillator;
@@ -65,17 +65,17 @@ impl SolOut for EvenOutput {
 }
 
 fn main() {
-    let mut ode = HarmonicOscillator;
+    let harmonic_oscillator = HarmonicOscillator;
     let x0 = 0.0;
-    let y0 = vec![1.0, 0.0];
+    let y0 = [1.0, 0.0];
     let xend = 2.0 * PI;
-    let mut solout = EvenOutput::new(PI / 10.0, xend);
-    let settings = Settings::builder()
+    let args = Args::builder()
         .rtol(1e-3)
         .atol(1e-3)
+        .solout(EvenOutput::new(PI / 10.0, xend))
         .build();
 
-    match rk23(&mut ode, x0, &y0, xend, &mut solout, settings) {
+    match rk23(&harmonic_oscillator, x0, xend, &y0, args) {
         Ok(result) => {
             println!("Final status: {:?}", result.status);
             println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);

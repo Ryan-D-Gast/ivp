@@ -24,11 +24,10 @@ use crate::{
     hinit::hinit,
     interpolate::Interpolate,
     ode::ODE,
-    settings::Settings,
+    args::Args,
     solout::{ControlFlag, SolOut},
     solution::Solution,
     status::Status,
-    tolerance::Tolerance,
 };
 
 /// Numerical solution of a system of first order
@@ -37,62 +36,58 @@ use crate::{
 /// method of order 5(4) due to dormand & prince
 /// (with stepsize control and dense output).
 pub fn dopri5<'a, F, S>(
-    f: &mut F,
-    x: Float,
-    y: &[Float],
+    f: &F,
+    mut x: Float,
     xend: Float,
-    solout: &mut S,
-    settings: Settings<'a>,
+    y: &[Float],
+    args: Args<'a, S>,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
 {
-    // --- Declarations ---
-    let nfev: usize = 0;
-    let nstep: usize = 0;
-    let naccpt: usize = 0;
-    let nrejct: usize = 0;
-
     // --- Input Validation ---
     let mut errors: Vec<Error> = Vec::new();
 
+    // Callback function
+    let mut solout = args.solout;
+
     // Maximum Number of Steps
-    let nmax = settings.nmax;
+    let nmax = args.nmax;
     if nmax <= 0 {
         errors.push(Error::NMaxMustBePositive(nmax));
     }
 
     // Parameter for stiffness detection
-    let nstiff = settings.nstiff;
+    let nstiff = args.nstiff;
     if nstiff <= 0 {
         errors.push(Error::NStiffMustBePositive(nstiff));
     }
 
     // Rounding Unit
-    let uround = settings.uround;
+    let uround = args.uround;
     if uround <= 1e-35 || uround >= 1.0 {
         errors.push(Error::URoundOutOfRange(uround));
     }
 
     // Safety Factor
-    let safety_factor = settings.safety_factor;
+    let safety_factor = args.safety_factor;
     if safety_factor >= 1.0 || safety_factor <= 1e-4 {
         errors.push(Error::SafetyFactorOutOfRange(safety_factor));
     }
 
     // Parameters for step size selection
-    let fac1 = match settings.scale_min {
+    let fac1 = match args.scale_min {
         Some(f) => f,
         None => 0.2,
     };
-    let fac2 = match settings.scale_max {
+    let fac2 = match args.scale_max {
         Some(f) => f,
         None => 10.0,
     };
 
     // Beta for step control stabilization
-    let beta = match settings.beta {
+    let beta = match args.beta {
         Some(f) => f,
         None => 0.04,
     };
@@ -101,76 +96,18 @@ where
     }
 
     // Maximum step size
-    let hmax = match settings.hmax {
+    let hmax = match args.hmax {
         Some(h) => h.abs(),
         None => (xend - x).abs(),
     };
-
-    // Initial step size: when not provided, use 0.0 so the core solver calls hinit
-    let h = settings.h0.unwrap_or(0.0);
 
     if !errors.is_empty() {
         return Err(errors);
     }
 
-    // --- Call DOPRI5 Core Solver ---
-    let rtol = settings.rtol.into();
-    let atol = settings.atol.into();
-    let result = dp5co::<F, S>(
-        f,
-        x,
-        y.to_vec(),
-        xend,
-        hmax,
-        h,
-        rtol,
-        atol,
-        solout,
-        nmax,
-        uround,
-        nstiff,
-        safety_factor,
-        beta,
-        fac1,
-        fac2,
-        nfev,
-        nstep,
-        naccpt,
-        nrejct,
-    );
-
-    Ok(result)
-}
-
-/// DOPRI5 core solver
-fn dp5co<F, S>(
-    f: &mut F,
-    mut x: Float,
-    mut y: Vec<Float>,
-    xend: Float,
-    hmax: Float,
-    mut h: Float,
-    rtol: Tolerance,
-    atol: Tolerance,
-    solout: &mut S,
-    nmax: usize,
-    uround: Float,
-    nstiff: usize,
-    safety_factor: Float,
-    beta: Float,
-    fac1: Float,
-    fac2: Float,
-    mut nfev: usize,
-    mut nstep: usize,
-    mut naccpt: usize,
-    mut nrejct: usize,
-) -> Solution
-where
-    F: ODE,
-    S: SolOut,
-{
-    // --- Initializations ---
+    // --- Declarations ---
     let n = y.len();
+    let mut y = y.to_vec();
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
@@ -185,28 +122,39 @@ where
     let mut nonsti = 0;
     let mut hlamb = 0.0;
     let mut iasti = 0;
-    let mut xold = x;
     let mut fac11;
     let mut fac;
     let mut hnew;
+    let mut nfev: usize = 0;
+    let mut nstep: usize = 0;
+    let mut naccpt: usize = 0;
+    let mut nrejct: usize = 0;
     let status;
     let expo1 = 0.2 - beta * 0.75;
     let facc1 = 1.0 / fac1;
     let facc2 = 1.0 / fac2;
     let posneg = (xend - x).signum();
+    let rtol = args.rtol;
+    let atol = args.atol;
 
-    // Initial call
+    // --- Initializations ---
     f.ode(x, &y, &mut k1);
     nfev += 1;
-    if h == 0.0 {
-        h = hinit(
-            f, x, &y, posneg, &k1, &mut k2, &mut y1, 5, hmax, &atol, &rtol,
-        );
-        nfev += 1;
+    let mut h = match args.h0 {
+        Some(h0) => h0,
+        None => {
+            nfev += 1;
+            hinit(
+                f, x, &y, posneg, &k1, &mut k2, &mut y1, 5, hmax, &atol, &rtol,
+            )
+        }
+    };
+    if let Some(s) = solout.as_mut() {
+        let interp = DenseOutput::new(&cont, &x, &h);
+        s.solout(x, x, &y, &interp);
     }
-    solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h));
 
-    // Main integration loop
+    // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
         if nstep > nmax {
@@ -325,17 +273,38 @@ where
                 }
             }
 
-            // Dense output coefficient computation
-            for i in 0..n {
-                let yd0 = y[i];
-                let ydiff = y1[i] - yd0;
-                let bspl = h * k1[i] - ydiff;
-                cont[i] = yd0;
-                cont[n + i] = ydiff;
-                cont[2 * n + i] = bspl;
-                cont[3 * n + i] = -h * k2[i] + ydiff - bspl;
-                cont[4 * n + i] = h
-                    * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
+            // Optional callback function
+            match solout.as_mut().map_or(ControlFlag::Continue,|s| {
+                // Dense output coefficient computation
+                for i in 0..n {
+                    let yd0 = y[i];
+                    let ydiff = y1[i] - yd0;
+                    let bspl = h * k1[i] - ydiff;
+                    cont[i] = yd0;
+                    cont[n + i] = ydiff;
+                    cont[2 * n + i] = bspl;
+                    cont[3 * n + i] = -h * k2[i] + ydiff - bspl;
+                    cont[4 * n + i] = h
+                        * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
+                }
+
+                let interp = DenseOutput::new(&cont, &x, &h);
+                s.solout(x, xph, &y1, &interp)
+            }) {
+                ControlFlag::Interrupt => {
+                    status = Status::Interrupted;
+                    for i in 0..n {
+                        k1[i] = k4[i];
+                        y[i] = k5[i];
+                    }
+                    x = xph;
+                    break;
+                }
+                ControlFlag::ModifiedSolution => {
+                    f.ode(xph, &y1, &mut k2);
+                    nfev += 1;
+                }
+                ControlFlag::Continue => {}
             }
 
             // Update state variables
@@ -343,20 +312,7 @@ where
                 k1[i] = k2[i];
                 y[i] = y1[i];
             }
-            xold = x;
             x = xph;
-
-            match solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h)) {
-                ControlFlag::Interrupt => {
-                    status = Status::Interrupted;
-                    break;
-                }
-                ControlFlag::ModifiedSolution => {
-                    f.ode(x, &y, &mut k1);
-                    nfev += 1;
-                }
-                ControlFlag::Continue => {}
-            }
 
             // Normal exit
             if last {
@@ -387,7 +343,7 @@ where
         h = hnew;
     }
 
-    Solution {
+    Ok(Solution {
         x,
         y: y.to_vec(),
         h,
@@ -396,7 +352,7 @@ where
         nstep,
         naccpt,
         nrejct,
-    }
+    })
 }
 
 /// Dense output interpolator for DOPRI5

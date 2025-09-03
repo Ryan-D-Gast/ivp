@@ -1,14 +1,16 @@
-//! Settings for numerical integrators
+//! Args for numerical integrators
 
 use std::marker::PhantomData;
 
 use bon::Builder;
 
-use crate::{Float, Tolerance};
+use crate::{Float, solout::{SolOut, DummySolOut}};
 
 #[derive(Builder)]
-/// Settings for the numerical integrators
-pub struct Settings<'a> {
+/// Args for the numerical integrators
+pub struct Args<'a, S: SolOut = DummySolOut> {
+    /// Solution output function
+    pub solout: Option<S>,
     /// Real tolerance for error estimation
     #[builder(default = 1e-6, into)]
     pub rtol: Tolerance<'a>,
@@ -41,6 +43,40 @@ pub struct Settings<'a> {
     #[builder(default = 1000)]
     pub nstiff: usize,
 
+    /// Phantom data for lifetime tracking
     #[builder(default)]
-    reference: PhantomData<&'a ()>
+    _phantom_reference: PhantomData<&'a ()>
+}
+
+/// Tolerance enum to allow scalar or vector tolerances
+/// using [`Into`] trait for easy conversion from `Float`, `[Float; N]`, or `Vec<Float>`
+/// users do not need to know or worry this simply allows both
+/// `Float` and `[Float; N]` to be passed in as arguments.
+#[derive(Clone, Debug)]
+pub enum Tolerance<'a> {
+    Scalar(Float),
+    Vector(&'a [Float]),
+}
+
+impl From<Float> for Tolerance<'_> {
+    fn from(val: Float) -> Self {
+        Tolerance::Scalar(val)
+    }
+}
+
+impl<'a> From<&'a [Float]> for Tolerance<'a> {
+    fn from(val: &'a [Float]) -> Self {
+        Tolerance::Vector(val)
+    }
+}
+
+impl std::ops::Index<usize> for Tolerance<'_> {
+    type Output = Float;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match self {
+            Tolerance::Scalar(v) => v,
+            Tolerance::Vector(vs) => &vs[index],
+        }
+    }
 }

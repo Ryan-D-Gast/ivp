@@ -24,11 +24,10 @@ use crate::{
     hinit::hinit,
     interpolate::Interpolate,
     ode::ODE,
-    settings::Settings,
+    args::Args,
     solout::{ControlFlag, SolOut},
     solution::Solution,
     status::Status,
-    tolerance::Tolerance,
 };
 
 /// Numerical solution of a system of first order
@@ -37,140 +36,82 @@ use crate::{
 /// method of order 8(5,3) due to dormand & prince
 /// (with stepsize control and dense output).
 pub fn dop853<'a, F, S>(
-    f: &mut F,
-    x: Float,
-    y: &[Float],
+    f: &F,
+    mut x: Float,
     xend: Float,
-    solout: &mut S,
-    settings: Settings<'a>,
+    y: &[Float],
+    args: Args<'a, S>,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
 {
-    // --- Declarations ---
-    let nfev: usize = 0;
-    let nstep: usize = 0;
-    let naccpt: usize = 0;
-    let nrejct: usize = 0;
-
     // --- Input Validation ---
     let mut errors: Vec<Error> = Vec::new();
 
+    // Callback function
+    let mut solout = args.solout;
+
     // Maximum Number of Steps
-    let nmax = settings.nmax;
+    let nmax = args.nmax;
     if nmax <= 0 {
         errors.push(Error::NMaxMustBePositive(nmax));
     }
 
     // Parameter for stiffness detection
-    let nstiff = settings.nstiff;
+    let nstiff = args.nstiff;
     if nstiff <= 0 {
         errors.push(Error::NStiffMustBePositive(nstiff));
     }
 
     // Rounding Unit
-    let uround = settings.uround;
+    let uround = args.uround;
     if uround <= 1e-35 || uround >= 1.0 {
         errors.push(Error::URoundOutOfRange(uround));
     }
 
     // Safety Factor
-    let safety_factor = settings.safety_factor;
+    let safety_factor = args.safety_factor;
     if safety_factor >= 1.0 || safety_factor <= 1e-4 {
         errors.push(Error::SafetyFactorOutOfRange(safety_factor));
     }
 
     // Parameters for step size selection
-    let fac1 = match settings.scale_min {
+    let fac1 = match args.scale_min {
         Some(f) => f,
         None => 1.0 / 3.0,
     };
-    let fac2 = match settings.scale_max {
+    let facc1 = 1.0 / fac1;
+    let fac2 = match args.scale_max {
         Some(f) => f,
         None => 6.0,
     };
+    let facc2 = 1.0 / fac2;
 
     // Beta for step control stabilization
-    let beta = match settings.beta {
+    let beta = match args.beta {
         Some(f) => f,
         None => 0.00,
     };
     if beta > 0.2 {
         errors.push(Error::BetaTooLarge(beta));
     }
+    let expo1 = 1.0 / 8.0 - beta * 0.2;
 
     // Maximum step size
-    let hmax = match settings.hmax {
+    let hmax = match args.hmax {
         Some(h) => h.abs(),
         None => (xend - x).abs(),
     };
 
-    // Initial step size: when not provided, use 0.0 so the core solver calls hinit
-    let h = settings.h0.unwrap_or(0.0);
 
     if !errors.is_empty() {
         return Err(errors);
-    }
-
-    // --- Call DOP853 Core Solver ---
-    let rtol = settings.rtol.into();
-    let atol = settings.atol.into();
-    let result = dp853co::<F, S>(
-        f,
-        x,
-        y.to_vec(),
-        xend,
-        hmax,
-        h,
-        rtol,
-        atol,
-        solout,
-        nmax,
-        uround,
-        nstiff,
-        safety_factor,
-        beta,
-        fac1,
-        fac2,
-        nfev,
-        nstep,
-        naccpt,
-        nrejct,
-    );
-
-    Ok(result)
-}
-
-/// DOP853 core solver
-fn dp853co<F, S>(
-    f: &mut F,
-    mut x: Float,
-    mut y: Vec<Float>,
-    xend: Float,
-    hmax: Float,
-    mut h: Float,
-    rtol: Tolerance,
-    atol: Tolerance,
-    solout: &mut S,
-    nmax: usize,
-    uround: Float,
-    nstiff: usize,
-    safety_factor: Float,
-    beta: Float,
-    fac1: Float,
-    fac2: Float,
-    mut nfev: usize,
-    mut nstep: usize,
-    mut naccpt: usize,
-    mut nrejct: usize,
-) -> Solution
-where
-    F: ODE,
-    S: SolOut,
-{
-    // --- Initializations ---
+    }    
+    
+    // --- Declarations ---
     let n = y.len();
+    let mut y = y.to_vec();
     let mut y1 = vec![0.0; n];
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
@@ -187,7 +128,6 @@ where
     let mut facold: Float = 1e-4;
     let mut hlamb = 0.0;
     let mut iasti = 0;
-    let mut xold;
     let mut err;
     let mut err2;
     let mut deno;
@@ -199,25 +139,33 @@ where
     let mut xph;
     let mut last = false;
     let mut reject = false;
+    let mut nfev: usize = 0;
+    let mut nstep: usize = 0;
+    let mut naccpt: usize = 0;
+    let mut nrejct: usize = 0;
     let status;
-    let expo1 = 1.0 / 8.0 - beta * 0.2;
-    let facc1 = 1.0 / fac1;
-    let facc2 = 1.0 / fac2;
     let posneg = (xend - x).signum();
+    let rtol = args.rtol;
+    let atol = args.atol;
 
-    // Initial preparation
+    // --- Initializations ---
     f.ode(x, &y, &mut k1);
     nfev += 1;
-    if h == 0.0 {
-        h = hinit(
-            f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, hmax, &atol, &rtol,
-        );
-        nfev += 1;
+    let mut h = match args.h0 {
+        Some(h0) => h0,
+        None => {
+            nfev += 1;
+            hinit(
+                f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, hmax, &atol, &rtol,
+            )
+        }
+    };
+    if let Some(s) = solout.as_mut() {
+        let interp = DenseOutput::new(&cont, &x, &h);
+        s.solout(x, x, &y, &interp);
     }
-    xold = x;
-    solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h));
 
-    // Main integration loop
+    // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
         if nstep > nmax {
@@ -420,121 +368,143 @@ where
                 }
             }
 
-            // Dense output coefficient computation
-            for i in 0..n {
-                cont[i] = y[i];
-                let ydiff = k5[i] - y[i];
-                cont[n + i] = ydiff;
-                let bspl = h * k1[i] - ydiff;
-                cont[2 * n + i] = bspl;
-                cont[3 * n + i] = ydiff - h * k4[i] - bspl;
-                cont[4 * n + i] = D41 * k1[i]
-                    + D46 * k6[i]
-                    + D47 * k7[i]
-                    + D48 * k8[i]
-                    + D49 * k9[i]
-                    + D410 * k10[i]
-                    + D411 * k2[i]
-                    + D412 * k3[i];
+            // Optional callback function
+            match solout.as_mut().map_or(ControlFlag::Continue, |s| {
+                // Dense output coefficient computation
+                for i in 0..n {
+                    cont[i] = y[i];
+                    let ydiff = k5[i] - y[i];
+                    cont[n + i] = ydiff;
+                    let bspl = h * k1[i] - ydiff;
+                    cont[2 * n + i] = bspl;
+                    cont[3 * n + i] = ydiff - h * k4[i] - bspl;
+                    cont[4 * n + i] = D41 * k1[i]
+                        + D46 * k6[i]
+                        + D47 * k7[i]
+                        + D48 * k8[i]
+                        + D49 * k9[i]
+                        + D410 * k10[i]
+                        + D411 * k2[i]
+                        + D412 * k3[i];
 
-                cont[5 * n + i] = D51 * k1[i]
-                    + D56 * k6[i]
-                    + D57 * k7[i]
-                    + D58 * k8[i]
-                    + D59 * k9[i]
-                    + D510 * k10[i]
-                    + D511 * k2[i]
-                    + D512 * k3[i];
+                    cont[5 * n + i] = D51 * k1[i]
+                        + D56 * k6[i]
+                        + D57 * k7[i]
+                        + D58 * k8[i]
+                        + D59 * k9[i]
+                        + D510 * k10[i]
+                        + D511 * k2[i]
+                        + D512 * k3[i];
 
-                cont[6 * n + i] = D61 * k1[i]
-                    + D66 * k6[i]
-                    + D67 * k7[i]
-                    + D68 * k8[i]
-                    + D69 * k9[i]
-                    + D610 * k10[i]
-                    + D611 * k2[i]
-                    + D612 * k3[i];
+                    cont[6 * n + i] = D61 * k1[i]
+                        + D66 * k6[i]
+                        + D67 * k7[i]
+                        + D68 * k8[i]
+                        + D69 * k9[i]
+                        + D610 * k10[i]
+                        + D611 * k2[i]
+                        + D612 * k3[i];
 
-                cont[7 * n + i] = D71 * k1[i]
-                    + D76 * k6[i]
-                    + D77 * k7[i]
-                    + D78 * k8[i]
-                    + D79 * k9[i]
-                    + D710 * k10[i]
-                    + D711 * k2[i]
-                    + D712 * k3[i];
-            }
+                    cont[7 * n + i] = D71 * k1[i]
+                        + D76 * k6[i]
+                        + D77 * k7[i]
+                        + D78 * k8[i]
+                        + D79 * k9[i]
+                        + D710 * k10[i]
+                        + D711 * k2[i]
+                        + D712 * k3[i];
+                }
 
-            // Next three function evaluations
-            for i in 0..n {
-                y1[i] = y[i]
-                    + h * (A141 * k1[i]
-                        + A147 * k7[i]
-                        + A148 * k8[i]
-                        + A149 * k9[i]
-                        + A1410 * k10[i]
-                        + A1411 * k2[i]
-                        + A1412 * k3[i]
-                        + A1413 * k4[i]);
-            }
-            f.ode(x + C14 * h, &y1, &mut k10);
+                // Next three function evaluations
+                for i in 0..n {
+                    y1[i] = y[i]
+                        + h * (A141 * k1[i]
+                            + A147 * k7[i]
+                            + A148 * k8[i]
+                            + A149 * k9[i]
+                            + A1410 * k10[i]
+                            + A1411 * k2[i]
+                            + A1412 * k3[i]
+                            + A1413 * k4[i]);
+                }
+                f.ode(x + C14 * h, &y1, &mut k10);
 
-            for i in 0..n {
-                y1[i] = y[i]
-                    + h * (A151 * k1[i]
-                        + A156 * k6[i]
-                        + A157 * k7[i]
-                        + A158 * k8[i]
-                        + A1511 * k2[i]
-                        + A1512 * k3[i]
-                        + A1513 * k4[i]
-                        + A1514 * k10[i]);
-            }
-            f.ode(x + C15 * h, &y1, &mut k2);
+                for i in 0..n {
+                    y1[i] = y[i]
+                        + h * (A151 * k1[i]
+                            + A156 * k6[i]
+                            + A157 * k7[i]
+                            + A158 * k8[i]
+                            + A1511 * k2[i]
+                            + A1512 * k3[i]
+                            + A1513 * k4[i]
+                            + A1514 * k10[i]);
+                }
+                f.ode(x + C15 * h, &y1, &mut k2);
 
-            for i in 0..n {
-                y1[i] = y[i]
-                    + h * (A161 * k1[i]
-                        + A166 * k6[i]
-                        + A167 * k7[i]
-                        + A168 * k8[i]
-                        + A169 * k9[i]
-                        + A1613 * k4[i]
-                        + A1614 * k10[i]
-                        + A1615 * k2[i]);
-            }
-            f.ode(x + C16 * h, &y1, &mut k3);
-            nfev += 3;
+                for i in 0..n {
+                    y1[i] = y[i]
+                        + h * (A161 * k1[i]
+                            + A166 * k6[i]
+                            + A167 * k7[i]
+                            + A168 * k8[i]
+                            + A169 * k9[i]
+                            + A1613 * k4[i]
+                            + A1614 * k10[i]
+                            + A1615 * k2[i]);
+                }
+                f.ode(x + C16 * h, &y1, &mut k3);
+                nfev += 3;
 
-            // Final dense output coefficients
-            for i in 0..n {
-                cont[4 * n + i] = h
-                    * (cont[4 * n + i]
-                        + D413 * k4[i]
-                        + D414 * k10[i]
-                        + D415 * k2[i]
-                        + D416 * k3[i]);
+                // Final dense output coefficients
+                for i in 0..n {
+                    cont[4 * n + i] = h
+                        * (cont[4 * n + i]
+                            + D413 * k4[i]
+                            + D414 * k10[i]
+                            + D415 * k2[i]
+                            + D416 * k3[i]);
 
-                cont[5 * n + i] = h
-                    * (cont[5 * n + i]
-                        + D513 * k4[i]
-                        + D514 * k10[i]
-                        + D515 * k2[i]
-                        + D516 * k3[i]);
+                    cont[5 * n + i] = h
+                        * (cont[5 * n + i]
+                            + D513 * k4[i]
+                            + D514 * k10[i]
+                            + D515 * k2[i]
+                            + D516 * k3[i]);
 
-                cont[6 * n + i] = h
-                    * (cont[6 * n + i]
-                        + D613 * k4[i]
-                        + D614 * k10[i]
-                        + D615 * k2[i]
-                        + D616 * k3[i]);
+                    cont[6 * n + i] = h
+                        * (cont[6 * n + i]
+                            + D613 * k4[i]
+                            + D614 * k10[i]
+                            + D615 * k2[i]
+                            + D616 * k3[i]);
 
-                cont[7 * n + i] = h
-                    * (cont[7 * n + i]
-                        + D713 * k4[i]
-                        + D714 * k10[i]
-                        + D715 * k2[i]
-                        + D716 * k3[i]);
+                    cont[7 * n + i] = h
+                        * (cont[7 * n + i]
+                            + D713 * k4[i]
+                            + D714 * k10[i]
+                            + D715 * k2[i]
+                            + D716 * k3[i]);
+                }
+
+                let interp = DenseOutput::new(&cont, &x, &h);
+                s.solout(x, xph, &k5, &interp)
+            }) {
+                ControlFlag::Interrupt => {
+                    status = Status::Interrupted;
+                    for i in 0..n {
+                        k1[i] = k4[i];
+                        y[i] = k5[i];
+                    }
+                    x = xph;
+                    break;
+                }
+                ControlFlag::ModifiedSolution => {
+                    // Recompute derivative
+                    f.ode(xph, &y1, &mut k4);
+                    nfev += 1;
+                }
+                ControlFlag::Continue => {}
             }
 
             // Update state variables
@@ -542,20 +512,7 @@ where
                 k1[i] = k4[i];
                 y[i] = k5[i];
             }
-            xold = x;
             x = xph;
-
-            match solout.solout(xold, x, &y, &DenseOutput::new(&cont, &xold, &h)) {
-                ControlFlag::Interrupt => {
-                    status = Status::Interrupted;
-                    break;
-                }
-                ControlFlag::ModifiedSolution => {
-                    f.ode(x, &y, &mut k1);
-                    nfev += 1;
-                }
-                ControlFlag::Continue => {}
-            }
 
             // Normal exit
             if last {
@@ -586,7 +543,7 @@ where
         h = hnew;
     }
 
-    Solution {
+    Ok(Solution {
         x,
         y,
         h,
@@ -595,7 +552,7 @@ where
         nstep,
         naccpt,
         nrejct,
-    }
+    })
 }
 
 /// Dense output interpolator for DOP853

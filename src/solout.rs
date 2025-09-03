@@ -73,3 +73,18 @@ pub enum ControlFlag {
     Interrupt,
     ModifiedSolution,
 }
+
+/// Dummy implementation of `SolOut` that does nothing.
+pub struct DummySolOut;
+
+impl SolOut for DummySolOut {
+    fn solout<I: crate::interpolate::Interpolate>(
+        &mut self,
+        _xold: Float,
+        _x: Float,
+        _y: &[Float],
+        _interpolator: &I,
+    ) -> crate::ControlFlag {
+        crate::ControlFlag::Continue
+    }
+}

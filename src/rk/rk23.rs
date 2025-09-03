@@ -1,8 +1,8 @@
 //! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
 
 use crate::{
-    ControlFlag, Float, ODE, SolOut, Tolerance, error::Error, hinit::hinit,
-    interpolate::Interpolate, settings::Settings, solution::Solution, status::Status,
+    ControlFlag, Float, ODE, SolOut, error::Error, hinit::hinit,
+    interpolate::Interpolate, args::Args, solution::Solution, status::Status,
 };
 
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
@@ -10,11 +10,10 @@ use crate::{
 /// and adjust the step size accordingly with dense output.
 pub fn rk23<'a, F, S>(
     f: &F,
-    x: Float,
-    y: &[Float],
+    mut x: Float,
     xend: Float,
-    solout: &mut S,
-    settings: Settings<'a>,
+    y: &[Float],
+    args: Args<'a, S>,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
@@ -22,25 +21,28 @@ where
 {
     // --- Input Validation ---
     let mut errors: Vec<Error> = Vec::new();
+    
+    // Callback function
+    let mut solout = args.solout;
 
     // Maximum Number of Steps
-    let nmax = settings.nmax;
+    let nmax = args.nmax;
     if nmax <= 0 {
         errors.push(Error::NMaxMustBePositive(nmax));
     }
 
     // Safety Factor
-    let safety_factor = settings.safety_factor;
+    let safety_factor = args.safety_factor;
     if safety_factor >= 1.0 || safety_factor <= 1e-4 {
         errors.push(Error::SafetyFactorOutOfRange(safety_factor));
     }
 
     // Step size scaling factors
-    let scale_min = match settings.scale_min {
+    let scale_min = match args.scale_min {
         Some(f) => f,
         None => 0.2,
     };
-    let scale_max = match settings.scale_max {
+    let scale_max = match args.scale_max {
         Some(f) => f,
         None => 5.0,
     };
@@ -52,59 +54,15 @@ where
     let error_exponent = -1.0 / 3.0;
 
     // Maximum step size
-    let hmax = settings.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
-
-    // Initial step size: when not provided, use 0.0 so the core solver can set it
-    let h = settings.h0.unwrap_or(0.0);
+    let hmax = args.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
 
     if !errors.is_empty() {
         return Err(errors);
     }
 
-    let rtol = settings.rtol.into();
-    let atol = settings.atol.into();
-
-    let result = rk23co(
-        f,
-        x,
-        y.to_vec(),
-        xend,
-        rtol,
-        atol,
-        solout,
-        h,
-        safety_factor,
-        error_exponent,
-        scale_min,
-        scale_max,
-        nmax,
-        hmax,
-    );
-
-    Ok(result)
-}
-
-fn rk23co<F, S>(
-    f: &F,
-    mut x: Float,
-    mut y: Vec<Float>,
-    xend: Float,
-    rtol: Tolerance,
-    atol: Tolerance,
-    solout: &mut S,
-    mut h: Float,
-    safety_factor: Float,
-    error_exponent: Float,
-    scale_min: Float,
-    scale_max: Float,
-    nmax: usize,
-    hmax: Float,
-) -> Solution
-where
-    F: ODE,
-    S: SolOut,
-{
+    // --- Declarations ---
     let n = y.len();
+    let mut y = y.to_vec();
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
@@ -119,21 +77,29 @@ where
     let mut naccpt = 0;
     let mut nrejct = 0;
     let mut status = Status::Success;
-    let mut xold;
+    let mut xold = x;
     let direction = (xend - x).signum();
+    let rtol = args.rtol;
+    let atol = args.atol;
 
-    // Initial derivative
+    // --- Initializations ---
     f.ode(x, &y, &mut k1);
     nfev += 1;
-
-    // Calculate initial step size if not provided
-    if h == 0.0 {
-        h = hinit(
-            f, x, &y, direction, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
-        );
-        nfev += 1;
+    let mut h = match args.h0 {
+        Some(h0) => h0,
+        None => {
+            nfev += 1;
+            hinit(
+                f, x, &y, direction, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
+            )
+        }
+    };
+    if let Some(s) = solout.as_mut() {
+        let interp = Rk23DenseOutput::new(h, xold, &ye, &q1, &q2, &q3);
+        s.solout(xold, x, &y, &interp);
     }
 
+    // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
         if nstep >= nmax {
@@ -191,15 +157,17 @@ where
             nstep += 1;
             naccpt += 1;
 
-            // Prepare dense output
-            for i in 0..n {
-                q1[i] = k1[i];
-                q2[i] = D21 * k1[i] + D22 * k2[i] + D23 * k3[i] + D24 * k4[i];
-                q3[i] = D31 * k1[i] + D32 * k2[i] + D33 * k3[i] + D34 * k4[i];
-            }
-            let dense_output = Rk23DenseOutput::new(h, xold, &ye, &q1, &q2, &q3);
-
-            match solout.solout(xold, x, &y, &dense_output) {
+            // Optional Callback function
+            match solout.as_mut().map_or(ControlFlag::Continue, |s| {
+                // Prepare dense output only when the callback exists.
+                for i in 0..n {
+                    q1[i] = k1[i];
+                    q2[i] = D21 * k1[i] + D22 * k2[i] + D23 * k3[i] + D24 * k4[i];
+                    q3[i] = D31 * k1[i] + D32 * k2[i] + D33 * k3[i] + D34 * k4[i];
+                }
+                let dense_output = Rk23DenseOutput::new(h, xold, &ye, &q1, &q2, &q3);
+                s.solout(xold, x, &y, &dense_output)
+            }) {
                 ControlFlag::Interrupt => {
                     status = Status::Interrupted;
                     break;
@@ -235,16 +203,16 @@ where
         }
     }
 
-    Solution {
+    Ok(Solution {
         x,
-        y,
+        y: y.to_vec(),
         h,
         nfev,
         nstep,
         naccpt,
         nrejct,
         status,
-    }
+    })
 }
 
 /// Dense output interpolant for RK23

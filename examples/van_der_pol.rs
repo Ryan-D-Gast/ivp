@@ -75,18 +75,17 @@ impl SolOut for Printer {
 }
 
 fn main() {
-    let mut vdp = VanDerPol { eps: 1e-3 };
+    let van_der_pol = VanDerPol { eps: 1e-3 };
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [2.0, 0.0];
-
-    let settings = Settings::builder()
+    let args = Args::builder()
         .rtol(1e-9)
         .atol(1e-9)
+        .solout(Printer::new(0.1, xend))
         .build();
-    let mut printer = Printer::new(0.1, xend);
 
-    let res = dop853(&mut vdp, x0, &y0, xend, &mut printer, settings);
+    let res = dop853(&van_der_pol, x0, xend, &y0, args);
 
     match res {
         Ok(r) => {

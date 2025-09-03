@@ -1,8 +1,8 @@
 //! Compute an initial step size guess
 
-use crate::{Float, ode::ODE, tolerance::Tolerance};
+use crate::{Float, ode::ODE, args::Tolerance};
 
-/// Compute an initial step size guess for Dormand-Prince methods
+/// Compute an initial step size guess for an ODE solver.
 pub fn hinit<F>(
     f: &F,
     x: Float,

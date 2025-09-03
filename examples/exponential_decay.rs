@@ -9,7 +9,7 @@
 //!
 
 use ivp::rk::rk4;
-use ivp::{ControlFlag, Float, Interpolate, ODE, Settings, SolOut};
+use ivp::{ControlFlag, Float, Interpolate, ODE, Args, SolOut};
 
 struct SimpleODE;
 
@@ -39,17 +39,17 @@ impl SolOut for Printer {
 
 fn main() {
     let f = SimpleODE;
-    let mut solout = Printer;
 
     let x0 = 0.0;
     let xend = 5.0;
     let y0 = [1.0];
     let h = 0.1;
 
-    let settings = Settings::builder()
+    let args = Args::builder()
+        .solout(Printer)
         .build();
 
-    match rk4(&f, x0, &y0, xend, h, &mut solout, settings) {
+    match rk4(&f, x0, xend, &y0, h, args) {
         Ok(result) => {
             println!("Final status: {:?}", result.status);
             println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);

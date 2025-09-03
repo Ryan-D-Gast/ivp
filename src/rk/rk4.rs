@@ -1,7 +1,7 @@
 //! Classic explicit Runge-Kutta 4 (RK4) fixed-step integrator.
 
 use crate::{
-    ControlFlag, Float, ODE, SolOut, error::Error, interpolate::CubicHermite, settings::Settings,
+    ControlFlag, Float, ODE, SolOut, error::Error, interpolate::CubicHermite, args::Args,
     solution::Solution, status::Status,
 };
 
@@ -9,17 +9,21 @@ use crate::{
 /// Provides a dense output via cubic Hermite interpolation.
 pub fn rk4<F, S>(
     f: &F,
-    x: Float,
-    y: &[Float],
+    mut x: Float,
     xend: Float,
+    y: &[Float],
     h: Float,
-    solout: &mut S,
-    settings: Settings<'_>,
+    args: Args<'_, S>,
 ) -> Result<Solution, Error>
 where
     F: ODE,
     S: SolOut,
 {
+    // --- Input Validation ---
+
+    // Callback function
+    let mut solout = args.solout;
+
     if h == 0.0 {
         return Err(Error::InvalidStepSize(h));
     }
@@ -29,25 +33,9 @@ where
         return Err(Error::InvalidStepSize(h));
     }
 
-    let result = rk4co(f, x, y.to_vec(), xend, h, solout, settings.nmax);
-
-    Ok(result)
-}
-
-fn rk4co<F, S>(
-    f: &F,
-    mut x: Float,
-    mut y: Vec<Float>,
-    xend: Float,
-    h: Float,
-    solout: &mut S,
-    nmax: usize,
-) -> Solution
-where
-    F: ODE,
-    S: SolOut,
-{
+    // --- Declarations ---
     let n = y.len();
+    let mut y = y.to_vec();
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
@@ -57,14 +45,16 @@ where
     let mut nstep = 0;
     let mut status = Status::Success;
     let mut xold = x;
+    let nmax = args.nmax;
 
-    // Initial derivative at the starting point
+    // --- Initializations ---
     f.ode(x, &y, &mut k1);
+    if let Some(s) = solout.as_mut() {
+        let interp = CubicHermite::new(&xold, &h, &yt, &y, &k4, &k1);
+        s.solout(xold, x, &y, &interp);
+    }
 
-    // Initial SolOut call
-    let interp = CubicHermite::new(&xold, &h, &yt, &y, &k4, &k1);
-    solout.solout(xold, x, &y, &interp);
-
+    // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
         if nstep >= nmax {
@@ -108,10 +98,11 @@ where
         nfev += 4;
         nstep += 1;
 
-        // Interpolator
-        let interp = CubicHermite::new(&xold, &h, &yt, &y, &k4, &k1);
-
-        match solout.solout(xold, x, &y, &interp) {
+        // Optional Callback function
+        match solout.as_mut().map_or(ControlFlag::Continue, |s| {
+            let interp = CubicHermite::new(&xold, &h, &yt, &y, &k4, &k1);
+            s.solout(xold, x, &y, &interp)
+        }) {
             ControlFlag::Interrupt => {
                 status = Status::Interrupted;
                 break;
@@ -129,7 +120,7 @@ where
         }
     }
 
-    Solution {
+    Ok(Solution {
         x,
         y: y.to_vec(),
         h,
@@ -138,7 +129,7 @@ where
         naccpt: nstep,
         nrejct: 0,
         status,
-    }
+    })
 }
 
 // Classical RK4 coefficients
