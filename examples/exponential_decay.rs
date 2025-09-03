@@ -46,7 +46,8 @@ fn main() {
     let y0 = [1.0];
     let h = 0.1;
 
-    let settings = Settings::default();
+    let settings = Settings::builder()
+        .build();
 
     match rk4(&f, x0, &y0, xend, h, &mut solout, settings) {
         Ok(result) => {

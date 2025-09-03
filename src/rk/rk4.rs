@@ -14,7 +14,7 @@ pub fn rk4<F, S>(
     xend: Float,
     h: Float,
     solout: &mut S,
-    settings: Settings,
+    settings: Settings<'_>,
 ) -> Result<Solution, Error>
 where
     F: ODE,

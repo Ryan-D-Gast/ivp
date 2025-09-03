@@ -1,13 +1,25 @@
 //! Settings for numerical integrators
 
-use crate::Float;
+use std::marker::PhantomData;
 
-#[derive(Clone, Debug)]
+use bon::Builder;
+
+use crate::{Float, Tolerance};
+
+#[derive(Builder)]
 /// Settings for the numerical integrators
-pub struct Settings {
+pub struct Settings<'a> {
+    /// Real tolerance for error estimation
+    #[builder(default = 1e-6, into)]
+    pub rtol: Tolerance<'a>,
+    /// Absolute tolerance for error estimation
+    #[builder(default = 1e-6, into)]
+    pub atol: Tolerance<'a>,
     /// The rounding unit, typically machine epsilon
+    #[builder(default = 2.3e-16)]
     pub uround: Float,
     /// safety factor in step-size prediction. Default is 0.9.
+    #[builder(default = 0.9)]
     pub safety_factor: Float,
     /// Parameter for step size selection where scale_min <= hnew/hold <= scale_max
     pub scale_min: Option<Float>,
@@ -23,23 +35,12 @@ pub struct Settings {
     /// provided by the [`crate::hinit::hinit`] function.
     pub h0: Option<Float>,
     /// Maximum number of allowed steps. Default is 100,000.
+    #[builder(default = 100_000)]
     pub nmax: usize,
     /// Number of steps before performing a stiffness test. Default is 1000.
+    #[builder(default = 1000)]
     pub nstiff: usize,
-}
 
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            uround: 2.3e-16,
-            safety_factor: 0.9,
-            scale_min: None,
-            scale_max: None,
-            beta: None,
-            hmax: None,
-            h0: None,
-            nmax: 100_000,
-            nstiff: 1000,
-        }
-    }
+    #[builder(default)]
+    reference: PhantomData<&'a ()>
 }

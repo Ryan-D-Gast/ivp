@@ -36,21 +36,17 @@ use crate::{
 /// `y' = f(x, y)`. This is an explicit Runge-Kutta
 /// method of order 5(4) due to dormand & prince
 /// (with stepsize control and dense output).
-pub fn dopri5<'a, F, S, R, A>(
+pub fn dopri5<'a, F, S>(
     f: &mut F,
     x: Float,
     y: &[Float],
     xend: Float,
-    rtol: R,
-    atol: A,
     solout: &mut S,
-    settings: Settings,
+    settings: Settings<'a>,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
-    R: Into<Tolerance<'a>>,
-    A: Into<Tolerance<'a>>,
 {
     // --- Declarations ---
     let nfev: usize = 0;
@@ -118,8 +114,8 @@ where
     }
 
     // --- Call DOPRI5 Core Solver ---
-    let rtol = rtol.into();
-    let atol = atol.into();
+    let rtol = settings.rtol.into();
+    let atol = settings.atol.into();
     let result = dp5co::<F, S>(
         f,
         x,

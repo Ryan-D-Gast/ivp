@@ -80,13 +80,13 @@ fn main() {
     let xend = 2.0;
     let y0 = [2.0, 0.0];
 
-    let settings = Settings::default();
+    let settings = Settings::builder()
+        .rtol(1e-9)
+        .atol(1e-9)
+        .build();
     let mut printer = Printer::new(0.1, xend);
 
-    let rtol = 1e-9;
-    let atol = 1e-9;
-
-    let res = dop853(&mut vdp, x0, &y0, xend, rtol, atol, &mut printer, settings);
+    let res = dop853(&mut vdp, x0, &y0, xend, &mut printer, settings);
 
     match res {
         Ok(r) => {

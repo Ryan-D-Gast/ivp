@@ -69,12 +69,13 @@ fn main() {
     let x0 = 0.0;
     let y0 = vec![1.0, 0.0];
     let xend = 2.0 * PI;
-    let rtol = 1e-3;
-    let atol = 1e-3;
     let mut solout = EvenOutput::new(PI / 10.0, xend);
-    let settings = Settings::default();
+    let settings = Settings::builder()
+        .rtol(1e-3)
+        .atol(1e-3)
+        .build();
 
-    match rk23(&mut ode, x0, &y0, xend, rtol, atol, &mut solout, settings) {
+    match rk23(&mut ode, x0, &y0, xend, &mut solout, settings) {
         Ok(result) => {
             println!("Final status: {:?}", result.status);
             println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);
