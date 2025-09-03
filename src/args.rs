@@ -8,6 +8,14 @@ use crate::{Float, solout::{SolOut, DummySolOut}};
 
 #[derive(Builder)]
 /// Args for the numerical integrators
+/// 
+/// Note if `solout` is not provided defining the type
+/// as `Args` is required to use the default `DummySolOut`
+/// e.g.
+/// ```
+/// let args: Args = ArgsBuilder::default().build();
+/// //        ^- Without this will be unable to infer solout type.
+/// ```
 pub struct Args<'a, S: SolOut = DummySolOut> {
     /// Solution output function
     pub solout: Option<S>,
