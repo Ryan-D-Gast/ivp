@@ -1,4 +1,4 @@
-//! Share interpolation implementations
+//! Interpolation trait and implementations
 
 use crate::Float;
 

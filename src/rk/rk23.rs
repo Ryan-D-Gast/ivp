@@ -2,7 +2,7 @@
 
 use crate::{
     ControlFlag, Float, ODE, SolOut, Tolerance, error::Error, hinit::hinit,
-    interpolate::Interpolate, rk::RKSettings, solution::Solution, status::Status,
+    interpolate::Interpolate, settings::Settings, solution::Solution, status::Status,
 };
 
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
@@ -16,7 +16,7 @@ pub fn rk23<'a, F, S, R, A>(
     rtol: R,
     atol: A,
     solout: &mut S,
-    settings: RKSettings,
+    settings: Settings,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
@@ -40,14 +40,20 @@ where
     }
 
     // Step size scaling factors
-    let scale_min = settings.scale_min;
-    let scale_max = settings.scale_max;
+    let scale_min = match settings.scale_min {
+        Some(f) => f,
+        None => 0.2,
+    };
+    let scale_max = match settings.scale_max {
+        Some(f) => f,
+        None => 5.0,
+    };
     if scale_min <= 0.0 || scale_max <= scale_min {
         errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
     }
 
     // Error exponent
-    let error_exponent = settings.error_exponent;
+    let error_exponent = -1.0 / 3.0;
 
     // Maximum step size
     let hmax = settings.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
@@ -133,11 +139,13 @@ where
     }
 
     loop {
+        // Check for maximum number of steps
         if nstep >= nmax {
             status = Status::NeedLargerNmax;
             break;
         }
 
+        // Check for last step adjustment
         if (x + h - xend) * direction > 0.0 {
             h = xend - x;
         }

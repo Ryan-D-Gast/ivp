@@ -1,7 +1,7 @@
 //! Classic explicit Runge-Kutta 4 (RK4) fixed-step integrator.
 
 use crate::{
-    ControlFlag, Float, ODE, SolOut, error::Error, interpolate::CubicHermite, rk::RKSettings,
+    ControlFlag, Float, ODE, SolOut, error::Error, interpolate::CubicHermite, settings::Settings,
     solution::Solution, status::Status,
 };
 
@@ -14,7 +14,7 @@ pub fn rk4<F, S>(
     xend: Float,
     h: Float,
     solout: &mut S,
-    settings: RKSettings,
+    settings: Settings,
 ) -> Result<Solution, Error>
 where
     F: ODE,
@@ -66,12 +66,13 @@ where
     solout.solout(xold, x, &y, &interp);
 
     loop {
+        // Check for maximum number of steps
         if nstep >= nmax {
             status = Status::NeedLargerNmax;
             break;
         }
 
-        // adjust last step so we land exactly on _xend
+        // Adjust last step so we land exactly on _xend
         let mut last = false;
         if (x + 1.01 * h - xend) * h.signum() > 0.0 {
             last = true;

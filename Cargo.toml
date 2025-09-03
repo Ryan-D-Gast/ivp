@@ -9,3 +9,5 @@ f32 = []
 f64 = []
 
 [dependencies]
+bon = "3.7.2"
+rayon = "1.11.0"

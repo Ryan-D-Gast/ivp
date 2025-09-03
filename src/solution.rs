@@ -31,7 +31,7 @@ pub struct Solution {
 impl Solution {
     pub fn new(
         x: Float,
-        y: &[Float],
+        y: Vec<Float>,
         h: Float,
         nfev: usize,
         nstep: usize,
@@ -41,7 +41,7 @@ impl Solution {
     ) -> Self {
         Self {
             x,
-            y: y.to_vec(),
+            y,
             h,
             nfev,
             nstep,

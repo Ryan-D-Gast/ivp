@@ -20,11 +20,11 @@
 
 use crate::{
     Float,
-    dp::DPSettings,
     error::Error,
     hinit::hinit,
     interpolate::Interpolate,
     ode::ODE,
+    settings::Settings,
     solout::{ControlFlag, SolOut},
     solution::Solution,
     status::Status,
@@ -44,7 +44,7 @@ pub fn dop853<'a, F, S, R, A>(
     rtol: R,
     atol: A,
     solout: &mut S,
-    settings: DPSettings,
+    settings: Settings,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
@@ -86,19 +86,20 @@ where
     }
 
     // Parameters for step size selection
-    let (mut fac1, mut fac2) = settings.fac;
-    if fac1 == 0.0 {
-        fac1 = 1.0 / 3.0;
-    }
-    if fac2 == 0.0 {
-        fac2 = 6.0;
-    }
+    let fac1 = match settings.scale_min {
+        Some(f) => f,
+        None => 1.0 / 3.0,
+    };
+    let fac2 = match settings.scale_max {
+        Some(f) => f,
+        None => 6.0,
+    };
 
     // Beta for step control stabilization
-    let mut beta = settings.beta;
-    if beta < 0.0 {
-        beta = 0.0;
-    }
+    let beta = match settings.beta {
+        Some(f) => f,
+        None => 0.00,
+    };
     if beta > 0.2 {
         errors.push(Error::BetaTooLarge(beta));
     }
@@ -222,19 +223,19 @@ where
 
     // Main integration loop
     loop {
-        // check for maximum number of steps
+        // Check for maximum number of steps
         if nstep > nmax {
             status = Status::NeedLargerNmax;
             break;
         }
 
-        // check for underflow due to machine rounding
+        // Check for underflow due to machine rounding
         if 0.1 * h.abs() <= x.abs() * uround {
             status = Status::StepSizeTooSmall;
             break;
         }
 
-        // adjust last step to land on xend
+        // Adjust last step to land on xend
         if (x + 1.01 * h - xend) * posneg > 0.0 {
             h = xend - x;
             last = true;

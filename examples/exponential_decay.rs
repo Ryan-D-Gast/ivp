@@ -8,8 +8,8 @@
 //! Initial condition: y(0) = 1.0
 //!
 
-use ivp::rk::{RKSettings, rk4};
-use ivp::{ControlFlag, Float, Interpolate, ODE, SolOut};
+use ivp::rk::rk4;
+use ivp::{ControlFlag, Float, Interpolate, ODE, Settings, SolOut};
 
 struct SimpleODE;
 
@@ -46,7 +46,7 @@ fn main() {
     let y0 = [1.0];
     let h = 0.1;
 
-    let settings = RKSettings::new();
+    let settings = Settings::default();
 
     match rk4(&f, x0, &y0, xend, h, &mut solout, settings) {
         Ok(result) => {

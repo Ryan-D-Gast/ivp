@@ -80,7 +80,7 @@ fn main() {
     let xend = 2.0;
     let y0 = [2.0, 0.0];
 
-    let settings = DPSettings::dop853();
+    let settings = Settings::default();
     let mut printer = Printer::new(0.1, xend);
 
     let rtol = 1e-9;
