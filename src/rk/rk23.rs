@@ -169,7 +169,7 @@ where
             yt[i] = y[i] + h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i]);
         }
 
-        // Stage 4-1: derivative at new point, also used as k1 if accepted.
+        // Stage 4/1: derivative at new point, also used as k1 if accepted.
         f.ode(x + h, &yt, &mut k4);
         nfev += 1;
 
