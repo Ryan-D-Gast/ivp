@@ -31,7 +31,7 @@ impl EvenOutput {
 }
 
 impl SolOut for EvenOutput {
-    fn solout<I: ivp::Interpolate>(
+    fn solout<I: Interpolate>(
         &mut self,
         xold: f64,
         x: f64,
