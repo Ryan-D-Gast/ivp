@@ -37,7 +37,7 @@ use crate::{Float, Interpolate};
 /// }
 /// impl SolOut for Printer {
 ///     fn solout(&mut self, xold, x, y, interpolator) -> ControlFlag {
-///         if nstep == 1 {
+///         if xold == x {
 ///             println!("x = {}, y = {:?}", xold, y);
 ///             self.xout = xold + self.dx;
 ///         }

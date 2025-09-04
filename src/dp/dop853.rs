@@ -32,12 +32,12 @@ use crate::{
 
 /// Explicit Runge-Kutta method of order 8(5,3) due to 
 /// dormand & prince (with stepsize control and dense output).
-pub fn dop853<'a, F, S>(
+pub fn dop853<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
     y: &[Float],
-    args: Args<'a, S>,
+    args: Args<S>,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,

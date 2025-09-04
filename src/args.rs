@@ -1,7 +1,5 @@
 //! Args for numerical integrators
 
-use std::marker::PhantomData;
-
 use bon::Builder;
 
 use crate::{Float, solout::{SolOut, DummySolOut}};
@@ -16,15 +14,15 @@ use crate::{Float, solout::{SolOut, DummySolOut}};
 /// let args: Args = ArgsBuilder::default().build();
 /// //        ^- Without this will be unable to infer solout type.
 /// ```
-pub struct Args<'a, S: SolOut = DummySolOut> {
+pub struct Args<S: SolOut = DummySolOut> {
     /// Solution output function
     pub solout: Option<S>,
     /// Real tolerance for error estimation
     #[builder(default = 1e-6, into)]
-    pub rtol: Tolerance<'a>,
+    pub rtol: Tolerance,
     /// Absolute tolerance for error estimation
     #[builder(default = 1e-6, into)]
-    pub atol: Tolerance<'a>,
+    pub atol: Tolerance,
     /// The rounding unit, typically machine epsilon
     #[builder(default = 2.3e-16)]
     pub uround: Float,
@@ -50,10 +48,6 @@ pub struct Args<'a, S: SolOut = DummySolOut> {
     /// Number of steps before performing a stiffness test. Default is 1000.
     #[builder(default = 1000)]
     pub nstiff: usize,
-
-    /// Phantom data for lifetime tracking
-    #[builder(default)]
-    _phantom_reference: PhantomData<&'a ()>
 }
 
 /// Tolerance enum to allow scalar or vector tolerances
@@ -61,24 +55,24 @@ pub struct Args<'a, S: SolOut = DummySolOut> {
 /// users do not need to know or worry this simply allows both
 /// `Float` and `[Float; N]` to be passed in as arguments.
 #[derive(Clone, Debug)]
-pub enum Tolerance<'a> {
+pub enum Tolerance {
     Scalar(Float),
-    Vector(&'a [Float]),
+    Vector(Vec<Float>),
 }
 
-impl From<Float> for Tolerance<'_> {
+impl From<Float> for Tolerance {
     fn from(val: Float) -> Self {
         Tolerance::Scalar(val)
     }
 }
 
-impl<'a> From<&'a [Float]> for Tolerance<'a> {
-    fn from(val: &'a [Float]) -> Self {
-        Tolerance::Vector(val)
+impl From<&[Float]> for Tolerance {
+    fn from(val: &[Float]) -> Self {
+        Tolerance::Vector(val.to_vec())
     }
 }
 
-impl std::ops::Index<usize> for Tolerance<'_> {
+impl std::ops::Index<usize> for Tolerance {
     type Output = Float;
 
     fn index(&self, index: usize) -> &Self::Output {

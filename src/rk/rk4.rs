@@ -13,7 +13,7 @@ pub fn rk4<F, S>(
     xend: Float,
     y: &[Float],
     h: Float,
-    args: Args<'_, S>,
+    args: Args<S>,
 ) -> Result<Solution, Error>
 where
     F: ODE,

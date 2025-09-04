@@ -8,12 +8,12 @@ use crate::{
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
 /// This implementation uses an embedded method to estimate errors
 /// and adjust the step size accordingly with dense output.
-pub fn rk23<'a, F, S>(
+pub fn rk23<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
     y: &[Float],
-    args: Args<'a, S>,
+    args: Args<S>,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
