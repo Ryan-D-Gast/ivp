@@ -1,8 +1,16 @@
 //! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
 
 use crate::{
-    ControlFlag, Float, ODE, SolOut, error::Error, hinit::hinit,
-    interpolate::Interpolate, args::Args, solution::Solution, status::Status,
+    Float,
+    core::{
+        interpolate::Interpolate,
+        ode::ODE,
+        solout::{ControlFlag, SolOut},
+        solution::Solution,
+        status::Status,
+    },
+    error::Error,
+    methods::{hinit::hinit, settings::Settings},
 };
 
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
@@ -13,7 +21,8 @@ pub fn rk23<F, S>(
     mut x: Float,
     xend: Float,
     y: &[Float],
-    args: Args<S>,
+    mut solout: Option<&mut S>,
+    settings: Settings,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
@@ -21,28 +30,25 @@ where
 {
     // --- Input Validation ---
     let mut errors: Vec<Error> = Vec::new();
-    
-    // Callback function
-    let mut solout = args.solout;
 
     // Maximum Number of Steps
-    let nmax = args.nmax;
+    let nmax = settings.nmax;
     if nmax <= 0 {
         errors.push(Error::NMaxMustBePositive(nmax));
     }
 
     // Safety Factor
-    let safety_factor = args.safety_factor;
+    let safety_factor = settings.safety_factor;
     if safety_factor >= 1.0 || safety_factor <= 1e-4 {
         errors.push(Error::SafetyFactorOutOfRange(safety_factor));
     }
 
     // Step size scaling factors
-    let scale_min = match args.scale_min {
+    let scale_min = match settings.scale_min {
         Some(f) => f,
         None => 0.2,
     };
-    let scale_max = match args.scale_max {
+    let scale_max = match settings.scale_max {
         Some(f) => f,
         None => 5.0,
     };
@@ -54,7 +60,7 @@ where
     let error_exponent = -1.0 / 3.0;
 
     // Maximum step size
-    let hmax = args.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
+    let hmax = settings.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
 
     if !errors.is_empty() {
         return Err(errors);
@@ -79,13 +85,13 @@ where
     let mut status = Status::Success;
     let mut xold = x;
     let direction = (xend - x).signum();
-    let rtol = args.rtol;
-    let atol = args.atol;
+    let rtol = settings.rtol;
+    let atol = settings.atol;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
     nfev += 1;
-    let mut h = match args.h0 {
+    let mut h = match settings.h0 {
         Some(h0) => h0,
         None => {
             nfev += 1;

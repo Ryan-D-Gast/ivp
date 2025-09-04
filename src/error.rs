@@ -2,7 +2,7 @@
 
 use crate::Float;
 
-/// Validation errors returned by the Dormand-Prince entry points.
+/// Errors for validation of input settings
 #[derive(Debug, Clone)]
 pub enum Error {
     NMaxMustBePositive(usize),
@@ -33,3 +33,5 @@ impl std::fmt::Display for Error {
         }
     }
 }
+
+impl std::error::Error for Error {}

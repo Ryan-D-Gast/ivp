@@ -1,8 +1,16 @@
 //! Classic explicit Runge-Kutta 4 (RK4) fixed-step integrator.
 
 use crate::{
-    ControlFlag, Float, ODE, SolOut, error::Error, args::Args, Interpolate,
-    solution::Solution, status::Status,
+    Float,
+    core::{
+        interpolate::Interpolate,
+        ode::ODE,
+        solout::{ControlFlag, SolOut},
+        solution::Solution,
+        status::Status,
+    },
+    error::Error,
+    methods::settings::Settings,
 };
 
 /// Classical explicit Runge-Kutta 4 (RK4) fixed-step integrator.
@@ -13,7 +21,8 @@ pub fn rk4<F, S>(
     xend: Float,
     y: &[Float],
     h: Float,
-    args: Args<S>,
+    mut solout: Option<&mut S>,
+    settings: Settings,
 ) -> Result<Solution, Error>
 where
     F: ODE,
@@ -21,9 +30,7 @@ where
 {
     // --- Input Validation ---
 
-    // Callback function
-    let mut solout = args.solout;
-
+    // Initial Step Size
     if h == 0.0 {
         return Err(Error::InvalidStepSize(h));
     }
@@ -45,7 +52,7 @@ where
     let mut nstep = 0;
     let mut status = Status::Success;
     let mut xold = x;
-    let nmax = args.nmax;
+    let nmax = settings.nmax;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);

@@ -1,27 +1,26 @@
 //! Example demonstrating the use of RK23 for solving a harmonic oscillator.
 
-use ivp::{ControlFlag, SolOut};
-use ivp::{Float, ODE, Args, rk::rk23};
+use ivp::prelude::*;
 use std::f64::consts::PI;
 
 struct HarmonicOscillator;
 
 impl ODE for HarmonicOscillator {
-    fn ode(&self, _x: Float, y: &[Float], dydx: &mut [Float]) {
+    fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
 }
 
 struct EvenOutput {
-    xout: Float,
-    dx: Float,
+    xout: f64,
+    dx: f64,
     first_call: bool,
-    xend: Float,
+    xend: f64,
 }
 
 impl EvenOutput {
-    fn new(dx: Float, xend: Float) -> Self {
+    fn new(dx: f64, xend: f64) -> Self {
         Self {
             xout: 0.0,
             dx,
@@ -34,9 +33,9 @@ impl EvenOutput {
 impl SolOut for EvenOutput {
     fn solout<I: ivp::Interpolate>(
         &mut self,
-        xold: Float,
-        x: Float,
-        y: &[Float],
+        xold: f64,
+        x: f64,
+        y: &[f64],
         interpolator: &I,
     ) -> ControlFlag {
         if self.first_call {
@@ -69,13 +68,16 @@ fn main() {
     let x0 = 0.0;
     let y0 = [1.0, 0.0];
     let xend = 2.0 * PI;
-    let args = Args::builder()
-        .rtol(1e-3)
-        .atol(1e-3)
-        .solout(EvenOutput::new(PI / 10.0, xend))
-        .build();
+    let settings = Settings::builder().rtol(1e-3).atol(1e-3).build();
 
-    match rk23(&harmonic_oscillator, x0, xend, &y0, args) {
+    match rk23(
+        &harmonic_oscillator,
+        x0,
+        xend,
+        &y0,
+        Some(&mut EvenOutput::new(PI / 10.0, xend)),
+        settings,
+    ) {
         Ok(result) => {
             println!("Final status: {:?}", result.status);
             println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);

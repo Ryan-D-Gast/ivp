@@ -1,6 +1,6 @@
 //! Compute an initial step size guess
 
-use crate::{Float, ode::ODE, args::Tolerance};
+use crate::{Float, core::ode::ODE, methods::settings::Tolerance};
 
 /// Compute an initial step size guess for an ODE solver.
 pub fn hinit<F>(

@@ -1,13 +1,8 @@
 //! A struct representing the outputted result of a numerical integrator.
 
-use crate::{Float, status::Status};
+use crate::{Float, core::status::Status};
 
 /// The output of a numerical integrator
-///
-/// This struct contains the results of the integration process,
-/// including the final values of the independent and dependent
-/// variables, as well as diagnostic information about the
-/// integration process.
 #[derive(Clone, Debug)]
 pub struct Solution {
     /// The final value of the independent variable

@@ -8,13 +8,12 @@
 //! Initial condition: y(0) = 1.0
 //!
 
-use ivp::rk::rk4;
-use ivp::{ControlFlag, Float, Interpolate, ODE, Args, SolOut};
+use ivp::prelude::*;
 
 struct SimpleODE;
 
 impl ODE for SimpleODE {
-    fn ode(&self, _x: Float, y: &[Float], dydx: &mut [Float]) {
+    fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
         // Example: dy/dx = -y (exponential decay)
         for i in 0..y.len() {
             dydx[i] = -y[i];
@@ -27,9 +26,9 @@ struct Printer;
 impl SolOut for Printer {
     fn solout<I: Interpolate>(
         &mut self,
-        _xold: Float,
-        x: Float,
-        y: &[Float],
+        _xold: f64,
+        x: f64,
+        y: &[f64],
         _interpolator: &I,
     ) -> ControlFlag {
         println!("x = {:.4}, y = {:?}", x, y);
@@ -45,11 +44,9 @@ fn main() {
     let y0 = [1.0];
     let h = 0.1;
 
-    let args = Args::builder()
-        .solout(Printer)
-        .build();
+    let settings = Settings::builder().build();
 
-    match rk4(&f, x0, xend, &y0, h, args) {
+    match rk4(&f, x0, xend, &y0, h, Some(&mut Printer), settings) {
         Ok(result) => {
             println!("Final status: {:?}", result.status);
             println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);

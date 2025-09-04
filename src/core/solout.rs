@@ -1,6 +1,6 @@
 //! User defined callback hook executed after each accepted step.
 
-use crate::{Float, Interpolate};
+use crate::{Float, core::interpolate::Interpolate};
 
 /// Callback hook executed after each accepted step.
 ///

@@ -20,24 +20,26 @@
 
 use crate::{
     Float,
+    core::{
+        interpolate::Interpolate,
+        ode::ODE,
+        solout::{ControlFlag, SolOut},
+        solution::Solution,
+        status::Status,
+    },
     error::Error,
-    hinit::hinit,
-    interpolate::Interpolate,
-    ode::ODE,
-    args::Args,
-    solout::{ControlFlag, SolOut},
-    solution::Solution,
-    status::Status,
+    methods::{hinit::hinit, settings::Settings},
 };
 
-/// Explicit Runge-Kutta method of order 5(4) due to 
+/// Explicit Runge-Kutta method of order 5(4) due to
 /// dormand & prince (with stepsize control and dense output).
 pub fn dopri5<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
     y: &[Float],
-    args: Args<S>,
+    mut solout: Option<&mut S>,
+    settings: Settings,
 ) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
@@ -46,45 +48,42 @@ where
     // --- Input Validation ---
     let mut errors: Vec<Error> = Vec::new();
 
-    // Callback function
-    let mut solout = args.solout;
-
     // Maximum Number of Steps
-    let nmax = args.nmax;
+    let nmax = settings.nmax;
     if nmax <= 0 {
         errors.push(Error::NMaxMustBePositive(nmax));
     }
 
     // Parameter for stiffness detection
-    let nstiff = args.nstiff;
+    let nstiff = settings.nstiff;
     if nstiff <= 0 {
         errors.push(Error::NStiffMustBePositive(nstiff));
     }
 
     // Rounding Unit
-    let uround = args.uround;
+    let uround = settings.uround;
     if uround <= 1e-35 || uround >= 1.0 {
         errors.push(Error::URoundOutOfRange(uround));
     }
 
     // Safety Factor
-    let safety_factor = args.safety_factor;
+    let safety_factor = settings.safety_factor;
     if safety_factor >= 1.0 || safety_factor <= 1e-4 {
         errors.push(Error::SafetyFactorOutOfRange(safety_factor));
     }
 
     // Parameters for step size selection
-    let fac1 = match args.scale_min {
+    let fac1 = match settings.scale_min {
         Some(f) => f,
         None => 0.2,
     };
-    let fac2 = match args.scale_max {
+    let fac2 = match settings.scale_max {
         Some(f) => f,
         None => 10.0,
     };
 
     // Beta for step control stabilization
-    let beta = match args.beta {
+    let beta = match settings.beta {
         Some(f) => f,
         None => 0.04,
     };
@@ -93,7 +92,7 @@ where
     }
 
     // Maximum step size
-    let hmax = match args.hmax {
+    let hmax = match settings.hmax {
         Some(h) => h.abs(),
         None => (xend - x).abs(),
     };
@@ -132,13 +131,13 @@ where
     let facc1 = 1.0 / fac1;
     let facc2 = 1.0 / fac2;
     let posneg = (xend - x).signum();
-    let rtol = args.rtol;
-    let atol = args.atol;
+    let rtol = settings.rtol;
+    let atol = settings.atol;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
     nfev += 1;
-    let mut h = match args.h0 {
+    let mut h = match settings.h0 {
         Some(h0) => h0,
         None => {
             nfev += 1;
@@ -272,7 +271,7 @@ where
             }
 
             // Optional callback function
-            match solout.as_mut().map_or(ControlFlag::Continue,|s| {
+            match solout.as_mut().map_or(ControlFlag::Continue, |s| {
                 // Dense output coefficient computation
                 for i in 0..n {
                     let yd0 = y[i];
@@ -283,7 +282,12 @@ where
                     cont[2 * n + i] = bspl;
                     cont[3 * n + i] = -h * k2[i] + ydiff - bspl;
                     cont[4 * n + i] = h
-                        * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
+                        * (D1 * k1[i]
+                            + D3 * k3[i]
+                            + D4 * k4[i]
+                            + D5 * k5[i]
+                            + D6 * k6[i]
+                            + D7 * k2[i]);
                 }
 
                 let interp = DenseOutput::new(&cont, &x, &h);

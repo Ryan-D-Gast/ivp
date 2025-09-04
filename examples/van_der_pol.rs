@@ -9,8 +9,7 @@
 //! Initial conditions: y0(0) = 2.0, y1(0) = 0.0
 //!
 
-use ivp::dp::*;
-use ivp::*;
+use ivp::prelude::*;
 
 struct VanDerPol {
     eps: f64,
@@ -79,13 +78,16 @@ fn main() {
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [2.0, 0.0];
-    let args = Args::builder()
-        .rtol(1e-9)
-        .atol(1e-9)
-        .solout(Printer::new(0.1, xend))
-        .build();
+    let settings = Settings::builder().rtol(1e-9).atol(1e-9).build();
 
-    let res = dop853(&van_der_pol, x0, xend, &y0, args);
+    let res = dop853(
+        &van_der_pol,
+        x0,
+        xend,
+        &y0,
+        Some(&mut Printer::new(0.1, xend)),
+        settings,
+    );
 
     match res {
         Ok(r) => {

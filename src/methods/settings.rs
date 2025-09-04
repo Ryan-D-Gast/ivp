@@ -1,22 +1,12 @@
-//! Args for numerical integrators
+//! Settings for numerical integrators
 
 use bon::Builder;
 
-use crate::{Float, solout::SolOut};
+use crate::Float;
 
 #[derive(Builder)]
-/// Args for the numerical integrators
-/// 
-/// Note if `solout` is not provided defining the type
-/// as `Args` is required to use the default `DummySolOut`
-/// e.g.
-/// ```
-/// let args: Args = ArgsBuilder::default().build();
-/// //        ^- Without this will be unable to infer solout type.
-/// ```
-pub struct Args<S: SolOut> {
-    /// Solution output function
-    pub solout: Option<S>,
+/// Settings for the numerical integrators
+pub struct Settings {
     /// Real tolerance for error estimation
     #[builder(default = 1e-6, into)]
     pub rtol: Tolerance,
