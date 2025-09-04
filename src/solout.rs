@@ -67,24 +67,9 @@ pub trait SolOut {
 /// - `ModifiedSolution`: the callback changed the solution `y` in-place; the
 ///   integrator will re-evaluate derivatives at the modified state before
 ///   continuing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ControlFlag {
     Continue,
     Interrupt,
-    ModifiedSolution,
-}
-
-/// Dummy implementation of `SolOut` that does nothing.
-pub struct DummySolOut;
-
-impl SolOut for DummySolOut {
-    fn solout<I: crate::interpolate::Interpolate>(
-        &mut self,
-        _xold: Float,
-        _x: Float,
-        _y: &[Float],
-        _interpolator: &I,
-    ) -> crate::ControlFlag {
-        crate::ControlFlag::Continue
-    }
+    ModifiedSolution(Float, Vec<Float>),
 }

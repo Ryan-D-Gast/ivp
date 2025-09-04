@@ -122,6 +122,7 @@ where
     let mut fac11;
     let mut fac;
     let mut hnew;
+    let mut xph;
     let mut nfev: usize = 0;
     let mut nstep: usize = 0;
     let mut naccpt: usize = 0;
@@ -202,7 +203,7 @@ where
             y1[i] =
                 y[i] + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
         }
-        let xph = x + h;
+        xph = x + h;
         f.ode(xph, &y1, &mut k6);
 
         // Final stage
@@ -297,7 +298,12 @@ where
                     x = xph;
                     break;
                 }
-                ControlFlag::ModifiedSolution => {
+                ControlFlag::ModifiedSolution(xm, ym) => {
+                    // Update with modified solution
+                    xph = xm;
+                    y1 = ym;
+
+                    // Recompute k2 at new (xph, y1)
                     f.ode(xph, &y1, &mut k2);
                     nfev += 1;
                 }

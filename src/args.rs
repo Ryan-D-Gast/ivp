@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, solout::{SolOut, DummySolOut}};
+use crate::{Float, solout::SolOut};
 
 #[derive(Builder)]
 /// Args for the numerical integrators
@@ -14,7 +14,7 @@ use crate::{Float, solout::{SolOut, DummySolOut}};
 /// let args: Args = ArgsBuilder::default().build();
 /// //        ^- Without this will be unable to infer solout type.
 /// ```
-pub struct Args<S: SolOut = DummySolOut> {
+pub struct Args<S: SolOut> {
     /// Solution output function
     pub solout: Option<S>,
     /// Real tolerance for error estimation

@@ -1,7 +1,7 @@
 //! Classic explicit Runge-Kutta 4 (RK4) fixed-step integrator.
 
 use crate::{
-    ControlFlag, Float, ODE, SolOut, error::Error, interpolate::CubicHermite, args::Args,
+    ControlFlag, Float, ODE, SolOut, error::Error, args::Args, Interpolate,
     solution::Solution, status::Status,
 };
 
@@ -107,9 +107,13 @@ where
                 status = Status::Interrupted;
                 break;
             }
-            ControlFlag::ModifiedSolution => {
-                // Recompute derivative
-                f.ode(x + h, &y, &mut k1);
+            ControlFlag::ModifiedSolution(xm, ym) => {
+                // Update with modified solution
+                x = xm;
+                y = ym;
+
+                // Recompute k1 at new (x, y).
+                f.ode(x, &y, &mut k1);
                 nfev += 1;
             }
             ControlFlag::Continue => {}
@@ -130,6 +134,56 @@ where
         nrejct: 0,
         status,
     })
+}
+
+struct CubicHermite<'a> {
+    x0: &'a Float,
+    h: &'a Float,
+    y0: &'a [Float],
+    y1: &'a [Float],
+    dy0: &'a [Float],
+    dy1: &'a [Float],
+}
+
+impl<'a> CubicHermite<'a> {
+    pub fn new(
+        x0: &'a Float,
+        h: &'a Float,
+        y0: &'a [Float],
+        y1: &'a [Float],
+        dy0: &'a [Float],
+        dy1: &'a [Float],
+    ) -> Self {
+        Self {
+            x0,
+            h,
+            y0,
+            y1,
+            dy0,
+            dy1,
+        }
+    }
+}
+
+impl<'a> Interpolate for CubicHermite<'a> {
+    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
+        // Cubic Hermite interpolation
+        let t = (xi - self.x0) / self.h;
+        let t2 = t * t;
+        let t3 = t2 * t;
+
+        let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+        let h10 = t3 - 2.0 * t2 + t;
+        let h01 = -2.0 * t3 + 3.0 * t2;
+        let h11 = t3 - t2;
+
+        for i in 0..self.y0.len() {
+            yi[i] = h00 * self.y0[i]
+                + h10 * self.h * self.dy0[i]
+                + h01 * self.y1[i]
+                + h11 * self.h * self.dy1[i];
+        }
+    }
 }
 
 // Classical RK4 coefficients

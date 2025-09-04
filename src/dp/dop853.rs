@@ -496,9 +496,12 @@ where
                     x = xph;
                     break;
                 }
-                ControlFlag::ModifiedSolution => {
-                    // Recompute derivative
-                    f.ode(xph, &y1, &mut k4);
+                ControlFlag::ModifiedSolution(xm, ym) => {
+                    // Update with modified solution
+                    xph = xm;
+                    k5 = ym;
+                    // Recompute k4 at new (xph, k5)
+                    f.ode(xph, &k5, &mut k4);
                     nfev += 1;
                 }
                 ControlFlag::Continue => {}

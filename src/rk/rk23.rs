@@ -172,8 +172,12 @@ where
                     status = Status::Interrupted;
                     break;
                 }
-                ControlFlag::ModifiedSolution => {
-                    // User changed y in-place; recompute k1 at new (x, y).
+                ControlFlag::ModifiedSolution(xm, ym) => {
+                    // Update with modified solution
+                    x = xm;
+                    y = ym;
+
+                    // Recompute k1 at new (x, y).
                     f.ode(x, &y, &mut k1);
                     nfev += 1;
                 }
