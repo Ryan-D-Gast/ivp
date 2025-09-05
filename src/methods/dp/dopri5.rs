@@ -366,7 +366,7 @@ where
 }
 
 /// Continuous output function for DOPRI5
-pub(crate) fn contd5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub(crate) fn contdp5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let n = cont.len() / 5;
     let theta = (xi - xold) / h;
     let theta1 = 1.0 - theta;
@@ -395,7 +395,7 @@ impl<'a> DenseOutput<'a> {
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        contd5(xi, yi, &self.cont, self.xold, self.h);
+        contdp5(xi, yi, &self.cont, self.xold, self.h);
     }
 }
 

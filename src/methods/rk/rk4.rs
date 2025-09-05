@@ -153,7 +153,7 @@ where
 }
 
 /// Continuous output function for RK4 using cubic Hermite interpolation.
-pub(crate) fn contd4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub(crate) fn contrk4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let t = (xi - xold) / h;
     let t2 = t * t;
     let t3 = t2 * t;
@@ -179,7 +179,7 @@ impl<'a> DenseOutput<'a> {
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        contd4(xi, yi, self.cont, self.xold, self.h);
+        contrk4(xi, yi, self.cont, self.xold, self.h);
     }
 }
 

@@ -229,7 +229,7 @@ where
 }
 
 /// Dense output evaluation for RK23
-pub(crate) fn contd4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub(crate) fn contrk23(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let n = yi.len();
     let x = (xi - xold) / h;
     let x2 = x * x;
@@ -253,7 +253,7 @@ impl<'a> DenseOutput<'a> {
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, ti: Float, yi: &mut [Float]) {
-        contd4(ti, yi, self.cont, self.xold, self.h);
+        contrk23(ti, yi, self.cont, self.xold, self.h);
     }
 }
 

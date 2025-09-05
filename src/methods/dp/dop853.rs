@@ -557,7 +557,7 @@ where
 }
 
 /// Continuous output function for DOP853
-pub(crate) fn contd8(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub(crate) fn contdp8(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let n = cont.len() / 8;
     let s = (xi - xold) / h;
     let s1 = 1.0 - s;
@@ -586,7 +586,7 @@ impl<'a> DenseOutput<'a> {
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        contd8(xi, yi, self.cont, self.xold, self.h);
+        contdp8(xi, yi, self.cont, self.xold, self.h);
     }
 }
 
