@@ -12,27 +12,13 @@ impl ODE for HarmonicOscillator {
     }
 }
 
-// No-op SolOut to satisfy generics when not using a custom callback
-struct NoOpSolOut;
-impl SolOut for NoOpSolOut {
-    fn solout<I: Interpolate>(
-        &mut self,
-        _xold: f64,
-        _x: f64,
-        _y: &[f64],
-        _interpolator: &I,
-    ) -> ControlFlag {
-        ControlFlag::Continue
-    }
-}
-
 fn main() {
     let harmonic_oscillator = HarmonicOscillator;
     let x0 = 0.0;
     let y0 = [1.0, 0.0];
     let xend = 2.0 * PI;
     let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * (PI / 10.0)).collect();
-    let options = IVPOptions::<NoOpSolOut>::builder()
+    let options = IVPOptions::builder()
         .method(Method::RK23)
         .rtol(1e-3)
         .atol(1e-3)

@@ -23,21 +23,26 @@ pub fn rk4<F, S>(
     h: Float,
     mut solout: Option<&mut S>,
     settings: Settings,
-) -> Result<Solution, Error>
+) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
 {
     // --- Input Validation ---
+    let mut errors = Vec::new();
 
     // Initial Step Size
     if h == 0.0 {
-        return Err(Error::InvalidStepSize(h));
+        errors.push(Error::InvalidStepSize(h));
     }
 
     let direction = (xend - x).signum();
     if h.signum() != direction {
-        return Err(Error::InvalidStepSize(h));
+        errors.push(Error::InvalidStepSize(h));
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
     }
 
     // --- Declarations ---

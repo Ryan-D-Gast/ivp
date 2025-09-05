@@ -28,7 +28,10 @@ use crate::{
         status::Status,
     },
     error::Error,
-    methods::{hinit::hinit, settings::{Settings, Tolerance}},
+    methods::{
+        hinit::hinit,
+        settings::{Settings, Tolerance},
+    },
 };
 
 /// Explicit Runge-Kutta method of order 8(5,3) due to

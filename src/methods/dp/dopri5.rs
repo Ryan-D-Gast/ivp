@@ -19,13 +19,19 @@
 //!
 
 use crate::{
+    Float,
     core::{
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         solution::Solution,
         status::Status,
-    }, error::Error, methods::{hinit::hinit, settings::{Settings, Tolerance}}, Float
+    },
+    error::Error,
+    methods::{
+        hinit::hinit,
+        settings::{Settings, Tolerance},
+    },
 };
 
 /// Explicit Runge-Kutta method of order 5(4) due to

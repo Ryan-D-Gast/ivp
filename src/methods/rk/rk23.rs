@@ -1,13 +1,19 @@
 //! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
 
 use crate::{
+    Float,
     core::{
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         solution::Solution,
         status::Status,
-    }, error::Error, methods::{hinit::hinit, settings::{Settings, Tolerance}}, Float
+    },
+    error::Error,
+    methods::{
+        hinit::hinit,
+        settings::{Settings, Tolerance},
+    },
 };
 
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.

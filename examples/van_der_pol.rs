@@ -22,27 +22,13 @@ impl ODE for VanDerPol {
     }
 }
 
-// No-op SolOut for solve_ivp
-struct NoOpSolOut;
-impl SolOut for NoOpSolOut {
-    fn solout<I: Interpolate>(
-        &mut self,
-        _xold: f64,
-        _x: f64,
-        _y: &[f64],
-        _interpolator: &I,
-    ) -> ControlFlag {
-        ControlFlag::Continue
-    }
-}
-
 fn main() {
     let van_der_pol = VanDerPol { eps: 1e-3 };
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [2.0, 0.0];
     let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * 0.1).collect();
-    let options = IVPOptions::<NoOpSolOut>::builder()
+    let options = IVPOptions::builder()
         .method(Method::DOP853)
         .rtol(1e-9)
         .atol(1e-9)

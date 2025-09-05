@@ -21,20 +21,6 @@ impl ODE for SimpleODE {
     }
 }
 
-// A no-op SolOut type to satisfy the generic parameter when not using a custom callback.
-struct NoOpSolOut;
-impl SolOut for NoOpSolOut {
-    fn solout<I: Interpolate>(
-        &mut self,
-        _xold: f64,
-        _x: f64,
-        _y: &[f64],
-        _interpolator: &I,
-    ) -> ControlFlag {
-        ControlFlag::Continue
-    }
-}
-
 fn main() {
     let f = SimpleODE;
     let x0 = 0.0;
@@ -42,7 +28,7 @@ fn main() {
     let y0 = [1.0];
     let t_eval: Vec<f64> = (0..=50).map(|i| i as f64 * 0.1).collect();
 
-    let options = IVPOptions::<NoOpSolOut>::builder()
+    let options = IVPOptions::builder()
         .rtol(1e-6)
         .atol(1e-6)
         .t_eval(t_eval)
@@ -64,6 +50,6 @@ fn main() {
                 println!("x = {:.4}, y = {:?}", ti, yi);
             }
         }
-        Err(e) => eprintln!("Integration failed: {}", e),
+        Err(e) => eprintln!("Integration failed: {:?}", e),
     }
 }
