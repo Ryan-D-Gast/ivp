@@ -47,7 +47,6 @@ fn main() {
         .rtol(1e-9)
         .atol(1e-9)
         .t_eval(t_eval)
-        .save_step_endpoints(false)
         .build();
 
     match solve_ivp(&van_der_pol, x0, xend, &y0, options) {

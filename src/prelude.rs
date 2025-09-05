@@ -7,4 +7,4 @@ pub use crate::core::{
     solution::Solution,
     status::Status,
 };
-pub use crate::solve_ivp::{IVPOptions, IVPSolution, Method, solve_ivp};
+pub use crate::solve::{IVPOptions, IVPSolution, Method, solve_ivp};

@@ -37,7 +37,6 @@ fn main() {
         .rtol(1e-3)
         .atol(1e-3)
         .t_eval(t_eval)
-        .save_step_endpoints(false)
         .build();
 
     match solve_ivp(&harmonic_oscillator, x0, xend, &y0, options) {
