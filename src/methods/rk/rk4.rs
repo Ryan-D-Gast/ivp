@@ -32,12 +32,8 @@ where
     let mut errors = Vec::new();
 
     // Initial Step Size
-    if h == 0.0 {
-        errors.push(Error::InvalidStepSize(h));
-    }
-
     let direction = (xend - x).signum();
-    if h.signum() != direction {
+    if h == 0.0 || h.signum() != direction {
         errors.push(Error::InvalidStepSize(h));
     }
 
