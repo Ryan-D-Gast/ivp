@@ -49,6 +49,8 @@ where
     let mut k3 = vec![0.0; n];
     let mut k4 = vec![0.0; n];
     let mut yt = vec![0.0; n];
+    // Dense output coefficients buffer: [y0 | dy0 | dy1 | y1]
+    let mut cont = vec![0.0; 4 * n];
     let mut nfev = 0;
     let mut nstep = 0;
     let mut status = Status::Success;
@@ -58,7 +60,9 @@ where
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
     if let Some(s) = solout.as_mut() {
-        let interp = CubicHermite::new(&xold, &h, &yt, &y, &k4, &k1);
+        cont[0..n].copy_from_slice(&y);
+        for i in 0..n { cont[n + i] = k1[i]; }
+        let interp = DenseOutput::new(&cont, xold, h);
         s.solout(xold, x, &y, &interp);
     }
 
@@ -92,12 +96,10 @@ where
         }
         f.ode(x + C4 * h, &yt, &mut k4);
 
-        // Store previous state
-        xold = x;
-        yt.copy_from_slice(&y);
+    xold = x;
+    yt.copy_from_slice(&y);
 
-        // Update state
-        x += h;
+    x += h;
         for i in 0..n {
             y[i] = y[i] + h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i] + B4 * k4[i]);
         }
@@ -106,9 +108,15 @@ where
         nfev += 4;
         nstep += 1;
 
-        // Optional Callback function
         match solout.as_mut().map_or(ControlFlag::Continue, |s| {
-            let interp = CubicHermite::new(&xold, &h, &yt, &y, &k4, &k1);
+            // cont = [y0 | dy0 | dy1 | y1]
+            cont[0..n].copy_from_slice(&yt);
+            for i in 0..n { 
+                cont[n + i] = k4[i]; 
+                cont[2 * n + i] = k1[i];
+            }
+            cont[3 * n..4 * n].copy_from_slice(&y);
+            let interp = DenseOutput::new(&cont, xold, h);
             s.solout(xold, x, &y, &interp)
         }) {
             ControlFlag::Interrupt => {
@@ -144,53 +152,34 @@ where
     })
 }
 
-struct CubicHermite<'a> {
-    x0: &'a Float,
-    h: &'a Float,
-    y0: &'a [Float],
-    y1: &'a [Float],
-    dy0: &'a [Float],
-    dy1: &'a [Float],
-}
-
-impl<'a> CubicHermite<'a> {
-    pub fn new(
-        x0: &'a Float,
-        h: &'a Float,
-        y0: &'a [Float],
-        y1: &'a [Float],
-        dy0: &'a [Float],
-        dy1: &'a [Float],
-    ) -> Self {
-        Self {
-            x0,
-            h,
-            y0,
-            y1,
-            dy0,
-            dy1,
-        }
+/// Continuous output function for RK4 using cubic Hermite interpolation.
+pub(crate) fn contd4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+    let t = (xi - xold) / h;
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+    let h10 = t3 - 2.0 * t2 + t;
+    let h01 = -2.0 * t3 + 3.0 * t2;
+    let h11 = t3 - t2;
+    let n = yi.len();
+    for i in 0..n {
+        yi[i] = h00 * cont[i] + h10 * h * cont[n + i] + h01 * cont[3 * n + i] + h11 * h * cont[2 * n + i];
     }
 }
 
-impl<'a> Interpolate for CubicHermite<'a> {
+struct DenseOutput<'a> {
+    cont: &'a [Float],
+    xold: Float,
+    h: Float,
+}
+
+impl<'a> DenseOutput<'a> {
+    pub fn new(cont: &'a [Float], xold: Float, h: Float) -> Self { Self { xold, h, cont } }
+}
+
+impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        // Cubic Hermite interpolation
-        let t = (xi - self.x0) / self.h;
-        let t2 = t * t;
-        let t3 = t2 * t;
-
-        let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
-        let h10 = t3 - 2.0 * t2 + t;
-        let h01 = -2.0 * t3 + 3.0 * t2;
-        let h11 = t3 - t2;
-
-        for i in 0..self.y0.len() {
-            yi[i] = h00 * self.y0[i]
-                + h10 * self.h * self.dy0[i]
-                + h01 * self.y1[i]
-                + h11 * self.h * self.dy1[i];
-        }
+        contd4(xi, yi, self.cont, self.xold, self.h);
     }
 }
 

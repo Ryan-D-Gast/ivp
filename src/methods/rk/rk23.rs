@@ -80,9 +80,8 @@ where
     let mut k4 = vec![0.0; n];
     let mut yt = vec![0.0; n];
     let mut ye = vec![0.0; n];
-    let mut q1 = vec![0.0; n];
-    let mut q2 = vec![0.0; n];
-    let mut q3 = vec![0.0; n];
+    // Dense output coefficients buffer: [y_old | q1 | q2 | q3]
+    let mut cont = vec![0.0; 4 * n];
     let mut nfev = 0;
     let mut nstep = 0;
     let mut naccpt = 0;
@@ -104,7 +103,8 @@ where
         }
     };
     if let Some(s) = solout.as_mut() {
-        let interp = Rk23DenseOutput::new(h, xold, &ye, &q1, &q2, &q3);
+        cont[0..n].copy_from_slice(&y);
+    let interp = DenseOutput::new(&cont, xold, h);
         s.solout(xold, x, &y, &interp);
     }
 
@@ -168,13 +168,13 @@ where
 
             // Optional Callback function
             match solout.as_mut().map_or(ControlFlag::Continue, |s| {
-                // Prepare dense output only when the callback exists.
+                cont[0..n].copy_from_slice(&ye);
                 for i in 0..n {
-                    q1[i] = k1[i];
-                    q2[i] = D21 * k1[i] + D22 * k2[i] + D23 * k3[i] + D24 * k4[i];
-                    q3[i] = D31 * k1[i] + D32 * k2[i] + D33 * k3[i] + D34 * k4[i];
+                    cont[n + i] = k1[i];
+                    cont[2 * n + i] = D21 * k1[i] + D22 * k2[i] + D23 * k3[i] + D24 * k4[i];
+                    cont[3 * n + i] = D31 * k1[i] + D32 * k2[i] + D33 * k3[i] + D34 * k4[i];
                 }
-                let dense_output = Rk23DenseOutput::new(h, xold, &ye, &q1, &q2, &q3);
+                let dense_output = DenseOutput::new(&cont, xold, h);
                 s.solout(xold, x, &y, &dense_output)
             }) {
                 ControlFlag::Interrupt => {
@@ -228,44 +228,32 @@ where
     })
 }
 
-/// Dense output interpolant for RK23
-struct Rk23DenseOutput<'a> {
-    t_old: Float,
-    y_old: &'a [Float],
-    q1: &'a [Float],
-    q2: &'a [Float],
-    q3: &'a [Float],
-    h: Float,
-}
-
-impl<'a> Rk23DenseOutput<'a> {
-    pub fn new(
-        h: Float,
-        t_old: Float,
-        y_old: &'a [Float],
-        q1: &'a [Float],
-        q2: &'a [Float],
-        q3: &'a [Float],
-    ) -> Self {
-        Self {
-            t_old,
-            y_old,
-            q1,
-            q2,
-            q3,
-            h,
-        }
+/// Dense output evaluation for RK23
+pub(crate) fn contd4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+    let n = yi.len();
+    let x = (xi - xold) / h;
+    let x2 = x * x;
+    let x3 = x2 * x;
+    for i in 0..n {
+        yi[i] = cont[i] + h * (cont[n + i] * x + cont[2 * n + i] * x2 + cont[3 * n + i] * x3);
     }
 }
 
-impl<'a> Interpolate for Rk23DenseOutput<'a> {
+struct DenseOutput<'a> {
+    cont: &'a [Float],
+    xold: Float,
+    h: Float,
+}
+
+impl<'a> DenseOutput<'a> {
+    pub fn new(cont: &'a [Float], xold: Float, h: Float) -> Self {
+        Self { xold, cont, h }
+    }
+}
+
+impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, ti: Float, yi: &mut [Float]) {
-        let x = (ti - self.t_old) / self.h;
-        let x2 = x * x;
-        let x3 = x2 * x;
-        for i in 0..yi.len() {
-            yi[i] = self.y_old[i] + self.h * (self.q1[i] * x + self.q2[i] * x2 + self.q3[i] * x3);
-        }
+        contd4(ti, yi, self.cont, self.xold, self.h);
     }
 }
 

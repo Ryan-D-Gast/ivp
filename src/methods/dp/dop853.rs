@@ -159,7 +159,7 @@ where
         }
     };
     if let Some(s) = solout.as_mut() {
-        let interp = DenseOutput::new(&cont, &x, &h);
+        let interp = DenseOutput::new(&cont, x, h);
         s.solout(x, x, &y, &interp);
     }
 
@@ -485,7 +485,7 @@ where
                             + D716 * k3[i]);
                 }
 
-                let interp = DenseOutput::new(&cont, &x, &h);
+                let interp = DenseOutput::new(&cont, x, h);
                 s.solout(x, xph, &k5, &interp)
             }) {
                 ControlFlag::Interrupt => {
@@ -556,33 +556,37 @@ where
     })
 }
 
+/// Continuous output function for DOP853
+pub(crate) fn contd8(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+    let n = cont.len() / 8;
+    let s = (xi - xold) / h;
+    let s1 = 1.0 - s;
+    for i in 0..n {
+        let conpar = cont[4 * n + i]
+            + s * (cont[5 * n + i] + s1 * (cont[6 * n + i] + s * cont[7 * n + i]));
+        let contd8 = cont[i]
+            + s * (cont[n + i]
+                + s1 * (cont[2 * n + i] + s * (cont[3 * n + i] + s1 * conpar)));
+        yi[i] = contd8;
+    }
+}
+
 /// Dense output interpolator for DOP853
 struct DenseOutput<'a> {
-    cont: &'a Vec<Float>,
-    xold: &'a Float,
-    h: &'a Float,
+    cont: &'a [Float],
+    xold: Float,
+    h: Float,
 }
 
 impl<'a> DenseOutput<'a> {
-    fn new(cont: &'a Vec<Float>, xold: &'a Float, h: &'a Float) -> Self {
+    fn new(cont: &'a [Float], xold: Float, h: Float) -> Self {
         Self { cont, xold, h }
     }
 }
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        let n = self.cont.len() / 8;
-        let s = (xi - *self.xold) / *self.h;
-        let s1 = 1.0 - s;
-        for i in 0..n {
-            let conpar = self.cont[4 * n + i]
-                + s * (self.cont[5 * n + i]
-                    + s1 * (self.cont[6 * n + i] + s * self.cont[7 * n + i]));
-            let contd8 = self.cont[i]
-                + s * (self.cont[n + i]
-                    + s1 * (self.cont[2 * n + i] + s * (self.cont[3 * n + i] + s1 * conpar)));
-            yi[i] = contd8;
-        }
+        contd8(xi, yi, self.cont, self.xold, self.h);
     }
 }
 

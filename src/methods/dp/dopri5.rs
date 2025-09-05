@@ -150,7 +150,7 @@ where
         }
     };
     if let Some(s) = solout.as_mut() {
-        let interp = DenseOutput::new(&cont, &x, &h);
+        let interp = DenseOutput::new(&cont, x, h);
         s.solout(x, x, &y, &interp);
     }
 
@@ -293,7 +293,7 @@ where
                             + D7 * k2[i]);
                 }
 
-                let interp = DenseOutput::new(&cont, &x, &h);
+                let interp = DenseOutput::new(&cont, x, h);
                 s.solout(x, xph, &y1, &interp)
             }) {
                 ControlFlag::Interrupt => {
@@ -365,32 +365,37 @@ where
     })
 }
 
+/// Continuous output function for DOPRI5
+pub(crate) fn contd5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+    let n = cont.len() / 5;
+    let theta = (xi - xold) / h;
+    let theta1 = 1.0 - theta;
+    for i in 0..n {
+        yi[i] = cont[i]
+            + theta
+                * (cont[n + i]
+                    + theta1
+                        * (cont[2 * n + i]
+                            + theta * (cont[3 * n + i] + theta1 * cont[4 * n + i])));
+    }
+}
+
 /// Dense output interpolator for DOPRI5
 struct DenseOutput<'a> {
-    cont: &'a Vec<Float>,
-    xold: &'a Float,
-    h: &'a Float,
+    cont: &'a [Float],
+    xold: Float,
+    h: Float,
 }
 
 impl<'a> DenseOutput<'a> {
-    fn new(cont: &'a Vec<Float>, xold: &'a Float, h: &'a Float) -> Self {
+    fn new(cont: &'a [Float], xold: Float, h: Float) -> Self {
         Self { cont, xold, h }
     }
 }
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        let n = self.cont.len() / 5;
-        let theta = (xi - *self.xold) / *self.h;
-        let theta1 = 1.0 - theta;
-        for i in 0..n {
-            yi[i] = self.cont[i]
-                + theta
-                    * (self.cont[n + i]
-                        + theta1
-                            * (self.cont[2 * n + i]
-                                + theta * (self.cont[3 * n + i] + theta1 * self.cont[4 * n + i])));
-        }
+        contd5(xi, yi, &self.cont, self.xold, self.h);
     }
 }
 
