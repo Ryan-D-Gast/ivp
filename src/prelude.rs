@@ -12,3 +12,4 @@ pub use crate::methods::{
     rk::{rk4, rk23},
     settings::Settings,
 };
+pub use crate::solve_ivp::{solve_ivp, IVPOptions, IVPSolution, Method};

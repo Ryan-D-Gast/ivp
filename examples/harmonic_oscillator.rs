@@ -12,53 +12,16 @@ impl ODE for HarmonicOscillator {
     }
 }
 
-struct EvenOutput {
-    xout: f64,
-    dx: f64,
-    first_call: bool,
-    xend: f64,
-}
-
-impl EvenOutput {
-    fn new(dx: f64, xend: f64) -> Self {
-        Self {
-            xout: 0.0,
-            dx,
-            first_call: true,
-            xend,
-        }
-    }
-}
-
-impl SolOut for EvenOutput {
+// No-op SolOut to satisfy generics when not using a custom callback
+struct NoOpSolOut;
+impl SolOut for NoOpSolOut {
     fn solout<I: Interpolate>(
         &mut self,
-        xold: f64,
-        x: f64,
-        y: &[f64],
-        interpolator: &I,
+        _xold: f64,
+        _x: f64,
+        _y: &[f64],
+        _interpolator: &I,
     ) -> ControlFlag {
-        if self.first_call {
-            println!("x = {:>8.5}, y = {:?}", xold, y);
-            self.first_call = false;
-            self.xout = xold + self.dx;
-        }
-
-        let tol = 1e-12;
-        while self.xout <= x + tol {
-            let mut yi = vec![0.0; y.len()];
-            interpolator.interpolate(self.xout, &mut yi);
-            println!("x = {:>8.5}, y = {:?}", self.xout, yi);
-            self.xout += self.dx;
-        }
-
-        if (x - self.xend).abs() <= tol {
-            let last = self.xout - self.dx;
-            if (last - x).abs() > tol {
-                println!("x = {:>8.5}, y = {:?}", x, y);
-            }
-        }
-
         ControlFlag::Continue
     }
 }
@@ -69,25 +32,29 @@ fn main() {
     let y0 = [1.0, 0.0];
     let xend = 2.0 * PI;
     let settings = Settings::builder().rtol(1e-3).atol(1e-3).build();
+    let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * (PI / 10.0)).collect();
+    let options = IVPOptions::<NoOpSolOut>::builder()
+        .method(Method::RK23)
+        .settings(settings)
+        .t_eval(t_eval)
+        .save_step_endpoints(false)
+        .build();
 
-    match rk23(
-        &harmonic_oscillator,
-        x0,
-        xend,
-        &y0,
-        Some(&mut EvenOutput::new(PI / 10.0, xend)),
-        settings,
-    ) {
-        Ok(result) => {
-            println!("Final status: {:?}", result.status);
-            println!("Final state: x = {:.5}, y = {:?}", result.x, result.y);
-            println!("Number of function evaluations: {}", result.nfev);
-            println!("Number of steps taken: {}", result.nstep);
-            println!("Number of accepted steps: {}", result.naccpt);
-            println!("Number of rejected steps: {}", result.nrejct);
+    match solve_ivp(&harmonic_oscillator, x0, xend, &y0, options) {
+        Ok(sol) => {
+            println!("Final status: {:?}", sol.status);
+            if let (Some(&t_last), Some(y_last)) = (sol.t.last(), sol.y.last()) {
+                println!("Final state: x = {:.5}, y = {:?}", t_last, y_last);
+            }
+            println!("Number of function evaluations: {}", sol.nfev);
+            println!("Number of steps taken: {}", sol.nstep);
+            println!("Number of accepted steps: {}", sol.naccpt);
+            println!("Number of rejected steps: {}", sol.nrejct);
+
+            for (ti, yi) in sol.t.iter().zip(sol.y.iter()) {
+                println!("x = {:>8.5}, y = {:?}", ti, yi);
+            }
         }
-        Err(err) => {
-            eprintln!("Integration failed: {:?}", err);
-        }
+        Err(err) => eprintln!("Integration failed: {:?}", err),
     }
 }

@@ -12,6 +12,8 @@ pub enum Error {
     BetaTooLarge(Float),
     InvalidStepSize(Float),
     InvalidScaleFactors(Float, Float),
+    InvalidTEval(String),
+    MethodErrors(Vec<Error>),
 }
 
 impl std::fmt::Display for Error {
@@ -30,6 +32,14 @@ impl std::fmt::Display for Error {
                 "scale_min must be > 0 and scale_max > scale_min (got min={}, max={})",
                 min, max
             ),
+            Error::InvalidTEval(msg) => write!(f, "invalid t_eval: {}", msg),
+            Error::MethodErrors(errs) => {
+                write!(f, "method configuration errors:")?;
+                for e in errs {
+                    write!(f, "\n  - {}", e)?;
+                }
+                Ok(())
+            }
         }
     }
 }

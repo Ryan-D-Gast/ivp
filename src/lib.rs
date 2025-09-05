@@ -3,6 +3,7 @@
 mod core;
 mod error;
 mod methods;
+mod solve_ivp;
 
 pub mod prelude;
 

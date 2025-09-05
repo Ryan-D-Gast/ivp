@@ -22,53 +22,16 @@ impl ODE for VanDerPol {
     }
 }
 
-struct Printer {
-    xout: f64,
-    dx: f64,
-    first_call: bool,
-    xend: f64,
-}
-
-impl Printer {
-    fn new(dx: f64, xend: f64) -> Self {
-        Self {
-            xout: 0.0,
-            dx,
-            first_call: true,
-            xend,
-        }
-    }
-}
-
-impl SolOut for Printer {
+// No-op SolOut for solve_ivp
+struct NoOpSolOut;
+impl SolOut for NoOpSolOut {
     fn solout<I: Interpolate>(
         &mut self,
-        xold: f64,
-        x: f64,
-        y: &[f64],
-        interpolator: &I,
+        _xold: f64,
+        _x: f64,
+        _y: &[f64],
+        _interpolator: &I,
     ) -> ControlFlag {
-        if self.first_call {
-            println!("x = {:>8.5}, y = {:?}", xold, y);
-            self.first_call = false;
-            self.xout = xold + self.dx;
-        }
-
-        let tol = 1e-12;
-        while self.xout <= x + tol {
-            let mut yi = [0.0; 2];
-            interpolator.interpolate(self.xout, &mut yi);
-            println!("x = {:>8.5}, y = {:?}", self.xout, yi);
-            self.xout += self.dx;
-        }
-
-        if (x - self.xend).abs() <= tol {
-            let last = self.xout - self.dx;
-            if (last - x).abs() > tol {
-                println!("x = {:>8.5}, y = {:?}", x, y);
-            }
-        }
-
         ControlFlag::Continue
     }
 }
@@ -79,25 +42,29 @@ fn main() {
     let xend = 2.0;
     let y0 = [2.0, 0.0];
     let settings = Settings::builder().rtol(1e-9).atol(1e-9).build();
+    let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * 0.1).collect();
+    let options = IVPOptions::<NoOpSolOut>::builder()
+        .method(Method::DOP853)
+        .settings(settings)
+        .t_eval(t_eval)
+        .save_step_endpoints(false)
+        .build();
 
-    let res = dop853(
-        &van_der_pol,
-        x0,
-        xend,
-        &y0,
-        Some(&mut Printer::new(0.1, xend)),
-        settings,
-    );
+    match solve_ivp(&van_der_pol, x0, xend, &y0, options) {
+        Ok(sol) => {
+            println!("Finished status: {:?}", sol.status);
+            if let (Some(&t_last), Some(y_last)) = (sol.t.last(), sol.y.last()) {
+                println!("Final State: x = {:.5}, y = {:?}", t_last, y_last);
+            }
+            println!("Number of function evaluations: {}", sol.nfev);
+            println!("Number of steps taken: {}", sol.nstep);
+            println!("Number of accepted steps: {}", sol.naccpt);
+            println!("Number of rejected steps: {}", sol.nrejct);
 
-    match res {
-        Ok(r) => {
-            println!("Finished status: {:?}", r.status);
-            println!("Final State: x = {:.5}, y = {:?}", r.x, r.y);
-            println!("Number of function evaluations: {}", r.nfev);
-            println!("Number of steps taken: {}", r.nstep);
-            println!("Number of accepted steps: {}", r.naccpt);
-            println!("Number of rejected steps: {}", r.nrejct);
+            for (ti, yi) in sol.t.iter().zip(sol.y.iter()) {
+                println!("x = {:>8.5}, y = {:?}", ti, yi);
+            }
         }
-        Err(e) => eprintln!("dop853 failed: {:?}", e),
+        Err(e) => eprintln!("solve_ivp failed: {:?}", e),
     }
 }
