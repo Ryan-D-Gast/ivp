@@ -7,12 +7,6 @@ use crate::Float;
 #[derive(Builder)]
 /// Settings for the numerical integrators
 pub struct Settings {
-    /// Real tolerance for error estimation
-    #[builder(default = 1e-6, into)]
-    pub rtol: Tolerance,
-    /// Absolute tolerance for error estimation
-    #[builder(default = 1e-6, into)]
-    pub atol: Tolerance,
     /// The rounding unit, typically machine epsilon
     #[builder(default = 2.3e-16)]
     pub uround: Float,
@@ -29,6 +23,8 @@ pub struct Settings {
     pub beta: Option<Float>,
     /// Maximal step size.
     pub hmax: Option<Float>,
+    /// Minimum step size.
+    pub hmin: Option<Float>,
     /// Initial step size. None will result in an initial guess
     /// provided by the [`crate::hinit::hinit`] function.
     pub h0: Option<Float>,
@@ -59,6 +55,18 @@ impl From<Float> for Tolerance {
 impl From<&[Float]> for Tolerance {
     fn from(val: &[Float]) -> Self {
         Tolerance::Vector(val.to_vec())
+    }
+}
+
+impl<const N: usize> From<[Float; N]> for Tolerance {
+    fn from(val: [Float; N]) -> Self {
+        Tolerance::Vector(val.to_vec())
+    }
+}
+
+impl From<Vec<Float>> for Tolerance {
+    fn from(val: Vec<Float>) -> Self {
+        Tolerance::Vector(val)
     }
 }
 

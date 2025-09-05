@@ -2,6 +2,7 @@
 
 use bon::Builder;
 
+use crate::methods::settings::Tolerance;
 use crate::Float;
 use crate::{
     error::Error,
@@ -20,14 +21,13 @@ pub struct IVPOptions<'a, S: SolOut> {
     #[builder(default = Method::RK45)]
     pub method: Method,
     /// Relative tolerance for error estimation.
-    #[builder(default = 1e-6)]
-    pub rtol: Float,
+    #[builder(default = 1e-6, into)]
+    pub rtol: Tolerance,
     /// Absolute tolerance for error estimation.
-    #[builder(default = 1e-6)]
-    pub atol: Float,
+    #[builder(default = 1e-6, into)]
+    pub atol: Tolerance,
     /// Maximum number of allowed steps.
-    #[builder(default = 100_000)]
-    pub nmax: usize,
+    pub nmax: Option<usize>,
     /// Points where the solution is requested. If provided, the default SolOut will
     /// use dense output to sample at these locations.
     pub t_eval: Option<Vec<Float>>,
@@ -39,7 +39,7 @@ pub struct IVPOptions<'a, S: SolOut> {
     pub first_step: Option<Float>,
     /// Convenience alias for maximum step size (maps to `settings.hmax`).
     pub max_step: Option<Float>,
-    /// Minimum step size constraint (not yet enforced by methods; placeholder).
+    /// Minimum step size constraint (maps to `settings.hmin`).
     pub min_step: Option<Float>,
     /// Save step endpoints (initial call and each accepted step). Default: true.
     #[builder(default = true)]
@@ -58,15 +58,15 @@ where
     F: ODE,
     S: SolOut,
 {
-    // Build Settings from IVPOptions knobs
-    let mut settings = Settings::builder()
-        .rtol(options.rtol)
-        .atol(options.atol)
-        .nmax(options.nmax)
-        .build();
+    // Build Settings from IVPOptions knobs (rtol/atol are now passed directly to methods)
+    let mut settings = Settings::builder().build();
+    if let Some(nmax) = options.nmax {
+        settings.nmax = nmax;
+    }
     // Align convenience aliases into Settings
     settings.h0 = options.first_step;
     settings.hmax = options.max_step;
+    settings.hmin = options.min_step;
 
     // Validate t_eval if provided
     if let Some(ref te) = options.t_eval {
@@ -123,7 +123,16 @@ where
                 }
             })
         }
-        Method::RK23 => rk23(f, x0, xend, y0, Some(&mut default_solout), settings)
+        Method::RK23 => rk23(
+            f,
+            x0,
+            xend,
+            y0,
+            options.rtol.into(),
+            options.atol.into(),
+            Some(&mut default_solout),
+            settings,
+        )
             .map_err(Error::MethodErrors)
             .map(|solution| {
                 let (t, y) = default_solout.into_data();
@@ -137,7 +146,16 @@ where
                     status: solution.status,
                 }
             }),
-        Method::RK45 => dopri5(f, x0, xend, y0, Some(&mut default_solout), settings)
+        Method::RK45 => dopri5(
+            f,
+            x0,
+            xend,
+            y0,
+            options.rtol.into(),
+            options.atol.into(),
+            Some(&mut default_solout),
+            settings,
+        )
             .map_err(Error::MethodErrors)
             .map(|solution| {
                 let (t, y) = default_solout.into_data();
@@ -151,7 +169,16 @@ where
                     status: solution.status,
                 }
             }),
-        Method::DOP853 => dop853(f, x0, xend, y0, Some(&mut default_solout), settings)
+        Method::DOP853 => dop853(
+            f,
+            x0,
+            xend,
+            y0,
+            options.rtol.into(),
+            options.atol.into(),
+            Some(&mut default_solout),
+            settings,
+        )
             .map_err(Error::MethodErrors)
             .map(|solution| {
                 let (t, y) = default_solout.into_data();
@@ -232,7 +259,7 @@ impl<'a, S: SolOut> SolOut for DefaultSolOut<'a, S> {
     ) -> crate::prelude::ControlFlag {
         // Record endpoints
         if self.save_endpoints {
-            if (xold - x).abs() <= self.tol {
+            if xold == x {
                 self.t.push(x);
                 self.y.push(y.to_vec());
             } else {

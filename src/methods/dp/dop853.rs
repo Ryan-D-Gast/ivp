@@ -28,7 +28,7 @@ use crate::{
         status::Status,
     },
     error::Error,
-    methods::{hinit::hinit, settings::Settings},
+    methods::{hinit::hinit, settings::{Settings, Tolerance}},
 };
 
 /// Explicit Runge-Kutta method of order 8(5,3) due to
@@ -38,6 +38,8 @@ pub fn dop853<F, S>(
     mut x: Float,
     xend: Float,
     y: &[Float],
+    rtol: Tolerance,
+    atol: Tolerance,
     mut solout: Option<&mut S>,
     settings: Settings,
 ) -> Result<Solution, Vec<Error>>
@@ -140,8 +142,6 @@ where
     let mut nrejct: usize = 0;
     let status;
     let posneg = (xend - x).signum();
-    let rtol = settings.rtol;
-    let atol = settings.atol;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);

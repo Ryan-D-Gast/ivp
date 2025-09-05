@@ -1,16 +1,13 @@
 //! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
 
 use crate::{
-    Float,
     core::{
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         solution::Solution,
         status::Status,
-    },
-    error::Error,
-    methods::{hinit::hinit, settings::Settings},
+    }, error::Error, methods::{hinit::hinit, settings::{Settings, Tolerance}}, Float
 };
 
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
@@ -21,6 +18,8 @@ pub fn rk23<F, S>(
     mut x: Float,
     xend: Float,
     y: &[Float],
+    rtol: Tolerance,
+    atol: Tolerance,
     mut solout: Option<&mut S>,
     settings: Settings,
 ) -> Result<Solution, Vec<Error>>
@@ -85,8 +84,6 @@ where
     let mut status = Status::Success;
     let mut xold = x;
     let direction = (xend - x).signum();
-    let rtol = settings.rtol;
-    let atol = settings.atol;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);

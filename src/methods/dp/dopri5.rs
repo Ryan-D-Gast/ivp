@@ -19,16 +19,13 @@
 //!
 
 use crate::{
-    Float,
     core::{
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         solution::Solution,
         status::Status,
-    },
-    error::Error,
-    methods::{hinit::hinit, settings::Settings},
+    }, error::Error, methods::{hinit::hinit, settings::{Settings, Tolerance}}, Float
 };
 
 /// Explicit Runge-Kutta method of order 5(4) due to
@@ -38,6 +35,8 @@ pub fn dopri5<F, S>(
     mut x: Float,
     xend: Float,
     y: &[Float],
+    rtol: Tolerance,
+    atol: Tolerance,
     mut solout: Option<&mut S>,
     settings: Settings,
 ) -> Result<Solution, Vec<Error>>
@@ -131,8 +130,6 @@ where
     let facc1 = 1.0 / fac1;
     let facc2 = 1.0 / fac2;
     let posneg = (xend - x).signum();
-    let rtol = settings.rtol;
-    let atol = settings.atol;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
