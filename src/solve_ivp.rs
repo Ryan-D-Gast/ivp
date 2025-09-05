@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     methods::{
         dp::{dop853, dopri5},
-        rk::{rk23, rk4},
+        rk::{rk4, rk23},
         settings::Settings,
     },
     prelude::{Interpolate, ODE, SolOut, Status},
@@ -19,9 +19,15 @@ pub struct IVPOptions<'a, S: SolOut> {
     /// Method to use. Default: RK45 (Dormand–Prince 5(4)).
     #[builder(default = Method::RK45)]
     pub method: Method,
-    /// Core integrator settings (rtol, atol, nmax, etc.)
-    #[builder(default = Settings::builder().build())]
-    pub settings: Settings,
+    /// Relative tolerance for error estimation.
+    #[builder(default = 1e-6)]
+    pub rtol: Float,
+    /// Absolute tolerance for error estimation.
+    #[builder(default = 1e-6)]
+    pub atol: Float,
+    /// Maximum number of allowed steps.
+    #[builder(default = 100_000)]
+    pub nmax: usize,
     /// Points where the solution is requested. If provided, the default SolOut will
     /// use dense output to sample at these locations.
     pub t_eval: Option<Vec<Float>>,
@@ -52,18 +58,22 @@ where
     F: ODE,
     S: SolOut,
 {
+    // Build Settings from IVPOptions knobs
+    let mut settings = Settings::builder()
+        .rtol(options.rtol)
+        .atol(options.atol)
+        .nmax(options.nmax)
+        .build();
     // Align convenience aliases into Settings
-    if let Some(h0) = options.first_step {
-        options.settings.h0 = Some(h0);
-    }
-    if let Some(hmax) = options.max_step {
-        options.settings.hmax = Some(hmax);
-    }
+    settings.h0 = options.first_step;
+    settings.hmax = options.max_step;
 
     // Validate t_eval if provided
     if let Some(ref te) = options.t_eval {
         if te.is_empty() {
-            return Err(Error::InvalidTEval("t_eval must be non-empty when provided".into()));
+            return Err(Error::InvalidTEval(
+                "t_eval must be non-empty when provided".into(),
+            ));
         }
         // Check monotonicity matching direction
         let dir = (xend - x0).signum();
@@ -98,19 +108,8 @@ where
     match options.method {
         Method::RK4 => {
             // Use settings.h0 if provided; otherwise default to (xend - x0)/100
-            let h = options
-                .settings
-                .h0
-                .unwrap_or_else(|| (xend - x0) / 100.0);
-            let res = rk4(
-                f,
-                x0,
-                xend,
-                y0,
-                h,
-                Some(&mut default_solout),
-                options.settings,
-            );
+            let h = settings.h0.unwrap_or_else(|| (xend - x0) / 100.0);
+            let res = rk4(f, x0, xend, y0, h, Some(&mut default_solout), settings);
             res.map(|solution| {
                 let (t, y) = default_solout.into_data();
                 IVPSolution {
@@ -124,69 +123,48 @@ where
                 }
             })
         }
-        Method::RK23 => rk23(
-            f,
-            x0,
-            xend,
-            y0,
-            Some(&mut default_solout),
-            options.settings,
-        )
-        .map_err(Error::MethodErrors)
-        .map(|solution| {
-            let (t, y) = default_solout.into_data();
-            IVPSolution {
-                t,
-                y,
-                nfev: solution.nfev,
-                nstep: solution.nstep,
-                naccpt: solution.naccpt,
-                nrejct: solution.nrejct,
-                status: solution.status,
-            }
-        }),
-        Method::RK45 => dopri5(
-            f,
-            x0,
-            xend,
-            y0,
-            Some(&mut default_solout),
-            options.settings,
-        )
-        .map_err(Error::MethodErrors)
-        .map(|solution| {
-            let (t, y) = default_solout.into_data();
-            IVPSolution {
-                t,
-                y,
-                nfev: solution.nfev,
-                nstep: solution.nstep,
-                naccpt: solution.naccpt,
-                nrejct: solution.nrejct,
-                status: solution.status,
-            }
-        }),
-        Method::DOP853 => dop853(
-            f,
-            x0,
-            xend,
-            y0,
-            Some(&mut default_solout),
-            options.settings,
-        )
-        .map_err(Error::MethodErrors)
-        .map(|solution| {
-            let (t, y) = default_solout.into_data();
-            IVPSolution {
-                t,
-                y,
-                nfev: solution.nfev,
-                nstep: solution.nstep,
-                naccpt: solution.naccpt,
-                nrejct: solution.nrejct,
-                status: solution.status,
-            }
-        }),
+        Method::RK23 => rk23(f, x0, xend, y0, Some(&mut default_solout), settings)
+            .map_err(Error::MethodErrors)
+            .map(|solution| {
+                let (t, y) = default_solout.into_data();
+                IVPSolution {
+                    t,
+                    y,
+                    nfev: solution.nfev,
+                    nstep: solution.nstep,
+                    naccpt: solution.naccpt,
+                    nrejct: solution.nrejct,
+                    status: solution.status,
+                }
+            }),
+        Method::RK45 => dopri5(f, x0, xend, y0, Some(&mut default_solout), settings)
+            .map_err(Error::MethodErrors)
+            .map(|solution| {
+                let (t, y) = default_solout.into_data();
+                IVPSolution {
+                    t,
+                    y,
+                    nfev: solution.nfev,
+                    nstep: solution.nstep,
+                    naccpt: solution.naccpt,
+                    nrejct: solution.nrejct,
+                    status: solution.status,
+                }
+            }),
+        Method::DOP853 => dop853(f, x0, xend, y0, Some(&mut default_solout), settings)
+            .map_err(Error::MethodErrors)
+            .map(|solution| {
+                let (t, y) = default_solout.into_data();
+                IVPSolution {
+                    t,
+                    y,
+                    nfev: solution.nfev,
+                    nstep: solution.nstep,
+                    naccpt: solution.naccpt,
+                    nrejct: solution.nrejct,
+                    status: solution.status,
+                }
+            }),
     }
 }
 
@@ -227,11 +205,7 @@ struct DefaultSolOut<'a, S: SolOut> {
 }
 
 impl<'a, S: SolOut> DefaultSolOut<'a, S> {
-    fn new(
-        t_eval: Option<&'a [Float]>,
-        save_endpoints: bool,
-        user: Option<&'a mut S>,
-    ) -> Self {
+    fn new(t_eval: Option<&'a [Float]>, save_endpoints: bool, user: Option<&'a mut S>) -> Self {
         Self {
             t_eval,
             save_endpoints,
@@ -296,7 +270,7 @@ impl<'a, S: SolOut> SolOut for DefaultSolOut<'a, S> {
         }
 
         // Forward to user callback if any
-    if let Some(user) = self.user.as_deref_mut() {
+        if let Some(user) = self.user.as_deref_mut() {
             return user.solout(xold, x, y, interpolator);
         }
 

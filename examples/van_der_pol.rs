@@ -41,11 +41,11 @@ fn main() {
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [2.0, 0.0];
-    let settings = Settings::builder().rtol(1e-9).atol(1e-9).build();
     let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * 0.1).collect();
     let options = IVPOptions::<NoOpSolOut>::builder()
         .method(Method::DOP853)
-        .settings(settings)
+        .rtol(1e-9)
+        .atol(1e-9)
         .t_eval(t_eval)
         .save_step_endpoints(false)
         .build();
