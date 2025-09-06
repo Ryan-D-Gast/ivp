@@ -1,4 +1,4 @@
-//! Dense (continuous) output support for solve_ivp
+//! Continuous output provided by dense output coefficients (cont) from each step.
 
 use crate::{
     Float,
@@ -21,14 +21,14 @@ struct Segment {
 
 /// Piecewise dense output over all accepted steps.
 #[derive(Debug, Clone)]
-pub struct DenseOutput {
+pub struct ContinuousOutput {
     segs: Vec<Segment>,
     cont_fn: ContFn,
     coeffs_per_state: usize,
 }
 
-impl DenseOutput {
-    /// Build a DenseOutput from per-step tuples of (cont, xold, h) and the selected method.
+impl ContinuousOutput {
+    /// Build a ContinuousOutput from per-step tuples of (cont, xold, h) and the selected method.
     pub(crate) fn from_segments(method: Method, segs: Vec<(Vec<Float>, Float, Float)>) -> Self {
         let (cont_fn, coeffs_per_state) = match method {
             Method::RK4 => (contrk4 as ContFn, 4),

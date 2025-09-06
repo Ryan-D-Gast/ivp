@@ -49,7 +49,6 @@ where
     let mut k3 = vec![0.0; n];
     let mut k4 = vec![0.0; n];
     let mut yt = vec![0.0; n];
-    // Dense output coefficients buffer: [y0 | dy0 | dy1 | y1]
     let mut cont = vec![0.0; 4 * n];
     let mut nfev = 0;
     let mut nstep = 0;
@@ -110,33 +109,37 @@ where
         nfev += 4;
         nstep += 1;
 
-        match solout.as_mut().map_or(ControlFlag::Continue, |s| {
-            // cont = [y0 | dy0 | dy1 | y1]
+        // Prepare dense output
+        if solout.is_some() {
             cont[0..n].copy_from_slice(&yt);
             for i in 0..n {
                 cont[n + i] = k4[i];
                 cont[2 * n + i] = k1[i];
             }
             cont[3 * n..4 * n].copy_from_slice(&y);
-            let interp = DenseOutput::new(&cont, xold, h);
-            s.solout(xold, x, &y, &interp)
-        }) {
-            ControlFlag::Interrupt => {
-                status = Status::Interrupted;
-                break;
-            }
-            ControlFlag::ModifiedSolution(xm, ym) => {
-                // Update with modified solution
-                x = xm;
-                y = ym;
+        } 
 
-                // Recompute k1 at new (x, y).
-                f.ode(x, &y, &mut k1);
-                nfev += 1;
+        // Optional callback function
+        if let Some(s) = solout.as_mut() {
+            match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+                ControlFlag::Interrupt => {
+                    status = Status::Interrupted;
+                    break;
+                }
+                ControlFlag::ModifiedSolution(xm, ym) => {
+                    // Update with modified solution
+                    x = xm;
+                    y = ym;
+
+                    // Recompute k1 at new (x, y).
+                    f.ode(x, &y, &mut k1);
+                    nfev += 1;
+                }
+                ControlFlag::Continue => {}
             }
-            ControlFlag::Continue => {}
         }
 
+        // Normal exit
         if last {
             break;
         }
@@ -155,7 +158,7 @@ where
 }
 
 /// Continuous output function for RK4 using cubic Hermite interpolation.
-pub(crate) fn contrk4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub fn contrk4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let t = (xi - xold) / h;
     let t2 = t * t;
     let t3 = t2 * t;

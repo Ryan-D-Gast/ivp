@@ -131,6 +131,7 @@ where
     let mut nstep: usize = 0;
     let mut naccpt: usize = 0;
     let mut nrejct: usize = 0;
+    let mut xold;
     let status;
     let expo1 = 0.2 - beta * 0.75;
     let facc1 = 1.0 / fac1;
@@ -273,9 +274,8 @@ where
                 }
             }
 
-            // Optional callback function
-            match solout.as_mut().map_or(ControlFlag::Continue, |s| {
-                // Dense output coefficient computation
+            // Prepare dense output
+            if solout.is_some() {
                 for i in 0..n {
                     let yd0 = y[i];
                     let ydiff = y1[i] - yd0;
@@ -292,37 +292,33 @@ where
                             + D6 * k6[i]
                             + D7 * k2[i]);
                 }
-
-                let interp = DenseOutput::new(&cont, x, h);
-                s.solout(x, xph, &y1, &interp)
-            }) {
-                ControlFlag::Interrupt => {
-                    status = Status::Interrupted;
-                    for i in 0..n {
-                        k1[i] = k4[i];
-                        y[i] = k5[i];
-                    }
-                    x = xph;
-                    break;
-                }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    // Update with modified solution
-                    xph = xm;
-                    y1 = ym;
-
-                    // Recompute k2 at new (xph, y1)
-                    f.ode(xph, &y1, &mut k2);
-                    nfev += 1;
-                }
-                ControlFlag::Continue => {}
             }
 
             // Update state variables
-            for i in 0..n {
-                k1[i] = k2[i];
-                y[i] = y1[i];
-            }
+            k1.copy_from_slice(&k2);
+            y.copy_from_slice(&y1);
+            xold = x;
             x = xph;
+
+            // Optional callback function
+            if let Some(ref mut s) = solout {
+                match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+                    ControlFlag::Interrupt => {
+                        status = Status::Interrupted;
+                        break;
+                    }
+                    ControlFlag::ModifiedSolution(xm, ym) => {
+                        // Update with modified solution
+                        x = xm;
+                        y.copy_from_slice(&ym);
+
+                        // Recompute k2 at new (x, y)
+                        f.ode(x, &y, &mut k2);
+                        nfev += 1;
+                    }
+                    ControlFlag::Continue => {}
+                }
+            }
 
             // Normal exit
             if last {
@@ -366,7 +362,7 @@ where
 }
 
 /// Continuous output function for DOPRI5
-pub(crate) fn contdp5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub fn contdp5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let n = cont.len() / 5;
     let theta = (xi - xold) / h;
     let theta1 = 1.0 - theta;

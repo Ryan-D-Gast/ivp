@@ -143,6 +143,7 @@ where
     let mut nstep: usize = 0;
     let mut naccpt: usize = 0;
     let mut nrejct: usize = 0;
+    let mut xold;
     let status;
     let posneg = (xend - x).signum();
 
@@ -366,9 +367,8 @@ where
                 }
             }
 
-            // Optional callback function
-            match solout.as_mut().map_or(ControlFlag::Continue, |s| {
-                // Dense output coefficient computation
+            // Prepare dense output
+            if solout.is_some() {
                 for i in 0..n {
                     cont[i] = y[i];
                     let ydiff = k5[i] - y[i];
@@ -454,7 +454,7 @@ where
                 f.ode(x + C16 * h, &y1, &mut k3);
                 nfev += 3;
 
-                // Final dense output coefficients
+                // Add contributions of last three stages
                 for i in 0..n {
                     cont[4 * n + i] = h
                         * (cont[4 * n + i]
@@ -484,36 +484,33 @@ where
                             + D715 * k2[i]
                             + D716 * k3[i]);
                 }
-
-                let interp = DenseOutput::new(&cont, x, h);
-                s.solout(x, xph, &k5, &interp)
-            }) {
-                ControlFlag::Interrupt => {
-                    status = Status::Interrupted;
-                    for i in 0..n {
-                        k1[i] = k4[i];
-                        y[i] = k5[i];
-                    }
-                    x = xph;
-                    break;
-                }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    // Update with modified solution
-                    xph = xm;
-                    k5 = ym;
-                    // Recompute k4 at new (xph, k5)
-                    f.ode(xph, &k5, &mut k4);
-                    nfev += 1;
-                }
-                ControlFlag::Continue => {}
             }
 
             // Update state variables
-            for i in 0..n {
-                k1[i] = k4[i];
-                y[i] = k5[i];
-            }
+            k1.copy_from_slice(&k4);
+            y.copy_from_slice(&k5);
+            xold = x;
             x = xph;
+ 
+            // Optional callback function
+            if let Some(ref mut s) = solout {
+                match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+                    ControlFlag::Interrupt => {
+                        status = Status::Interrupted;
+                        break;
+                    }
+                    ControlFlag::ModifiedSolution(xm, ym) => {
+                        // Update with modified solution
+                        x = xm;
+                        y.copy_from_slice(&ym);
+
+                        // Recompute k4 at new (x, y)
+                        f.ode(x, &y, &mut k4);
+                        nfev += 1;
+                    }
+                    ControlFlag::Continue => {}
+                }
+            }
 
             // Normal exit
             if last {
@@ -557,7 +554,7 @@ where
 }
 
 /// Continuous output function for DOP853
-pub(crate) fn contdp8(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub fn contdp8(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let n = cont.len() / 8;
     let s = (xi - xold) / h;
     let s1 = 1.0 - s;

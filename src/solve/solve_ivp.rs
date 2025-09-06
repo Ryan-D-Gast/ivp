@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    cont::DenseOutput,
+    cont::ContinuousOutput,
     options::{IVPOptions, Method},
     solout::DefaultSolOut,
     solution::IVPSolution,
@@ -21,7 +21,7 @@ use super::{
 // IVPSolution is defined in solve::solution
 
 /// Solve an initial value problem with SciPy-like options.
-pub fn solve_ivp<'a, F>(
+pub fn solve_ivp<F>(
     f: &F,
     x0: Float,
     xend: Float,
@@ -84,8 +84,8 @@ where
     match result {
         Ok(sol) => {
             let (t, y, dense_raw) = default_solout.into_payload();
-            let dense_output = if options.dense_output {
-                Some(DenseOutput::from_segments(options.method, dense_raw))
+            let continuous_sol = if options.dense_output {
+                Some(ContinuousOutput::from_segments(options.method, dense_raw))
             } else {
                 None
             };
@@ -97,7 +97,7 @@ where
                 naccpt: sol.naccpt,
                 nrejct: sol.nrejct,
                 status: sol.status,
-                dense_output,
+                continuous_sol,
             })
         }
         Err(errors) => {

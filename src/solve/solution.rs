@@ -3,9 +3,8 @@
 use crate::{
     Float,
     core::status::Status,
+    solve::cont::ContinuousOutput,
 };
-
-use super::cont::DenseOutput;
 
 /// Rich solution of solve_ivp: sampled data plus basic stats
 #[derive(Debug, Clone)]
@@ -17,22 +16,21 @@ pub struct IVPSolution {
     pub naccpt: usize,
     pub nrejct: usize,
     pub status: Status,
-    /// Stores continuous solution if dense output was enabled.
-    pub(crate) dense_output: Option<DenseOutput>,
+    pub(crate) continuous_sol: Option<ContinuousOutput>,
 }
 
 impl IVPSolution {
     /// Evaluate the continuous solution at a single time t.
-    /// Returns None if dense_output was disabled or t is outside the covered range.
+    /// Returns None if continuous_sol was disabled or t is outside the covered range.
     pub fn sol(&self, t: Float) -> Option<Vec<Float>> {
-        self.dense_output.as_ref()?.evaluate(t)
+        self.continuous_sol.as_ref()?.evaluate(t)
     }
 
     /// Evaluate the continuous solution at many time points.
     /// If dense output is disabled, returns a Vec of None of the same length.
     /// Points outside the range yield None entries.
     pub fn sol_many(&self, ts: &[Float]) -> Vec<Option<Vec<Float>>> {
-        match self.dense_output.as_ref() {
+        match self.continuous_sol.as_ref() {
             Some(dense) => dense.evaluate_many(ts),
             None => vec![None; ts.len()],
         }
@@ -40,7 +38,7 @@ impl IVPSolution {
 
     /// Return the time span covered by the dense output if available.
     pub fn sol_span(&self) -> Option<(Float, Float)> {
-        self.dense_output.as_ref()?.t_span()
+        self.continuous_sol.as_ref()?.t_span()
     }
 
     /// Iterate over stored sample pairs (t_i, y_i) from the discrete output.

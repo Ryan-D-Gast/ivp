@@ -80,7 +80,6 @@ where
     let mut k4 = vec![0.0; n];
     let mut yt = vec![0.0; n];
     let mut ye = vec![0.0; n];
-    // Dense output coefficients buffer: [y_old | q1 | q2 | q3]
     let mut cont = vec![0.0; 4 * n];
     let mut nfev = 0;
     let mut nstep = 0;
@@ -159,45 +158,46 @@ where
 
         if err <= 1.0 {
             // Step accepted
-            xold = x;
-            ye.copy_from_slice(&y);
-            x += h;
-            y.copy_from_slice(&yt);
             nstep += 1;
             naccpt += 1;
 
-            // Optional Callback function
-            match solout.as_mut().map_or(ControlFlag::Continue, |s| {
+            // Update state
+            ye.copy_from_slice(&y);
+            y.copy_from_slice(&yt);
+            xold = x;
+            x += h;
+
+            // Prepare dense output
+            if solout.is_some() {
                 cont[0..n].copy_from_slice(&ye);
                 for i in 0..n {
                     cont[n + i] = k1[i];
                     cont[2 * n + i] = D21 * k1[i] + D22 * k2[i] + D23 * k3[i] + D24 * k4[i];
                     cont[3 * n + i] = D31 * k1[i] + D32 * k2[i] + D33 * k3[i] + D34 * k4[i];
                 }
-                let dense_output = DenseOutput::new(&cont, xold, h);
-                s.solout(xold, x, &y, &dense_output)
-            }) {
-                ControlFlag::Interrupt => {
-                    status = Status::Interrupted;
-                    break;
-                }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    // Update with modified solution
-                    x = xm;
-                    y = ym;
+            } 
+            
+            // Optional callback function
+            if let Some(s) = solout.as_mut() {
+                match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+                    ControlFlag::Interrupt => {
+                        status = Status::Interrupted;
+                        break;
+                    }
+                    ControlFlag::ModifiedSolution(xm, ym) => {
+                        // Update with modified solution
+                        x = xm;
+                        y = ym;
 
-                    // Recompute k1 at new (x, y).
-                    f.ode(x, &y, &mut k1);
-                    nfev += 1;
+                        // Recompute k1 at new (x, y).
+                        f.ode(x, &y, &mut k1);
+                        nfev += 1;
+                    }
+                    ControlFlag::Continue => {
+                        // Reuse k4 as k1 for the next step to save an evaluation.
+                        k1.copy_from_slice(&k4);
+                    }
                 }
-                ControlFlag::Continue => {
-                    // Reuse k4 as k1 for the next step to save an evaluation.
-                    k1.copy_from_slice(&k4);
-                }
-            }
-
-            if x == xend {
-                break;
             }
 
             // Adjust step size
@@ -206,6 +206,11 @@ where
                 .max(scale_min);
             if h > hmax {
                 h = hmax;
+            }
+
+            // Normal exit
+            if x == xend {
+                break;
             }
         } else {
             // Step rejected
@@ -218,7 +223,7 @@ where
 
     Ok(Solution {
         x,
-        y: y.to_vec(),
+        y,
         h,
         nfev,
         nstep,
@@ -229,7 +234,7 @@ where
 }
 
 /// Dense output evaluation for RK23
-pub(crate) fn contrk23(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+pub fn contrk23(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
     let n = yi.len();
     let x = (xi - xold) / h;
     let x2 = x * x;
