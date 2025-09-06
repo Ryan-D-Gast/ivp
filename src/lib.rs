@@ -2,9 +2,9 @@
 
 mod core;
 mod error;
-mod methods;
 mod solve;
 
+pub mod methods;
 pub mod prelude;
 
 // Prevent selecting two incompatible float precision features at once.
