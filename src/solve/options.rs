@@ -1,10 +1,10 @@
-//! Options and method selection for solve_ivp
+//! Options for solve_ivp
 
 use bon::Builder;
 
 use crate::{Float, methods::settings::Tolerance};
 
-/// Solver method selection (roughly mirroring scipy.integrate.solve_ivp)
+/// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
 pub enum Method {
     /// Bogacki–Shampine 3(2) adaptive RK
@@ -17,11 +17,23 @@ pub enum Method {
     RK4,
 }
 
+impl From<&str> for Method {
+    fn from(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "RK23" => Method::RK23,
+            "DOPRI5" | "RK45" => Method::DOPRI5,
+            "DOP853" => Method::DOP853,
+            "RK4" => Method::RK4,
+            _ => Method::DOPRI5, // Default
+        }
+    }
+}
+
 #[derive(Builder)]
 /// Options for solve_ivp similar to SciPy
 pub struct IVPOptions {
-    /// Method to use. Default: RK45 (Dormand–Prince 5(4)).
-    #[builder(default = Method::DOPRI5)]
+    /// Method to use. Default: DOPRI5.
+    #[builder(default = Method::DOPRI5, into)]
     pub method: Method,
     /// Relative tolerance for error estimation.
     #[builder(default = 1e-6, into)]

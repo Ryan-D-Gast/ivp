@@ -1,4 +1,4 @@
-//! Dormand-Prince Runge Kutta methods
+//! Dormand-Prince Runge Kutta methods (DOPRI5, DOP853)
 
 mod dop853;
 mod dopri5;
