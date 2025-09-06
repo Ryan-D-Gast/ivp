@@ -33,9 +33,7 @@ where
 {
     // Build Settings (rtol/atol are passed to methods)
     let mut settings = Settings::builder().build();
-    if let Some(nmax) = options.nmax {
-        settings.nmax = nmax;
-    }
+    settings.nmax = options.nmax;
     settings.h0 = options.first_step;
     settings.hmax = options.max_step;
     settings.hmin = options.min_step;
@@ -59,7 +57,7 @@ where
             Some(&mut default_solout),
             settings,
         ),
-        Method::RK45 => dopri5(
+        Method::DOPRI5 => dopri5(
             f,
             x0,
             xend,

@@ -33,7 +33,7 @@ impl ContinuousOutput {
         let (cont_fn, coeffs_per_state) = match method {
             Method::RK4 => (contrk4 as ContFn, 4),
             Method::RK23 => (contrk23 as ContFn, 4),
-            Method::RK45 => (contdp5 as ContFn, 5),
+            Method::DOPRI5 => (contdp5 as ContFn, 5),
             Method::DOP853 => (contdp8 as ContFn, 8),
         };
         let segs = segs

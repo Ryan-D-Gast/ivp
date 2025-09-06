@@ -36,6 +36,17 @@ where
     if h == 0.0 || h.signum() != direction {
         errors.push(Error::InvalidStepSize(h));
     }
+    
+    // Maximum Number of Steps
+    let nmax = match settings.nmax {
+        Some(n) => {
+            if n <= 0 {
+                errors.push(Error::NMaxMustBePositive(n));
+            }
+            n
+        }
+        None => 100_000,
+    };
 
     if !errors.is_empty() {
         return Err(errors);
@@ -54,7 +65,6 @@ where
     let mut nstep = 0;
     let mut status = Status::Success;
     let mut xold = x;
-    let nmax = settings.nmax;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);

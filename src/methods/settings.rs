@@ -8,11 +8,9 @@ use crate::Float;
 /// Settings for the numerical integrators
 pub struct Settings {
     /// The rounding unit, typically machine epsilon
-    #[builder(default = 2.3e-16)]
-    pub uround: Float,
-    /// safety factor in step-size prediction. Default is 0.9.
-    #[builder(default = 0.9)]
-    pub safety_factor: Float,
+    pub uround: Option<Float>,
+    /// safety factor in step-size prediction.
+    pub safety_factor: Option<Float>,
     /// Parameter for step size selection where scale_min <= hnew/hold <= scale_max
     pub scale_min: Option<Float>,
     /// Parameter for step size selection where scale_min <= hnew/hold <= scale_max
@@ -29,11 +27,9 @@ pub struct Settings {
     /// provided by the [`crate::hinit::hinit`] function.
     pub h0: Option<Float>,
     /// Maximum number of allowed steps. Default is 100,000.
-    #[builder(default = 100_000)]
-    pub nmax: usize,
+    pub nmax: Option<usize>,
     /// Number of steps before performing a stiffness test. Default is 1000.
-    #[builder(default = 1000)]
-    pub nstiff: usize,
+    pub nstiff: Option<usize>,
 }
 
 /// Tolerance enum to allow scalar or vector tolerances

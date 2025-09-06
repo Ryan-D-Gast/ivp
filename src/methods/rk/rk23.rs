@@ -37,16 +37,26 @@ where
     let mut errors: Vec<Error> = Vec::new();
 
     // Maximum Number of Steps
-    let nmax = settings.nmax;
-    if nmax <= 0 {
-        errors.push(Error::NMaxMustBePositive(nmax));
-    }
+    let nmax = match settings.nmax {
+        Some(n) => {
+            if n <= 0 {
+                errors.push(Error::NMaxMustBePositive(n));
+            }
+            n
+        }
+        None => 100_000,
+    };
 
     // Safety Factor
-    let safety_factor = settings.safety_factor;
-    if safety_factor >= 1.0 || safety_factor <= 1e-4 {
-        errors.push(Error::SafetyFactorOutOfRange(safety_factor));
-    }
+    let safety_factor = match settings.safety_factor {
+        Some(f) => {
+            if f >= 1.0 || f <= 1e-4 {
+                errors.push(Error::SafetyFactorOutOfRange(f));
+            }
+            f
+        }
+        None => 0.9,
+    };
 
     // Step size scaling factors
     let scale_min = match settings.scale_min {

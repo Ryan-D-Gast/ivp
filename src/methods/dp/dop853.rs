@@ -54,50 +54,69 @@ where
     let mut errors: Vec<Error> = Vec::new();
 
     // Maximum Number of Steps
-    let nmax = settings.nmax;
-    if nmax <= 0 {
-        errors.push(Error::NMaxMustBePositive(nmax));
-    }
+    let nmax = match settings.nmax {
+        Some(n) => {
+            if n <= 0 {
+                errors.push(Error::NMaxMustBePositive(n));
+            }
+            n
+        }
+        None => 100_000,
+    };
 
-    // Parameter for stiffness detection
-    let nstiff = settings.nstiff;
-    if nstiff <= 0 {
-        errors.push(Error::NStiffMustBePositive(nstiff));
-    }
+    // Number of steps before performing a stiffness test
+    let nstiff = match settings.nstiff {
+        Some(n) => {
+            if n <= 0 {
+                errors.push(Error::NStiffMustBePositive(n));
+            }
+            n
+        }
+        None => 1000,
+    };
 
     // Rounding Unit
-    let uround = settings.uround;
-    if uround <= 1e-35 || uround >= 1.0 {
-        errors.push(Error::URoundOutOfRange(uround));
-    }
+    let uround = match settings.uround {
+        Some(u) => {
+            if u <= 1e-35 || u >= 1.0 {
+                errors.push(Error::URoundOutOfRange(u));
+            }
+            u
+        }
+        None => 2.3e-16,
+    };
 
     // Safety Factor
-    let safety_factor = settings.safety_factor;
-    if safety_factor >= 1.0 || safety_factor <= 1e-4 {
-        errors.push(Error::SafetyFactorOutOfRange(safety_factor));
-    }
+    let safety_factor = match settings.safety_factor {
+        Some(f) => {
+            if f >= 1.0 || f <= 1e-4 {
+                errors.push(Error::SafetyFactorOutOfRange(f));
+            }
+            f
+        }
+        None => 0.9,
+    };
 
     // Parameters for step size selection
-    let fac1 = match settings.scale_min {
-        Some(f) => f,
-        None => 1.0 / 3.0,
+    let facc1 = match settings.scale_min {
+        Some(f) => 1.0 / f,
+        None => 3.0,
     };
-    let facc1 = 1.0 / fac1;
-    let fac2 = match settings.scale_max {
-        Some(f) => f,
-        None => 6.0,
+    let facc2 = match settings.scale_max {
+        Some(f) => 1.0 / f,
+        None => 1.0 / 6.0,
     };
-    let facc2 = 1.0 / fac2;
 
     // Beta for step control stabilization
     let beta = match settings.beta {
-        Some(f) => f,
+        Some(b) => {
+            if b > 0.2 {
+                errors.push(Error::BetaTooLarge(b));
+            }
+            b
+        }
         None => 0.00,
     };
-    if beta > 0.2 {
-        errors.push(Error::BetaTooLarge(beta));
-    }
-    let expo1 = 1.0 / 8.0 - beta * 0.2;
 
     // Maximum step size
     let hmax = match settings.hmax {
@@ -144,6 +163,7 @@ where
     let mut naccpt: usize = 0;
     let mut nrejct: usize = 0;
     let mut xold;
+    let expo1 = 1.0 / 8.0 - beta * 0.2;
     let status;
     let posneg = (xend - x).signum();
 

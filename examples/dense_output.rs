@@ -20,7 +20,6 @@ fn main() {
     let y0 = [1.0, 0.0];
 
     let options = IVPOptions::builder()
-        .method(Method::RK45)
         .rtol(1e-9)
         .atol(1e-9)
         .dense_output(true)
