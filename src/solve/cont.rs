@@ -4,7 +4,7 @@ use crate::{
     Float,
     methods::{
         dp::{contdp5, contdp8},
-        rk::{contrk23, contrk4},
+        rk::{contrk4, contrk23},
     },
 };
 
@@ -41,7 +41,11 @@ impl DenseOutput {
             .filter(|(_, _, h)| *h != 0.0)
             .map(|(cont, xold, h)| Segment { cont, xold, h })
             .collect();
-        Self { segs, cont_fn, coeffs_per_state }
+        Self {
+            segs,
+            cont_fn,
+            coeffs_per_state,
+        }
     }
 
     /// Domain covered by the dense output (inclusive on the right within tolerance).

@@ -562,11 +562,10 @@ pub(crate) fn contdp8(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, 
     let s = (xi - xold) / h;
     let s1 = 1.0 - s;
     for i in 0..n {
-        let conpar = cont[4 * n + i]
-            + s * (cont[5 * n + i] + s1 * (cont[6 * n + i] + s * cont[7 * n + i]));
+        let conpar =
+            cont[4 * n + i] + s * (cont[5 * n + i] + s1 * (cont[6 * n + i] + s * cont[7 * n + i]));
         let contd8 = cont[i]
-            + s * (cont[n + i]
-                + s1 * (cont[2 * n + i] + s * (cont[3 * n + i] + s1 * conpar)));
+            + s * (cont[n + i] + s1 * (cont[2 * n + i] + s * (cont[3 * n + i] + s1 * conpar)));
         yi[i] = contd8;
     }
 }

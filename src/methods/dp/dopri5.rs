@@ -375,8 +375,7 @@ pub(crate) fn contdp5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, 
             + theta
                 * (cont[n + i]
                     + theta1
-                        * (cont[2 * n + i]
-                            + theta * (cont[3 * n + i] + theta1 * cont[4 * n + i])));
+                        * (cont[2 * n + i] + theta * (cont[3 * n + i] + theta1 * cont[4 * n + i])));
     }
 }
 

@@ -28,16 +28,18 @@ fn main() {
 
     let sol = solve_ivp(&f, x0, xend, &y0, options).expect("solve_ivp failed");
     println!("Final status: {:?}", sol.status);
-    println!("Steps: {} (accepted {} / rejected {})", sol.nstep, sol.naccpt, sol.nrejct);
+    println!(
+        "Steps: {} (accepted {} / rejected {})",
+        sol.nstep, sol.naccpt, sol.nrejct
+    );
 
-    // Use dense_output to evaluate on a fine grid
-    if let Some(dense) = sol.dense_output.as_ref() {
-        let (t0, t1) = dense.t_span().unwrap_or((x0, xend));
+    // Use continuous solution via sol() to evaluate on a fine grid
+    if let Some((t0, t1)) = sol.sol_span() {
         let npts = 41;
         let ts: Vec<f64> = (0..=npts)
             .map(|i| t0 + (t1 - t0) * (i as f64) / (npts as f64))
             .collect();
-        let ys = dense.evaluate_many(&ts);
+    let ys = sol.sol_many(&ts);
 
         // Print a few interpolated samples and the analytic reference
         for (i, (t, y_opt)) in ts.iter().zip(ys.iter()).enumerate() {
@@ -53,6 +55,6 @@ fn main() {
             }
         }
     } else {
-        println!("dense_output was not enabled");
+        println!("dense output was not enabled");
     }
 }

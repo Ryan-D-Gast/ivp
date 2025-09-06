@@ -61,7 +61,9 @@ where
     f.ode(x, &y, &mut k1);
     if let Some(s) = solout.as_mut() {
         cont[0..n].copy_from_slice(&y);
-        for i in 0..n { cont[n + i] = k1[i]; }
+        for i in 0..n {
+            cont[n + i] = k1[i];
+        }
         let interp = DenseOutput::new(&cont, xold, h);
         s.solout(xold, x, &y, &interp);
     }
@@ -96,10 +98,10 @@ where
         }
         f.ode(x + C4 * h, &yt, &mut k4);
 
-    xold = x;
-    yt.copy_from_slice(&y);
+        xold = x;
+        yt.copy_from_slice(&y);
 
-    x += h;
+        x += h;
         for i in 0..n {
             y[i] = y[i] + h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i] + B4 * k4[i]);
         }
@@ -111,8 +113,8 @@ where
         match solout.as_mut().map_or(ControlFlag::Continue, |s| {
             // cont = [y0 | dy0 | dy1 | y1]
             cont[0..n].copy_from_slice(&yt);
-            for i in 0..n { 
-                cont[n + i] = k4[i]; 
+            for i in 0..n {
+                cont[n + i] = k4[i];
                 cont[2 * n + i] = k1[i];
             }
             cont[3 * n..4 * n].copy_from_slice(&y);
@@ -163,7 +165,10 @@ pub(crate) fn contrk4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, 
     let h11 = t3 - t2;
     let n = yi.len();
     for i in 0..n {
-        yi[i] = h00 * cont[i] + h10 * h * cont[n + i] + h01 * cont[3 * n + i] + h11 * h * cont[2 * n + i];
+        yi[i] = h00 * cont[i]
+            + h10 * h * cont[n + i]
+            + h01 * cont[3 * n + i]
+            + h11 * h * cont[2 * n + i];
     }
 }
 
@@ -174,7 +179,9 @@ struct DenseOutput<'a> {
 }
 
 impl<'a> DenseOutput<'a> {
-    pub fn new(cont: &'a [Float], xold: Float, h: Float) -> Self { Self { xold, h, cont } }
+    pub fn new(cont: &'a [Float], xold: Float, h: Float) -> Self {
+        Self { xold, h, cont }
+    }
 }
 
 impl<'a> Interpolate for DenseOutput<'a> {

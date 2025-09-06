@@ -2,33 +2,23 @@
 
 use crate::{
     Float,
-    core::{ode::ODE, status::Status},
+    core::ode::ODE,
     error::Error,
     methods::{
-    dp::{dop853, dopri5},
-    rk::{rk4, rk23},
+        dp::{dop853, dopri5},
+        rk::{rk4, rk23},
         settings::Settings,
     },
 };
 
 use super::{
+    cont::DenseOutput,
     options::{IVPOptions, Method},
     solout::DefaultSolOut,
-    cont::DenseOutput,
+    solution::IVPSolution,
 };
 
-/// Rich solution of solve_ivp: sampled data plus basic stats
-#[derive(Debug, Clone)]
-pub struct IVPSolution {
-    pub t: Vec<Float>,
-    pub y: Vec<Vec<Float>>,
-    pub nfev: usize,
-    pub nstep: usize,
-    pub naccpt: usize,
-    pub nrejct: usize,
-    pub status: Status,
-    pub dense_output: Option<DenseOutput>,
-}
+// IVPSolution is defined in solve::solution
 
 /// Solve an initial value problem with SciPy-like options.
 pub fn solve_ivp<'a, F>(
@@ -95,10 +85,7 @@ where
         Ok(sol) => {
             let (t, y, dense_raw) = default_solout.into_payload();
             let dense_output = if options.dense_output {
-                Some(DenseOutput::from_segments(
-                    options.method,
-                    dense_raw,
-                ))
+                Some(DenseOutput::from_segments(options.method, dense_raw))
             } else {
                 None
             };

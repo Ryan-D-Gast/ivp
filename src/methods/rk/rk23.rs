@@ -104,7 +104,7 @@ where
     };
     if let Some(s) = solout.as_mut() {
         cont[0..n].copy_from_slice(&y);
-    let interp = DenseOutput::new(&cont, xold, h);
+        let interp = DenseOutput::new(&cont, xold, h);
         s.solout(xold, x, &y, &interp);
     }
 
