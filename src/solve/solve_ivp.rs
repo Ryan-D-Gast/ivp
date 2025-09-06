@@ -30,11 +30,12 @@ where
     F: ODE,
 {
     // Build Settings (rtol/atol are passed to methods)
-    let mut settings = Settings::builder().build();
-    settings.nmax = options.nmax;
-    settings.h0 = options.first_step;
-    settings.hmax = options.max_step;
-    settings.hmin = options.min_step;
+    let settings = Settings::builder()
+        .maybe_nmax(options.nmax)
+        .maybe_h0(options.first_step)
+        .maybe_hmax(options.max_step)
+        .maybe_hmin(options.min_step)
+        .build();
 
     // Prepare the default SolOut (wrapping user callback if provided)
     let mut default_solout = DefaultSolOut::new(options.t_eval, options.dense_output);
