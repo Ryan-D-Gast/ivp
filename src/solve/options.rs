@@ -39,4 +39,9 @@ pub struct IVPOptions {
     pub max_step: Option<Float>,
     /// Minimum step size constraint (maps to `settings.hmin`).
     pub min_step: Option<Float>,
+    /// If true, collect dense output coefficients for per-step interpolation.
+    /// When enabled, the solver returns a `dense_output` object that can
+    /// evaluate the solution at arbitrary times inside the integration range.
+    #[builder(default = false)]
+    pub dense_output: bool,
 }

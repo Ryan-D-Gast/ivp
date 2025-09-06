@@ -14,21 +14,26 @@ pub(crate) struct DefaultSolOut {
     tol: Float,
     t: Vec<Float>,
     y: Vec<Vec<Float>>,
+    // Dense output collection
+    collect_dense: bool,
+    dense_segs: Vec<(Vec<Float>, Float, Float)>, // (cont, xold, h)
 }
 
 impl DefaultSolOut {
-    pub fn new(t_eval: Option<Vec<Float>>) -> Self {
+    pub fn new(t_eval: Option<Vec<Float>>, collect_dense: bool) -> Self {
         Self {
             t_eval,
             next_idx: 0,
             tol: 1e-12,
             t: Vec::new(),
             y: Vec::new(),
+            collect_dense,
+            dense_segs: Vec::new(),
         }
     }
 
-    pub fn into_data(self) -> (Vec<Float>, Vec<Vec<Float>>) {
-        (self.t, self.y)
+    pub fn into_payload(self) -> (Vec<Float>, Vec<Vec<Float>>, Vec<(Vec<Float>, Float, Float)>) {
+        (self.t, self.y, self.dense_segs)
     }
 }
 
@@ -40,6 +45,14 @@ impl SolOut for DefaultSolOut {
         y: &[Float],
         interpolator: &I,
     ) -> ControlFlag {
+        // Optionally collect dense coefficients for this accepted step
+        if self.collect_dense {
+            let (cont, cxold, h) = interpolator.get_cont();
+            // Skip degenerate segments
+            if h != 0.0 {
+                self.dense_segs.push((cont, cxold, h));
+            }
+        }
         // If t_eval is provided, interpolate and store values within (xold, x]
         if let Some(te) = self.t_eval.as_ref() {
             // Handle the initial call (xold == x) -> only include exact match

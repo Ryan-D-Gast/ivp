@@ -255,6 +255,10 @@ impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, ti: Float, yi: &mut [Float]) {
         contrk23(ti, yi, self.cont, self.xold, self.h);
     }
+
+    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
+        (self.cont.to_vec(), self.xold, self.h)
+    }
 }
 
 // RK23 Butcher tableau coefficients

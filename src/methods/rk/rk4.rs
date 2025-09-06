@@ -181,6 +181,10 @@ impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
         contrk4(xi, yi, self.cont, self.xold, self.h);
     }
+
+    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
+        (self.cont.to_vec(), self.xold, self.h)
+    }
 }
 
 // Classical RK4 coefficients

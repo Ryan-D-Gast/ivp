@@ -3,6 +3,7 @@
 pub mod options;
 pub mod solout;
 pub mod solve_ivp;
+pub mod cont;
 
 // Re-exports for ergonomic access via crate::solve::* and prelude
 pub use options::{IVPOptions, Method};

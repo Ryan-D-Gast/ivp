@@ -5,8 +5,8 @@ use crate::{
     core::{ode::ODE, status::Status},
     error::Error,
     methods::{
-        dp::{dop853, dopri5},
-        rk::{rk4, rk23},
+    dp::{dop853, dopri5},
+    rk::{rk4, rk23},
         settings::Settings,
     },
 };
@@ -14,6 +14,7 @@ use crate::{
 use super::{
     options::{IVPOptions, Method},
     solout::DefaultSolOut,
+    cont::DenseOutput,
 };
 
 /// Rich solution of solve_ivp: sampled data plus basic stats
@@ -26,6 +27,7 @@ pub struct IVPSolution {
     pub naccpt: usize,
     pub nrejct: usize,
     pub status: Status,
+    pub dense_output: Option<DenseOutput>,
 }
 
 /// Solve an initial value problem with SciPy-like options.
@@ -49,7 +51,7 @@ where
     settings.hmin = options.min_step;
 
     // Prepare the default SolOut (wrapping user callback if provided)
-    let mut default_solout = DefaultSolOut::new(options.t_eval);
+    let mut default_solout = DefaultSolOut::new(options.t_eval, options.dense_output);
 
     // Dispatch by method
     let result = match options.method {
@@ -91,7 +93,15 @@ where
 
     match result {
         Ok(sol) => {
-            let (t, y) = default_solout.into_data();
+            let (t, y, dense_raw) = default_solout.into_payload();
+            let dense_output = if options.dense_output {
+                Some(DenseOutput::from_segments(
+                    options.method,
+                    dense_raw,
+                ))
+            } else {
+                None
+            };
             Ok(IVPSolution {
                 t,
                 y,
@@ -100,6 +110,7 @@ where
                 naccpt: sol.naccpt,
                 nrejct: sol.nrejct,
                 status: sol.status,
+                dense_output,
             })
         }
         Err(errors) => {

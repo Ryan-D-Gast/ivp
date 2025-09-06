@@ -3,5 +3,8 @@
 mod dop853;
 mod dopri5;
 
+pub(crate) use dop853::contdp8;
+pub(crate) use dopri5::contdp5;
+
 pub use dop853::dop853;
 pub use dopri5::dopri5;
