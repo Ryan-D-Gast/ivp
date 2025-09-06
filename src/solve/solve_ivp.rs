@@ -1,4 +1,4 @@
-//! SciPy-like solve_ivp entry point implementation
+//! Solve an initial value problem for a system of ODEs.
 
 use crate::{
     Float,
@@ -18,9 +18,7 @@ use super::{
     solution::IVPSolution,
 };
 
-// IVPSolution is defined in solve::solution
-
-/// Solve an initial value problem with SciPy-like options.
+/// Solve an initial value problem.
 pub fn solve_ivp<F>(
     f: &F,
     x0: Float,

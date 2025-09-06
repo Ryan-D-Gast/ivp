@@ -1,4 +1,13 @@
-//! Example demonstrating the use of RK23 for solving a harmonic oscillator.
+//! # Example: Harmonic Oscillator
+//!
+//! Solve the harmonic oscillator as a first-order system.
+//!
+//! Equations:
+//! dy0/dt = y1
+//! dy1/dt = -y0
+//!
+//! Initial conditions: y0(0) = 1, y1(0) = 0
+//!
 
 use ivp::prelude::*;
 use std::f64::consts::PI;

@@ -29,6 +29,7 @@ fn main() {
     let t_eval: Vec<f64> = (0..=50).map(|i| i as f64 * 0.1).collect();
 
     let options = IVPOptions::builder()
+        // Default method is DOPRI5 (Also known as RK45 in SciPy)
         .rtol(1e-6)
         .atol(1e-6)
         .t_eval(t_eval)
