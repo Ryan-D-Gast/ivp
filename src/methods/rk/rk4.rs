@@ -2,15 +2,17 @@
 
 use crate::{
     Float,
-    core::{
+    {
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
-        result::IntegrationResult,
         status::Status,
     },
     error::Error,
-    methods::settings::Settings,
+    methods::{
+        settings::Settings,
+        result::IntegrationResult,
+    },
 };
 
 /// Classical explicit Runge-Kutta 4 (RK4) fixed-step integrator.

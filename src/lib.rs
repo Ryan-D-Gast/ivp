@@ -53,12 +53,14 @@
 //!
 //! See the examples folder for more usage patterns.
 
-mod core;
-mod error;
-mod solve;
-
-pub mod methods;
 pub mod prelude;
+pub mod error;
+pub mod solve;
+pub mod interpolate;
+pub mod ode;
+pub mod solout;
+pub mod status;
+pub mod methods;
 
 // Prevent selecting two incompatible float precision features at once.
 #[cfg(all(feature = "f32", feature = "f64"))]

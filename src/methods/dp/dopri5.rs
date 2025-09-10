@@ -20,15 +20,15 @@
 
 use crate::{
     Float,
-    core::{
+    {
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
-        result::IntegrationResult,
         status::Status,
     },
     error::Error,
     methods::{
+        result::IntegrationResult,
         hinit::hinit,
         settings::{Settings, Tolerance},
     },

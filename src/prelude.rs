@@ -11,11 +11,10 @@
 //! - High-level API: `solve_ivp`, `Options`, `Solution`, and `Method`.
 //!
 
-pub use crate::core::{
+pub use crate::{
     interpolate::Interpolate,
     ode::ODE,
     solout::{ControlFlag, SolOut},
-    result::IntegrationResult,
     status::Status,
 };
 pub use crate::solve::{Options, Solution, Method, solve_ivp};

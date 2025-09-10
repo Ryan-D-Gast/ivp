@@ -2,7 +2,7 @@
 
 use crate::{
     Float,
-    core::status::Status,
+    status::Status,
     solve::cont::ContinuousOutput,
     error::Error,
 };

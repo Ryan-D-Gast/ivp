@@ -1,6 +1,6 @@
 //! A struct representing the outputted result of a numerical integrator.
 
-use crate::{Float, core::status::Status};
+use crate::{Float, status::Status};
 
 /// The output of a numerical integrator
 #[derive(Clone, Debug)]

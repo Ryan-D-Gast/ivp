@@ -2,7 +2,7 @@
 
 use crate::{
     Float,
-    core::{
+    {
         interpolate::Interpolate,
         solout::{ControlFlag, SolOut},
     },

@@ -2,7 +2,7 @@
 
 use crate::{
     Float,
-    core::ode::ODE,
+    ode::ODE,
     error::Error,
     methods::{
         dp::{dop853, dopri5},
@@ -25,7 +25,7 @@ use super::{
 /// statistics, and (optionally) a continuous interpolant for dense evaluation.
 ///
 /// Arguments:
-/// - `f`: System right‑hand side implementing `core::ode::ODE`.
+/// - `f`: System right‑hand side implementing `ode::ODE`.
 /// - `x0`: Initial independent variable (time) value.
 /// - `xend`: Final independent variable value. Can be less than `x0` to integrate backward.
 /// - `y0`: Initial state vector at `x0`.
