@@ -12,6 +12,8 @@ pub enum Error {
     BetaTooLarge(Float),
     InvalidStepSize(Float),
     InvalidScaleFactors(Float, Float),
+    DenseOutputDisabled,
+    EvaluationOutOfRange(Float),
 }
 
 impl std::fmt::Display for Error {
@@ -30,6 +32,8 @@ impl std::fmt::Display for Error {
                 "scale_min must be > 0 and scale_max > scale_min (got min={}, max={})",
                 min, max
             ),
+            Error::DenseOutputDisabled => write!(f, "dense output is disabled"),
+            Error::EvaluationOutOfRange(t) => write!(f, "evaluation time {} is outside the covered range", t),
         }
     }
 }

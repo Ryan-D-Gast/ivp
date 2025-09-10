@@ -4,6 +4,7 @@ use crate::{
     Float,
     core::status::Status,
     solve::cont::ContinuousOutput,
+    error::Error,
 };
 
 /// Rich solution of solve_ivp: sampled data plus basic stats
@@ -16,24 +17,33 @@ pub struct IVPSolution {
     pub naccpt: usize,
     pub nrejct: usize,
     pub status: Status,
-    pub(crate) continuous_sol: Option<ContinuousOutput>,
+    pub continuous_sol: Option<ContinuousOutput>,
 }
 
 impl IVPSolution {
     /// Evaluate the continuous solution at a single time t.
-    /// Returns None if continuous_sol was disabled or t is outside the covered range.
-    pub fn sol(&self, t: Float) -> Option<Vec<Float>> {
-        self.continuous_sol.as_ref()?.evaluate(t)
+    /// Returns an error if continuous_sol was disabled or t is outside the covered range.
+    pub fn sol(&self, t: Float) -> Result<Vec<Float>, Error> {
+        let dense = self.continuous_sol.as_ref().ok_or(Error::DenseOutputDisabled)?;
+        let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
+        if t < start || t > end {
+            return Err(Error::EvaluationOutOfRange(t));
+        }
+        dense.evaluate(t).ok_or(Error::EvaluationOutOfRange(t))
     }
 
     /// Evaluate the continuous solution at many time points.
-    /// If dense output is disabled, returns a Vec of None of the same length.
-    /// Points outside the range yield None entries.
-    pub fn sol_many(&self, ts: &[Float]) -> Vec<Option<Vec<Float>>> {
-        match self.continuous_sol.as_ref() {
-            Some(dense) => dense.evaluate_many(ts),
-            None => vec![None; ts.len()],
+    /// Returns an error if dense output is disabled or any point is outside the covered range.
+    pub fn sol_many(&self, ts: &[Float]) -> Result<Vec<Vec<Float>>, Error> {
+        let dense = self.continuous_sol.as_ref().ok_or(Error::DenseOutputDisabled)?;
+        let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
+        for &t in ts {
+            if t < start || t > end {
+                return Err(Error::EvaluationOutOfRange(t));
+            }
         }
+        let results = dense.evaluate_many(ts);
+        Ok(results.into_iter().map(|opt| opt.unwrap()).collect())
     }
 
     /// Return the time span covered by the dense output if available.
@@ -42,7 +52,7 @@ impl IVPSolution {
     }
 
     /// Iterate over stored sample pairs (t_i, y_i) from the discrete output.
-    pub fn iter(&self) -> SolutionIter {
+    pub fn iter(&self) -> SolutionIter<'_> {
         SolutionIter { t_iter: self.t.iter(), y_iter: self.y.iter() }
     }
 }
