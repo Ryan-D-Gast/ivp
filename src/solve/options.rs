@@ -9,7 +9,7 @@ use crate::{Float, methods::settings::Tolerance};
 pub enum Method {
     /// Bogacki–Shampine 3(2) adaptive RK
     RK23,
-    /// Dormand–Prince 5(4) adaptive RK
+    /// Dormand–Prince 5(4) adaptive RK; in SciPy known as RK45
     DOPRI5,
     /// Dormand–Prince 8(5,3) high-order adaptive RK
     DOP853,
@@ -36,7 +36,7 @@ pub struct IVPOptions {
     #[builder(default = Method::DOPRI5, into)]
     pub method: Method,
     /// Relative tolerance for error estimation.
-    #[builder(default = 1e-6, into)]
+    #[builder(default = 1e-3, into)]
     pub rtol: Tolerance,
     /// Absolute tolerance for error estimation.
     #[builder(default = 1e-6, into)]
