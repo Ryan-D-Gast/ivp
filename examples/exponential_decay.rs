@@ -10,9 +10,9 @@
 
 use ivp::prelude::*;
 
-struct SimpleODE;
+struct ExponentialDecay;
 
-impl ODE for SimpleODE {
+impl ODE for ExponentialDecay {
     fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
         // Example: dy/dx = -y (exponential decay)
         for i in 0..y.len() {
@@ -22,7 +22,7 @@ impl ODE for SimpleODE {
 }
 
 fn main() {
-    let f = SimpleODE;
+    let f = ExponentialDecay;
     let x0 = 0.0;
     let xend = 5.0;
     let y0 = [1.0];
