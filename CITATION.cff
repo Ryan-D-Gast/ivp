@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+title: ivp
+message: >-
+  If you use this software in scientific
+  publications, please consider citing it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Ryan
+    family-names: Gast
+repository-code: 'https://github.com/Ryan-D-Gast/ivp'
+abstract: A library of numerical methods for solving initial value problems (IVPs) for ordinary differential equations (ODEs).
+license: Apache-2.0
+version: latest
+year: 2025
+url: 'https://github.com/Ryan-D-Gast/ivp'
+repository: 'https://github.com/Ryan-D-Gast/ivp'
+repository-artifact: 'https://crates.io/crates/ivp'

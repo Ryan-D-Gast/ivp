@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="110" viewBox="0 0 500 110">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#E0E0E0" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  
+  <!-- Light blue background with grid lines -->
+  <rect x="0" y="0" width="500" height="110" fill="#F0F8FF" rx="5" ry="5" />
+  <rect x="0" y="0" width="500" height="110" fill="url(#grid)" rx="5" ry="5" />
+  
+  <!-- Library name -->
+  <text x="250" y="56" font-family="'Palatino Linotype', 'Book Antiqua', 'Cambria Math', serif" font-size="42" 
+        font-weight="600" text-anchor="middle" fill="#2C5D99" letter-spacing="0.5">
+    IVP
+  </text>
+  
+  <!-- Rust tagline with background -->
+  <text x="250" y="85" font-family="'Palatino Linotype', 'Times New Roman', serif" font-size="14" 
+        font-weight="400" text-anchor="middle" fill="#333333">
+    A library of numerical methods for solving initial value problems.
+  </text>
+</svg>
