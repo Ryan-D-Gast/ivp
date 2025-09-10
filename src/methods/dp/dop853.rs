@@ -20,17 +20,17 @@
 
 use crate::{
     Float,
+    error::Error,
+    methods::{
+        hinit::hinit,
+        result::IntegrationResult,
+        settings::{Settings, Tolerance},
+    },
     {
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         status::Status,
-    },
-    error::Error,
-    methods::{
-        result::IntegrationResult,
-        hinit::hinit,
-        settings::{Settings, Tolerance},
     },
 };
 
@@ -511,7 +511,7 @@ where
             y.copy_from_slice(&k5);
             xold = x;
             x = xph;
- 
+
             // Optional callback function
             if let Some(ref mut s) = solout {
                 match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {

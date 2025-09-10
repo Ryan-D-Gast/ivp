@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{default_opts, SHO};
+use common::{SHO, default_opts};
 
 fn methods() -> Vec<Method> {
     vec![Method::RK4, Method::RK23, Method::DOPRI5, Method::DOP853]
@@ -18,14 +18,25 @@ fn harmonic_accuracy_end_state() {
         let opts = if let Method::RK4 = method {
             // fixed step RK4: choose step to land on period
             let h = (xend - x0) / 2000.0;
-            Options::builder().method(method.clone()).first_step(h).build()
+            Options::builder()
+                .method(method.clone())
+                .first_step(h)
+                .build()
         } else {
             default_opts(method.clone())
         };
         let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");
         let y_end = sol.y.last().unwrap().clone();
-        assert!((y_end[0] - 1.0).abs() < 1e-5, "cos end mismatch for {}", method_dbg);
-        assert!(y_end[1].abs() < 1e-5, "sin' end mismatch for {}", method_dbg);
+        assert!(
+            (y_end[0] - 1.0).abs() < 1e-5,
+            "cos end mismatch for {}",
+            method_dbg
+        );
+        assert!(
+            y_end[1].abs() < 1e-5,
+            "sin' end mismatch for {}",
+            method_dbg
+        );
     }
 }
 

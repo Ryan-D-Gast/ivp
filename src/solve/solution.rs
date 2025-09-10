@@ -1,11 +1,6 @@
 //! Rich solution type for solve_ivp: sampled data, stats, and dense evaluation helpers.
 
-use crate::{
-    Float,
-    status::Status,
-    solve::cont::ContinuousOutput,
-    error::Error,
-};
+use crate::{Float, error::Error, solve::cont::ContinuousOutput, status::Status};
 
 /// Rich solution of solve_ivp: sampled data plus basic stats
 #[derive(Debug, Clone)]
@@ -24,7 +19,10 @@ impl Solution {
     /// Evaluate the continuous solution at a single time t.
     /// Returns an error if continuous_sol was disabled or t is outside the covered range.
     pub fn sol(&self, t: Float) -> Result<Vec<Float>, Error> {
-        let dense = self.continuous_sol.as_ref().ok_or(Error::DenseOutputDisabled)?;
+        let dense = self
+            .continuous_sol
+            .as_ref()
+            .ok_or(Error::DenseOutputDisabled)?;
         let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
         let (lo, hi) = (start.min(end), start.max(end));
         if t < lo || t > hi {
@@ -36,7 +34,10 @@ impl Solution {
     /// Evaluate the continuous solution at many time points.
     /// Returns an error if dense output is disabled or any point is outside the covered range.
     pub fn sol_many(&self, ts: &[Float]) -> Result<Vec<Vec<Float>>, Error> {
-        let dense = self.continuous_sol.as_ref().ok_or(Error::DenseOutputDisabled)?;
+        let dense = self
+            .continuous_sol
+            .as_ref()
+            .ok_or(Error::DenseOutputDisabled)?;
         let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
         let (lo, hi) = (start.min(end), start.max(end));
         for &t in ts {
@@ -55,7 +56,10 @@ impl Solution {
 
     /// Iterate over stored sample pairs (t_i, y_i) from the discrete output.
     pub fn iter(&self) -> SolutionIter<'_> {
-        SolutionIter { t_iter: self.t.iter(), y_iter: self.y.iter() }
+        SolutionIter {
+            t_iter: self.t.iter(),
+            y_iter: self.y.iter(),
+        }
     }
 }
 

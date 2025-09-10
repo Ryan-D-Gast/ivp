@@ -20,17 +20,17 @@
 
 use crate::{
     Float,
+    error::Error,
+    methods::{
+        hinit::hinit,
+        result::IntegrationResult,
+        settings::{Settings, Tolerance},
+    },
     {
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         status::Status,
-    },
-    error::Error,
-    methods::{
-        result::IntegrationResult,
-        hinit::hinit,
-        settings::{Settings, Tolerance},
     },
 };
 
@@ -241,12 +241,7 @@ where
         if solout.is_some() {
             for i in 0..n {
                 cont[4 * n + i] = h
-                    * (D1 * k1[i]
-                        + D3 * k3[i]
-                        + D4 * k4[i]
-                        + D5 * k5[i]
-                        + D6 * k6[i]
-                        + D7 * k2[i]);
+                    * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
             }
         }
 

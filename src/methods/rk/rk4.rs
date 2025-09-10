@@ -2,16 +2,13 @@
 
 use crate::{
     Float,
+    error::Error,
+    methods::{result::IntegrationResult, settings::Settings},
     {
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         status::Status,
-    },
-    error::Error,
-    methods::{
-        settings::Settings,
-        result::IntegrationResult,
     },
 };
 
@@ -38,7 +35,7 @@ where
     if h == 0.0 || h.signum() != direction {
         errors.push(Error::InvalidStepSize(h));
     }
-    
+
     // Maximum Number of Steps
     let nmax = match settings.nmax {
         Some(n) => {
@@ -129,7 +126,7 @@ where
                 cont[2 * n + i] = k1[i];
             }
             cont[3 * n..4 * n].copy_from_slice(&y);
-        } 
+        }
 
         // Optional callback function
         if let Some(s) = solout.as_mut() {

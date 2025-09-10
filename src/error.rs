@@ -33,7 +33,9 @@ impl std::fmt::Display for Error {
                 min, max
             ),
             Error::DenseOutputDisabled => write!(f, "dense output is disabled"),
-            Error::EvaluationOutOfRange(t) => write!(f, "evaluation time {} is outside the covered range", t),
+            Error::EvaluationOutOfRange(t) => {
+                write!(f, "evaluation time {} is outside the covered range", t)
+            }
         }
     }
 }

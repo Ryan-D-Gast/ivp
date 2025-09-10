@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{default_opts_dense, SHO};
+use common::{SHO, default_opts_dense};
 
 #[test]
 fn backward_integration_works() {

@@ -2,17 +2,17 @@
 
 use crate::{
     Float,
+    error::Error,
+    methods::{
+        hinit::hinit,
+        result::IntegrationResult,
+        settings::{Settings, Tolerance},
+    },
     {
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
         status::Status,
-    },
-    error::Error,
-    methods::{
-        result::IntegrationResult,
-        hinit::hinit,
-        settings::{Settings, Tolerance},
     },
 };
 
@@ -185,8 +185,8 @@ where
                     cont[2 * n + i] = D21 * k1[i] + D22 * k2[i] + D23 * k3[i] + D24 * k4[i];
                     cont[3 * n + i] = D31 * k1[i] + D32 * k2[i] + D33 * k3[i] + D34 * k4[i];
                 }
-            } 
-            
+            }
+
             // Optional callback function
             if let Some(s) = solout.as_mut() {
                 match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {

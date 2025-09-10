@@ -2,18 +2,18 @@
 
 use crate::{
     Float,
-    ode::ODE,
     error::Error,
     methods::{
         dp::{dop853, dopri5},
         rk::{rk4, rk23},
         settings::Settings,
     },
+    ode::ODE,
 };
 
 use super::{
     cont::ContinuousOutput,
-    options::{Options, Method},
+    options::{Method, Options},
     solout::DefaultSolOut,
     solution::Solution,
 };
@@ -56,7 +56,7 @@ use super::{
 ///     and backward integration.
 ///
 /// Example:
-/// ```rust,no_run
+/// ```
 /// use ivp::prelude::*;
 ///
 /// struct SHO;
@@ -69,8 +69,8 @@ use super::{
 ///
 /// fn main() {
 ///     let opts = Options::builder()
-///         .rtol(1e-9).atol(1e-9)
 ///         .method(Method::DOP853)
+///         .rtol(1e-9).atol(1e-9)
 ///         .dense_output(true)
 ///         .build();
 ///
@@ -81,16 +81,20 @@ use super::{
 ///
 ///     let sol = solve_ivp(&f, x0, xend, &y0, opts).unwrap();
 ///
-///     // Iterate over stored samples
+///     // Discrete samples
+///     println!("Discrete output at accepted steps:");
 ///     for (t, y) in sol.iter() {
-///         // ...
+///         println!("x = {:>8.5}, y = {:?}", t, y);
 ///     }
 ///
-///     // Evaluate continuous solution (if enabled)
+///     // Continuous evaluation within the solution span
 ///     if let Some((t0, t1)) = sol.sol_span() {
-///         let mid = 0.5 * (t0 + t1);
-///         let y_mid = sol.sol(mid); // Option<Vec<f64>>
-///         let ys = sol.sol_many(&[t0, mid, t1]); // Vec<Option<Vec<f64>>>
+///         let ts = [t0, 0.5*(t0+t1), t1];
+///         let ys = sol.sol_many(&ts).unwrap();
+///         println!("\nDense output at t0, (t0+t1)/2, t1:");
+///         for (t, y) in ts.iter().zip(ys.iter()) {
+///             println!("x = {:>8.5}, y = {:?}", t, y);
+///         }
 ///     }
 /// }
 /// ```

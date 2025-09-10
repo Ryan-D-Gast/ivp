@@ -3,10 +3,10 @@
 pub mod cont;
 pub mod options;
 pub mod solout;
-pub mod solve_ivp;
 pub mod solution;
+pub mod solve_ivp;
 
 // Required exports to use "solve_ivp"
-pub use options::{Options, Method};
+pub use options::{Method, Options};
 pub use solution::Solution;
 pub use solve_ivp::solve_ivp;

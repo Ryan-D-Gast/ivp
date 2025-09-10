@@ -12,7 +12,7 @@
 //! - Iteration: iterate stored samples via `solution.iter()`
 //!
 //! Quick start
-//! ```rust,no_run
+//! ```
 //! use ivp::prelude::*;
 //!
 //! struct SHO;
@@ -29,7 +29,7 @@
 //!         .rtol(1e-9).atol(1e-9)
 //!         .dense_output(true)
 //!         .build();
-//! 
+//!
 //!     let f = SHO;
 //!     let x0 = 0.0;
 //!     let xend = 2.0 * std::f64::consts::PI; // one period
@@ -38,38 +38,45 @@
 //!     let sol = solve_ivp(&f, x0, xend, &y0, opts).unwrap();
 //!
 //!     // Discrete samples
+//!     println!("Discrete output at accepted steps:");
 //!     for (t, y) in sol.iter() {
-//!         // use t and y (slice)
+//!         println!("x = {:>8.5}, y = {:?}", t, y);
 //!     }
 //!
 //!     // Continuous evaluation within the solution span
 //!     if let Some((t0, t1)) = sol.sol_span() {
 //!         let ts = [t0, 0.5*(t0+t1), t1];
-//!         let ys = sol.sol_many(&ts); // Vec<Option<Vec<f64>>>
-//!         // If dense output was disabled, ys will be [None, None, None]
+//!         let ys = sol.sol_many(&ts).unwrap();
+//!         println!("\nDense output at t0, (t0+t1)/2, t1:");
+//!         for (t, y) in ts.iter().zip(ys.iter()) {
+//!             println!("x = {:>8.5}, y = {:?}", t, y);
+//!         }
 //!     }
 //! }
 //! ```
 //!
 //! See the examples folder for more usage patterns.
 
-pub mod prelude;
-pub mod error;
-pub mod solve;
-pub mod interpolate;
-pub mod ode;
-pub mod solout;
-pub mod status;
-pub mod methods;
-
-// Prevent selecting two incompatible float precision features at once.
+// Feature guards
 #[cfg(all(feature = "f32", feature = "f64"))]
-compile_error!(
-    "features 'f32' and 'f64' cannot both be enabled; pick exactly one Float precision feature"
-);
+compile_error!("Select only one of the features 'f32' or 'f64' for the Float type.");
 
-/// Change this to f128, f64, f32 as desired.
+// Numeric alias / core types
 #[cfg(feature = "f32")]
 pub(crate) type Float = f32;
 #[cfg(feature = "f64")]
 pub(crate) type Float = f64;
+
+// -- Core API modules (stable building blocks) --
+pub mod error;
+pub mod interpolate;
+pub mod ode;
+pub mod solout;
+pub mod solve;
+pub mod status;
+
+// -- Numerical methods (implementation) --
+pub mod methods;
+
+// -- User convenience / re-exports --
+pub mod prelude;
