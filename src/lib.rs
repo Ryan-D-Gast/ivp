@@ -83,7 +83,7 @@ pub(crate) type Float = f32;
 #[cfg(feature = "f64")]
 pub(crate) type Float = f64;
 
-// -- Core API modules (stable building blocks) --
+// -- Core modules --
 pub mod error;
 pub mod interpolate;
 pub mod ode;
@@ -91,7 +91,7 @@ pub mod solout;
 pub mod solve;
 pub mod status;
 
-// -- Numerical methods (implementation) --
+// -- Numerical methods --
 pub mod methods;
 
 // -- User convenience / re-exports --

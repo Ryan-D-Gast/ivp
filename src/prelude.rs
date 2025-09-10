@@ -36,6 +36,7 @@ pub use crate::solve::{Method, Options, Solution, solve_ivp};
 pub use crate::{
     interpolate::Interpolate,
     ode::ODE,
-    solout::{ControlFlag, SolOut},
+    solout::ControlFlag,
     status::Status,
+    solve::event::EventDirection,
 };

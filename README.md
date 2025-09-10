@@ -43,3 +43,5 @@ Currently implemented solvers:
 Planned additions in development:
 -   **Radau**: A 5th order implicit Runge-Kutta method of Radau IIA type with step-size control and dense output.
 -   **BDF**: A variable-order (1 to 5) Backward Differentiation Formula method with step-size control and dense output.
+
+Note: This library uses dynamically sized arrays (Vec) internally to allow for flexibility in use cases and future deployment as a Python package. For a more performant solution with statically sized arrays (and thus require compile-time declaration of system), consider using [differential-equations](https://github.com/Ryan-D-Gast/differential-equations)

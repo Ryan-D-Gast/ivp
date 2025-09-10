@@ -5,6 +5,7 @@ pub mod options;
 pub mod solout;
 pub mod solution;
 pub mod solve_ivp;
+pub mod event;
 
 // Required exports to use "solve_ivp"
 pub use options::{Method, Options};

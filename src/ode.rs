@@ -21,5 +21,15 @@ use crate::Float;
 /// }
 /// ```
 pub trait ODE {
+    /// Compute the derivative dydx at (x, y).
     fn ode(&self, x: Float, y: &[Float], dydx: &mut [Float]);
+
+    /// Event function
+    #[allow(unused_variables)]
+    fn event(&self, x: Float, y: &[Float]) -> Float {
+        1.0 // No event by default
+    }
+
+    // TODO: Jacobian for stiff solvers (radau, bdf)
+    // fn jac(&self, x: Float, y: &[Float], dfdy: &mut Matrix);
 }
