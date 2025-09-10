@@ -48,9 +48,11 @@ use super::{
 ///   - Otherwise, `t` and `y` contain all accepted internal steps.
 /// - Dense output:
 ///   - If enabled via `options.dense_output`, the returned `Solution` exposes
-///     `sol(t)` and `sol_many(&ts)` for continuous interpolation inside the covered span.
-///   - `sol_many` always returns `Vec<Option<Vec<Float>>>`; if dense output is disabled,
-///     it yields a vector of `None` values of the same length as `ts`.
+///     `sol(t) -> Result<Vec<Float>, Error>` and `sol_many(&ts) -> Result<Vec<Vec<Float>>, Error>`
+///     for continuous interpolation inside the covered span.
+///   - Both functions return an `Err` if dense output was not requested or if any
+///     requested time lies outside the covered interval. `sol_many` returns a
+///     single `Err` in that case (it does not return per-point `Option`s anymore).
 /// - Direction:
 ///   - The solver infers the integration direction from `xend - x0` and handles forward
 ///     and backward integration.
