@@ -26,7 +26,8 @@ impl IVPSolution {
     pub fn sol(&self, t: Float) -> Result<Vec<Float>, Error> {
         let dense = self.continuous_sol.as_ref().ok_or(Error::DenseOutputDisabled)?;
         let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
-        if t < start || t > end {
+        let (lo, hi) = (start.min(end), start.max(end));
+        if t < lo || t > hi {
             return Err(Error::EvaluationOutOfRange(t));
         }
         dense.evaluate(t).ok_or(Error::EvaluationOutOfRange(t))
@@ -37,8 +38,9 @@ impl IVPSolution {
     pub fn sol_many(&self, ts: &[Float]) -> Result<Vec<Vec<Float>>, Error> {
         let dense = self.continuous_sol.as_ref().ok_or(Error::DenseOutputDisabled)?;
         let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
+        let (lo, hi) = (start.min(end), start.max(end));
         for &t in ts {
-            if t < start || t > end {
+            if t < lo || t > hi {
                 return Err(Error::EvaluationOutOfRange(t));
             }
         }

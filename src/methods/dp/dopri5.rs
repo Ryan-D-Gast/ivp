@@ -237,6 +237,19 @@ where
         f.ode(xph, &y1, &mut k2);
         nfev += 6;
 
+        // Prepare last segment of dense output before recalculating k4
+        if solout.is_some() {
+            for i in 0..n {
+                cont[4 * n + i] = h
+                    * (D1 * k1[i]
+                        + D3 * k3[i]
+                        + D4 * k4[i]
+                        + D5 * k5[i]
+                        + D6 * k6[i]
+                        + D7 * k2[i]);
+            }
+        }
+
         // K4 scaled for error estimate
         for i in 0..n {
             k4[i] =
@@ -297,20 +310,12 @@ where
             // Prepare dense output
             if solout.is_some() {
                 for i in 0..n {
-                    let yd0 = y[i];
-                    let ydiff = y1[i] - yd0;
+                    let ydiff = y1[i] - y[i];
                     let bspl = h * k1[i] - ydiff;
-                    cont[i] = yd0;
+                    cont[i] = y[i];
                     cont[n + i] = ydiff;
                     cont[2 * n + i] = bspl;
                     cont[3 * n + i] = -h * k2[i] + ydiff - bspl;
-                    cont[4 * n + i] = h
-                        * (D1 * k1[i]
-                            + D3 * k3[i]
-                            + D4 * k4[i]
-                            + D5 * k5[i]
-                            + D6 * k6[i]
-                            + D7 * k2[i]);
                 }
             }
 
