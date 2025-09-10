@@ -27,7 +27,7 @@ fn main() {
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [2.0, 0.0];
-    let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * 0.1).collect();
+    let t_eval = (0..=20).map(|i| i as f64 * 0.1).collect();
     let options = Options::builder()
         .method(Method::DOP853)
         .rtol(1e-9)

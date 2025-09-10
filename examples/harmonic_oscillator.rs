@@ -26,7 +26,7 @@ fn main() {
     let x0 = 0.0;
     let y0 = [1.0, 0.0];
     let xend = 2.0 * PI;
-    let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * (PI / 10.0)).collect();
+    let t_eval = (0..=20).map(|i| i as f64 * (PI / 10.0)).collect();
     let options = Options::builder()
         .method(Method::RK23)
         .rtol(1e-3)
