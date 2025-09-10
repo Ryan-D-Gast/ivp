@@ -36,7 +36,7 @@ impl<'a, F> DefaultSolOut<'a, F>
 where
     F: ODE,
 {
-    pub fn new(ode: &'a F, t_eval: Option<Vec<Float>>, collect_dense: bool) -> Self {
+    pub fn new(ode: &'a F, t_eval: Option<Vec<Float>>, collect_dense: bool, dir: EventDirection, terminal: Option<usize>) -> Self {
         Self {
             ode,
             t_eval,
@@ -46,9 +46,8 @@ where
             y: Vec::new(),
             collect_dense,
             dense_segs: Vec::new(),
-            // Defaults inspired by user request (terminate after first event)
-            event_direction: EventDirection::All,
-            terminal_count: Some(1),
+            event_direction: dir,
+            terminal_count: terminal,
             event_hits: 0,
             yold: Vec::new(),
         }
@@ -56,16 +55,6 @@ where
 
     pub fn into_payload(self) -> (Vec<Float>, Vec<Vec<Float>>, Vec<(Vec<Float>, Float, Float)>) {
         (self.t, self.y, self.dense_segs)
-    }
-
-    /// Override the event direction filter.
-    pub fn set_event_direction(&mut self, dir: EventDirection) {
-        self.event_direction = dir;
-    }
-
-    /// Set the terminal behavior: None => never terminate; Some(k) => stop after k events.
-    pub fn set_event_terminal(&mut self, terminal: Option<usize>) {
-        self.terminal_count = terminal;
     }
 }
 

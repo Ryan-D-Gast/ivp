@@ -119,12 +119,7 @@ where
         .build();
 
     // Prepare the default SolOut (wrapping user callback if provided)
-    let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output);
-    // Apply event options
-    default_solout.set_event_direction(options.event_direction);
-    if options.event_terminal.is_some() {
-        default_solout.set_event_terminal(options.event_terminal);
-    }
+    let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output, options.event_direction, options.event_terminal);
 
     // Dispatch by method
     let result = match options.method {
