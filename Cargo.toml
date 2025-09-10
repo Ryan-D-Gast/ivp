@@ -1,7 +1,19 @@
 [package]
 name = "ivp"
 version = "0.1.0"
+authors = ["Ryan D. Gast <ryan.d.gast@gmail.com>"]
+description = "A Rust library for solving initial value problems (IVPs) for ordinary differential equations (ODEs)."
 edition = "2024"
+
+documentation = "https://docs.rs/ivp"
+homepage = "https://github.com/Ryan-D-Gast/ivp"
+repository = "https://github.com/Ryan-D-Gast/ivp"
+readme = "README.md"
+
+keywords = ["differential", "equations", "solve_ivp", "ode", "ivp"]
+categories = ["science", "mathematics", "algorithms"]
+
+license = "Apache-2.0"
 
 [features]
 default = ["f64"]
