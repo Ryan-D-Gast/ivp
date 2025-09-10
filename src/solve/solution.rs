@@ -9,7 +9,7 @@ use crate::{
 
 /// Rich solution of solve_ivp: sampled data plus basic stats
 #[derive(Debug, Clone)]
-pub struct IVPSolution {
+pub struct Solution {
     pub t: Vec<Float>,
     pub y: Vec<Vec<Float>>,
     pub nfev: usize,
@@ -20,7 +20,7 @@ pub struct IVPSolution {
     pub continuous_sol: Option<ContinuousOutput>,
 }
 
-impl IVPSolution {
+impl Solution {
     /// Evaluate the continuous solution at a single time t.
     /// Returns an error if continuous_sol was disabled or t is outside the covered range.
     pub fn sol(&self, t: Float) -> Result<Vec<Float>, Error> {
@@ -59,7 +59,7 @@ impl IVPSolution {
     }
 }
 
-/// Iterator over (t, y) pairs of stored samples in an IVPSolution.
+/// Iterator over (t, y) pairs of stored samples in an Solution.
 pub struct SolutionIter<'a> {
     t_iter: std::slice::Iter<'a, Float>,
     y_iter: std::slice::Iter<'a, Vec<Float>>,

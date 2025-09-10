@@ -6,7 +6,7 @@ use crate::{
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
-        solution::Solution,
+        result::IntegrationResult,
         status::Status,
     },
     error::Error,
@@ -23,7 +23,7 @@ pub fn rk4<F, S>(
     h: Float,
     mut solout: Option<&mut S>,
     settings: Settings,
-) -> Result<Solution, Vec<Error>>
+) -> Result<IntegrationResult, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
@@ -155,7 +155,7 @@ where
         }
     }
 
-    Ok(Solution {
+    Ok(IntegrationResult {
         x,
         y: y.to_vec(),
         h,

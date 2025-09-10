@@ -6,7 +6,7 @@ use crate::{
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
-        solution::Solution,
+        result::IntegrationResult,
         status::Status,
     },
     error::Error,
@@ -28,7 +28,7 @@ pub fn rk23<F, S>(
     atol: Tolerance,
     mut solout: Option<&mut S>,
     settings: Settings,
-) -> Result<Solution, Vec<Error>>
+) -> Result<IntegrationResult, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
@@ -231,7 +231,7 @@ where
         }
     }
 
-    Ok(Solution {
+    Ok(IntegrationResult {
         x,
         y,
         h,

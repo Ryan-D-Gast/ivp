@@ -24,7 +24,7 @@ use crate::{
         interpolate::Interpolate,
         ode::ODE,
         solout::{ControlFlag, SolOut},
-        solution::Solution,
+        result::IntegrationResult,
         status::Status,
     },
     error::Error,
@@ -45,7 +45,7 @@ pub fn dop853<F, S>(
     atol: Tolerance,
     mut solout: Option<&mut S>,
     settings: Settings,
-) -> Result<Solution, Vec<Error>>
+) -> Result<IntegrationResult, Vec<Error>>
 where
     F: ODE,
     S: SolOut,
@@ -561,7 +561,7 @@ where
         h = hnew;
     }
 
-    Ok(Solution {
+    Ok(IntegrationResult {
         x,
         y,
         h,

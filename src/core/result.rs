@@ -4,7 +4,7 @@ use crate::{Float, core::status::Status};
 
 /// The output of a numerical integrator
 #[derive(Clone, Debug)]
-pub struct Solution {
+pub struct IntegrationResult {
     /// The final value of the independent variable
     pub x: Float,
     /// The final value(s) of the dependent variable(s)
@@ -23,7 +23,7 @@ pub struct Solution {
     pub status: Status,
 }
 
-impl Solution {
+impl IntegrationResult {
     pub fn new(
         x: Float,
         y: Vec<Float>,

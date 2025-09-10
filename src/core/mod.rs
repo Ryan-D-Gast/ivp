@@ -3,5 +3,5 @@
 pub mod interpolate;
 pub mod ode;
 pub mod solout;
-pub mod solution;
+pub mod result;
 pub mod status;

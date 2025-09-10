@@ -7,6 +7,6 @@ pub mod solve_ivp;
 pub mod solution;
 
 // Required exports to use "solve_ivp"
-pub use options::{IVPOptions, Method};
-pub use solution::IVPSolution;
+pub use options::{Options, Method};
+pub use solution::Solution;
 pub use solve_ivp::solve_ivp;

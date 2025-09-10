@@ -8,7 +8,7 @@
 //! - Methods: RK4 (fixed step), RK23, DOPRI5, DOP853 (adaptive)
 //! - Controls: `rtol`, `atol`, `first_step`, `min_step`, `max_step`, `nmax`
 //! - Sampling: internal accepted steps by default, or exact `t_eval` times
-//! - Dense output: `sol(t)`, `sol_many(&ts)`, `sol_span()` on the returned `IVPSolution`
+//! - Dense output: `sol(t)`, `sol_many(&ts)`, `sol_span()` on the returned `Solution`
 //! - Iteration: iterate stored samples via `solution.iter()`
 //!
 //! Quick start
@@ -24,7 +24,7 @@
 //! }
 //!
 //! fn main() {
-//!     let opts = IVPOptions::builder()
+//!     let opts = Options::builder()
 //!         .method(Method::DOP853)
 //!         .rtol(1e-9).atol(1e-9)
 //!         .dense_output(true)

@@ -13,9 +13,9 @@ use crate::{
 
 use super::{
     cont::ContinuousOutput,
-    options::{IVPOptions, Method},
+    options::{Options, Method},
     solout::DefaultSolOut,
-    solution::IVPSolution,
+    solution::Solution,
 };
 
 /// Solve an initial value problem (IVP) for a system of first‑order ODEs: y' = f(x, y).
@@ -33,11 +33,11 @@ use super::{
 ///   and whether to build dense output).
 ///
 /// Returns:
-/// - `Ok(IVPSolution)`: Discrete samples and stats. Fields:
+/// - `Ok(Solution)`: Discrete samples and stats. Fields:
 ///   - `t`: Sampled time points (either internal accepted steps or `options.t_eval` if provided)
 ///   - `y`: State values corresponding to `t` (shape: `t.len() x y0.len()`)
 ///   - `nfev`, `nstep`, `naccpt`, `nrejct`, `status`: Solver statistics and final status
-///   - Continuous evaluation is available via `IVPSolution::sol`, `sol_many`, `sol_span`
+///   - Continuous evaluation is available via `Solution::sol`, `sol_many`, `sol_span`
 ///     when `options.dense_output == true`.
 /// - `Err(Vec<Error>)`: One or more errors encountered during integration.
 ///
@@ -47,7 +47,7 @@ use super::{
 ///     (subject to solver success).
 ///   - Otherwise, `t` and `y` contain all accepted internal steps.
 /// - Dense output:
-///   - If enabled via `options.dense_output`, the returned `IVPSolution` exposes
+///   - If enabled via `options.dense_output`, the returned `Solution` exposes
 ///     `sol(t)` and `sol_many(&ts)` for continuous interpolation inside the covered span.
 ///   - `sol_many` always returns `Vec<Option<Vec<Float>>>`; if dense output is disabled,
 ///     it yields a vector of `None` values of the same length as `ts`.
@@ -68,7 +68,7 @@ use super::{
 /// }
 ///
 /// fn main() {
-///     let opts = IVPOptions::builder()
+///     let opts = Options::builder()
 ///         .rtol(1e-9).atol(1e-9)
 ///         .method(Method::DOP853)
 ///         .dense_output(true)
@@ -99,8 +99,8 @@ pub fn solve_ivp<F>(
     x0: Float,
     xend: Float,
     y0: &[Float],
-    options: IVPOptions,
-) -> Result<IVPSolution, Vec<Error>>
+    options: Options,
+) -> Result<Solution, Vec<Error>>
 where
     F: ODE,
 {
@@ -161,7 +161,7 @@ where
             } else {
                 None
             };
-            Ok(IVPSolution {
+            Ok(Solution {
                 t,
                 y,
                 nfev: sol.nfev,

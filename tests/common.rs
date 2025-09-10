@@ -9,8 +9,8 @@ impl ODE for SHO {
 }
 
 #[allow(dead_code)]
-pub fn default_opts_dense(method: Method) -> IVPOptions {
-    IVPOptions::builder()
+pub fn default_opts_dense(method: Method) -> Options {
+    Options::builder()
         .method(method)
         .rtol(1e-9)
         .atol(1e-9)
@@ -19,8 +19,8 @@ pub fn default_opts_dense(method: Method) -> IVPOptions {
 }
 
 #[allow(dead_code)]
-pub fn default_opts(method: Method) -> IVPOptions {
-    IVPOptions::builder()
+pub fn default_opts(method: Method) -> Options {
+    Options::builder()
         .method(method)
         .rtol(1e-9)
         .atol(1e-9)

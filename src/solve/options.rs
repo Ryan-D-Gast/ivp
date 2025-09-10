@@ -31,7 +31,7 @@ impl From<&str> for Method {
 
 #[derive(Builder)]
 /// Options for solve_ivp similar to SciPy
-pub struct IVPOptions {
+pub struct Options {
     /// Method to use. Default: DOPRI5.
     #[builder(default = Method::DOPRI5, into)]
     pub method: Method,

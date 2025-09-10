@@ -7,15 +7,15 @@
 //! ```
 //!
 //! Re-exports included:
-//! - Core traits and types: `ODE`, `Interpolate`, `SolOut`, `ControlFlag`, `Solution`, `Status`.
-//! - High-level API: `solve_ivp`, `IVPOptions`, `IVPSolution`, and `Method`.
+//! - Core traits and types: `ODE`, `Interpolate`, `SolOut`, `ControlFlag`, `IntegrationResult`, `Status`.
+//! - High-level API: `solve_ivp`, `Options`, `Solution`, and `Method`.
 //!
 
 pub use crate::core::{
     interpolate::Interpolate,
     ode::ODE,
     solout::{ControlFlag, SolOut},
-    solution::Solution,
+    result::IntegrationResult,
     status::Status,
 };
-pub use crate::solve::{IVPOptions, IVPSolution, Method, solve_ivp};
+pub use crate::solve::{Options, Solution, Method, solve_ivp};

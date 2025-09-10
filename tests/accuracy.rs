@@ -18,7 +18,7 @@ fn harmonic_accuracy_end_state() {
         let opts = if let Method::RK4 = method {
             // fixed step RK4: choose step to land on period
             let h = (xend - x0) / 2000.0;
-            IVPOptions::builder().method(method.clone()).first_step(h).build()
+            Options::builder().method(method.clone()).first_step(h).build()
         } else {
             default_opts(method.clone())
         };
@@ -38,7 +38,7 @@ fn t_eval_sampling_exact_times() {
 
     for method in methods() {
         let method_dbg = format!("{:?}", method);
-        let opts = IVPOptions::builder()
+        let opts = Options::builder()
             .method(method)
             .rtol(1e-9)
             .atol(1e-9)
