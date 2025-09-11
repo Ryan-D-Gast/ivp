@@ -3,13 +3,11 @@
 use crate::{
     Float,
     error::Error,
+    interpolate::Interpolate,
     methods::{result::IntegrationResult, settings::Settings},
-    {
-        interpolate::Interpolate,
-        ode::ODE,
-        solout::{ControlFlag, SolOut},
-        status::Status,
-    },
+    ode::ODE,
+    solout::{ControlFlag, SolOut},
+    status::Status,
 };
 
 /// Classical explicit Runge-Kutta 4 (RK4) fixed-step integrator.

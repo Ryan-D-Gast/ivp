@@ -10,7 +10,7 @@
 //! dvy/dt = y - 2*vx - (1-mu)*y/r13^3 - mu*y/r23^3
 //! dvz/dt = -(1-mu)*z/r13^3 - mu*z/r23^3
 //! where r13 and r23 are distances to the primary and secondary bodies.
-//! 
+//!
 //! Initial conditions:
 //! Mass ratio: mu = 0.1
 //! x(0) = 0.5, y(0) = 0, z(0) = 0
@@ -39,10 +39,7 @@ impl ODE for CR3BP {
         dsdt[3] = x + 2.0 * vy
             - (1.0 - self.mu) * (x + self.mu) / r13.powi(3)
             - self.mu * (x - 1.0 + self.mu) / r23.powi(3);
-        dsdt[4] = y
-            - 2.0 * vx
-            - (1.0 - self.mu) * y / r13.powi(3)
-            - self.mu * y / r23.powi(3);
+        dsdt[4] = y - 2.0 * vx - (1.0 - self.mu) * y / r13.powi(3) - self.mu * y / r23.powi(3);
         dsdt[5] = -(1.0 - self.mu) * vz / r13.powi(3) - self.mu * vz / r23.powi(3);
     }
 

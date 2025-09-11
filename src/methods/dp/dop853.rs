@@ -21,17 +21,15 @@
 use crate::{
     Float,
     error::Error,
+    interpolate::Interpolate,
     methods::{
         hinit::hinit,
         result::IntegrationResult,
         settings::{Settings, Tolerance},
     },
-    {
-        interpolate::Interpolate,
-        ode::ODE,
-        solout::{ControlFlag, SolOut},
-        status::Status,
-    },
+    ode::ODE,
+    solout::{ControlFlag, SolOut},
+    status::Status,
 };
 
 /// Explicit Runge-Kutta method of order 8(5,3) due to
