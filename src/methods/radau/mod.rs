@@ -2,4 +2,4 @@
 
 mod radau5;
 
-pub use radau5::{radau5, contr5};
+pub use radau5::{contr5, radau5};

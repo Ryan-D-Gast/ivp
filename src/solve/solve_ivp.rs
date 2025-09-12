@@ -5,8 +5,8 @@ use crate::{
     error::Error,
     methods::{
         dp::{dop853, dopri5},
-        rk::{rk4, rk23},
         radau::radau5,
+        rk::{rk4, rk23},
         settings::Settings,
     },
     ode::ODE,

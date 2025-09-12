@@ -4,8 +4,8 @@ use crate::{
     Float,
     methods::{
         dp::{contdp5, contdp8},
-        rk::{contrk4, contrk23},
         radau::contr5,
+        rk::{contrk4, contrk23},
     },
 };
 
