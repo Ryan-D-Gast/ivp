@@ -52,7 +52,7 @@ use super::{
 ///     for continuous interpolation inside the covered span.
 ///   - Both functions return an `Err` if dense output was not requested or if any
 ///     requested time lies outside the covered interval. `sol_many` returns a
-///     single `Err` in that case (it does not return per-point `Option`s anymore).
+///     single `Err` in that case. This can easily be checked via `sol.sol_span()`.
 /// - Direction:
 ///   - The solver infers the integration direction from `xend - x0` and handles forward
 ///     and backward integration.
