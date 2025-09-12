@@ -2,11 +2,7 @@
 
 use bon::Builder;
 
-use crate::{
-    Float,
-    methods::settings::Tolerance,
-    solve::event::EventDirection,
-};
+use crate::{Float, methods::settings::Tolerance};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
@@ -32,7 +28,6 @@ impl From<&str> for Method {
         }
     }
 }
-
 
 #[derive(Builder)]
 /// Options for solve_ivp similar to SciPy
@@ -61,9 +56,4 @@ pub struct Options {
     /// evaluate the solution at arbitrary times inside the integration range.
     #[builder(default = false)]
     pub dense_output: bool,
-    /// Event zero-crossing direction filter. Default: All.
-    #[builder(default = EventDirection::All, into)]
-    pub event_direction: EventDirection,
-    /// Terminate after this many event occurrences. None => never terminate.
-    pub event_terminal: Option<usize>,
 }

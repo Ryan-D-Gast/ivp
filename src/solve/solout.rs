@@ -4,10 +4,9 @@ use crate::{
     interpolate::Interpolate,
     ode::ODE,
     solout::{ControlFlag, SolOut},
-    solve::event::EventDirection,
+    solve::event::{EventConfig, Direction},
     Float,
 };
-
 
 pub(crate) struct DefaultSolOut<'a, F> 
 where 
@@ -22,12 +21,12 @@ where
     // Dense output collection
     collect_dense: bool,
     dense_segs: Vec<(Vec<Float>, Float, Float)>, // (cont, xold, h)
-    // For event handling
+    // For event handling: last state and configuration
     yold: Vec<Float>,
-    // Event handling configuration
-    event_direction: EventDirection,
-    // Terminate after this many occurrences; None => never terminate
-    terminal_count: Option<usize>,
+    // Mutable event configuration provided to the user's `event` callback
+    event_config: EventConfig,
+    // Cached event value from previous step (g at the previous abscissa)
+    prev_event: Option<Float>,
     // Internal counter of occurred events
     event_hits: usize,
 }
@@ -36,7 +35,7 @@ impl<'a, F> DefaultSolOut<'a, F>
 where
     F: ODE,
 {
-    pub fn new(ode: &'a F, t_eval: Option<Vec<Float>>, collect_dense: bool, dir: EventDirection, terminal: Option<usize>) -> Self {
+    pub fn new(ode: &'a F, t_eval: Option<Vec<Float>>, collect_dense: bool) -> Self {
         Self {
             ode,
             t_eval,
@@ -46,8 +45,8 @@ where
             y: Vec::new(),
             collect_dense,
             dense_segs: Vec::new(),
-            event_direction: dir,
-            terminal_count: terminal,
+            event_config: EventConfig::new(),
+            prev_event: None,
             event_hits: 0,
             yold: Vec::new(),
         }
@@ -66,35 +65,34 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
         y: &[Float],
         interpolator: &I,
     ) -> ControlFlag {
-        // Event detection using zero crossings with direction filtering (SciPy-like)
-        // Only attempt when we have a non-degenerate step
-        if (x - xold).abs() > 0.0 {
-            // Evaluate event function at both ends
-            let g0 = self.ode.event(xold, &self.yold);
-            let g1 = self.ode.event(x, y);
+        // Event handling: if we have a cached previous event value use it, otherwise
+        // evaluate at the initial point and skip detection on this first call.
+        if let Some(g_prev) = self.prev_event {
+            // Evaluate event function at the current endpoint (may mutate config)
+            let g_curr = self.ode.event(x, y, &mut self.event_config);
 
-            // Helper to test if a sign change in desired direction occurred
-            let crossed = |g_left: Float, g_right: Float, dir: EventDirection| -> bool {
+            // Helper to test if a sign change in the requested direction occurred
+            let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
                 match dir {
-                    EventDirection::All => (g_left <= 0.0 && g_right >= 0.0) || (g_left >= 0.0 && g_right <= 0.0),
-                    EventDirection::Positive => g_left < 0.0 && g_right >= 0.0,
-                    EventDirection::Negative => g_left > 0.0 && g_right <= 0.0,
+                    Direction::All => (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0),
+                    Direction::Positive => left < 0.0 && right >= 0.0,
+                    Direction::Negative => left > 0.0 && right <= 0.0,
                 }
             };
 
-            if crossed(g0, g1, self.event_direction) {
-                // Bracket [a,b] = [xold, x] and refine by bisection using dense output
+            if crossed(g_prev, g_curr, &self.event_config.direction) {
+                // Root-bracket [a,b] = [xold,x] and refine by bisection using dense output
                 let mut a = xold;
                 let mut b = x;
-                let mut ga = g0;
-                let mut gb = g1;
-                let mut y_mid = vec![0.0; y.len()];
+                let mut g_left = g_prev;
+                let mut g_right = g_curr;
+                let mut y_mid_buf = vec![0.0; y.len()];
 
-                // If one endpoint already close to zero, snap to it
-                if ga.abs() <= self.tol {
+                // Snap to an endpoint if it's already within tolerance
+                if g_left.abs() <= self.tol {
                     self.t.push(a);
                     self.y.push(self.yold.clone());
-                } else if gb.abs() <= self.tol {
+                } else if g_right.abs() <= self.tol {
                     self.t.push(b);
                     self.y.push(y.to_vec());
                 } else {
@@ -103,48 +101,53 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
                             break;
                         }
                         let mid = 0.5 * (a + b);
-                        interpolator.interpolate(mid, &mut y_mid);
-                        let gm = self.ode.event(mid, &y_mid);
+                        interpolator.interpolate(mid, &mut y_mid_buf);
+                        let g_mid = self.ode.event(mid, &y_mid_buf, &mut self.event_config);
 
-                        // Choose sub-interval that preserves crossing in desired direction
-                        let left_cross = crossed(ga, gm, self.event_direction);
-                        let right_cross = crossed(gm, gb, self.event_direction);
+                        // Preserve crossing direction when selecting the subinterval
+                        let left_cross = crossed(g_left, g_mid, &self.event_config.direction);
+                        let right_cross = crossed(g_mid, g_right, &self.event_config.direction);
 
                         if left_cross {
                             b = mid;
-                            gb = gm;
-                            // y_mid becomes new right candidate; keep iterating
+                            g_right = g_mid;
                         } else if right_cross {
                             a = mid;
-                            ga = gm;
+                            g_left = g_mid;
                         } else {
-                            // Fallback: standard sign-based bisection
-                            if ga.signum() * gm.signum() <= 0.0 {
+                            // Fallback to sign-based bisection
+                            if g_left.signum() * g_mid.signum() <= 0.0 {
                                 b = mid;
-                                gb = gm;
+                                g_right = g_mid;
                             } else {
                                 a = mid;
-                                ga = gm;
+                                g_left = g_mid;
                             }
                         }
                     }
 
-                    // Use b as the event time and y at b
-                    let mut yb = vec![0.0; y.len()];
-                    interpolator.interpolate(b, &mut yb);
+                    // Record event time and state at b
+                    let mut y_at_b = vec![0.0; y.len()];
+                    interpolator.interpolate(b, &mut y_at_b);
                     self.t.push(b);
-                    self.y.push(yb);
+                    self.y.push(y_at_b);
                 }
 
-                // Count and decide whether to terminate
+                // Count the event and check for termination
                 self.event_hits += 1;
-                if let Some(limit) = self.terminal_count {
+                if let Some(limit) = self.event_config.terminal_count {
                     if self.event_hits >= limit {
                         return ControlFlag::Interrupt;
                     }
                 }
-                // Non-terminal event: continue integration
             }
+
+            // Cache current event value for next step
+            self.prev_event = Some(g_curr);
+        } else {
+            // First call: evaluate event at current point and cache it; no detection yet
+            let g0 = self.ode.event(x, y, &mut self.event_config);
+            self.prev_event = Some(g0);
         }
 
         // Update yold for next step

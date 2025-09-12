@@ -43,7 +43,13 @@ impl ODE for CR3BP {
         dsdt[5] = -(1.0 - self.mu) * vz / r13.powi(3) - self.mu * vz / r23.powi(3);
     }
 
-    fn event(&self, _x: f64, y: &[f64]) -> f64 {
+    fn event(&self, _x: f64, y: &[f64], event: &mut EventConfig) -> f64 {
+        // Terminate after 1 occurrence of the event
+        event.terminal();
+        event.positive(); // Only detect positive-going zero crossings
+        // Other options: event.negative(), event.all() <- All is default feel free to omit
+        // For recording multiple events before termination, use event.terminal_count(n) instead of event.terminal()
+
         // Example event: crossing the x-axis (y=0)
         y[1]
     }
@@ -53,7 +59,7 @@ fn main() {
     let mu = 0.1; // Mass ratio
     let cr3bp = CR3BP { mu };
     let t0 = 0.0;
-    let y0 = [0.5, 0.0, 0.0, 0.0, 1.2, 0.0]; // Initial state vector
+    let y0 = [0.5, 0.1, 0.0, 0.0, 1.2, 0.0]; // Initial state vector
     let tf = 10.0; // Integrate over 10 time units
     let t_eval = Vec::new(); // This will allow only event steps to be recorded
     let options = Options::builder()

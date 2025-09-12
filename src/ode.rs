@@ -1,6 +1,6 @@
 //! User-supplied ODE system.
 
-use crate::Float;
+use crate::{Float, solve::event::EventConfig};
 
 /// User-supplied ODE system.
 ///
@@ -26,8 +26,8 @@ pub trait ODE {
 
     /// Event function
     #[allow(unused_variables)]
-    fn event(&self, x: Float, y: &[Float]) -> Float {
-        1.0 // No event by default
+    fn event(&self, x: Float, y: &[Float], event: &mut EventConfig) -> Float {
+        0.0
     }
 
     // TODO: Jacobian for stiff solvers (radau, bdf)
