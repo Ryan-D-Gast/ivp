@@ -77,7 +77,7 @@ fn main() {
             println!("Number of accepted steps: {}", sol.naccpt);
             println!("Number of rejected steps: {}", sol.nrejct);
 
-            for (ti, yi) in sol.t.iter().zip(sol.y.iter()) {
+            for (ti, yi) in sol.iter() {
                 println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
             }
         }

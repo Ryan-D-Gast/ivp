@@ -46,7 +46,7 @@ fn main() {
             println!("Number of rejected steps: {}", sol.nrejct);
 
             // Print sampled values
-            for (ti, yi) in sol.t.iter().zip(sol.y.iter()) {
+            for (ti, yi) in sol.iter() {
                 println!("x = {:.4}, y = {:?}", ti, yi);
             }
         }
