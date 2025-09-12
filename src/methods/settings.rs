@@ -26,10 +26,14 @@ pub struct Settings {
     /// Initial step size. None will result in an initial guess
     /// provided by the [`crate::hinit::hinit`] function.
     pub h0: Option<Float>,
-    /// Maximum number of allowed steps. Default is 100,000.
+    /// Maximum number of allowed steps.
     pub nmax: Option<usize>,
-    /// Number of steps before performing a stiffness test. Default is 1000.
+    /// Number of steps before performing a stiffness test.
     pub nstiff: Option<usize>,
+    /// Max number of iterations in Newton solver.
+    pub newton_maxiter: Option<usize>,
+    /// Newton iteration tolerance.
+    pub newton_tol: Option<Float>,
 }
 
 /// Tolerance enum to allow scalar or vector tolerances
