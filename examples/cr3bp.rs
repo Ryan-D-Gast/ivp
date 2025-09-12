@@ -73,7 +73,7 @@ fn main() {
         Ok(sol) => {
             println!("Final status: {:?}", sol.status);
             if let (Some(&t_last), Some(y_last)) = (sol.t.last(), sol.y.last()) {
-                println!("Final state: t = {:.5}, y = {:?}", t_last, y_last);
+                println!("Final state: t = {:.5}, y = {:.5?}", t_last, y_last);
             }
             println!("Number of function evaluations: {}", sol.nfev);
             println!("Number of steps taken: {}", sol.nstep);
@@ -81,7 +81,7 @@ fn main() {
             println!("Number of rejected steps: {}", sol.nrejct);
 
             for (ti, yi) in sol.t.iter().zip(sol.y.iter()) {
-                println!("t = {:>8.5}, y = {:?}", ti, yi);
+                println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
             }
         }
         Err(err) => eprintln!("Integration failed: {:?}", err),
