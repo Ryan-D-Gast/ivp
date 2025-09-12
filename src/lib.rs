@@ -14,6 +14,7 @@
 //! Quick start
 //! ```
 //! use ivp::prelude::*;
+//! use std::f64::consts::PI;
 //!
 //! struct SHO;
 //! impl ODE for SHO {
@@ -32,7 +33,7 @@
 //!
 //!     let f = SHO;
 //!     let x0 = 0.0;
-//!     let xend = 2.0 * std::f64::consts::PI; // one period
+//!     let xend = 2.0 * PI; // one period
 //!     let y0 = [1.0, 0.0];
 //!
 //!     let sol = solve_ivp(&f, x0, xend, &y0, opts).unwrap();
@@ -90,6 +91,7 @@ pub mod ode;
 pub mod solout;
 pub mod solve;
 pub mod status;
+pub mod matrix;
 
 // -- Numerical methods --
 pub mod methods;

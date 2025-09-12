@@ -39,4 +39,5 @@ pub use crate::{
     solve::event::{Direction, EventConfig},
     solve::{Method, Options, Solution, solve_ivp},
     status::Status,
+    matrix::Matrix,
 };
