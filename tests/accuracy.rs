@@ -58,7 +58,12 @@ fn t_eval_sampling_exact_times() {
         let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");
         let tol = 1e-9;
         for &te in &t_eval {
-            assert!(sol.t.iter().any(|&t| (t - te).abs() <= tol), "t_eval not respected for {} (missing {})", method_dbg, te);
+            assert!(
+                sol.t.iter().any(|&t| (t - te).abs() <= tol),
+                "t_eval not respected for {} (missing {})",
+                method_dbg,
+                te
+            );
         }
         assert_eq!(sol.y.len(), sol.t.len());
     }

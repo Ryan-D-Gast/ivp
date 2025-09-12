@@ -1,16 +1,16 @@
 //! Default SolOut that implements t_eval sampling and endpoint recording; wraps a user SolOut.
 
 use crate::{
+    Float,
     interpolate::Interpolate,
     ode::ODE,
     solout::{ControlFlag, SolOut},
-    solve::event::{EventConfig, Direction},
-    Float,
+    solve::event::{Direction, EventConfig},
 };
 
-pub(crate) struct DefaultSolOut<'a, F> 
-where 
-    F: ODE
+pub(crate) struct DefaultSolOut<'a, F>
+where
+    F: ODE,
 {
     ode: &'a F,
     t_eval: Option<Vec<Float>>,
@@ -74,7 +74,9 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
             // Helper to test if a sign change in the requested direction occurred
             let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
                 match dir {
-                    Direction::All => (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0),
+                    Direction::All => {
+                        (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0)
+                    }
                     Direction::Positive => left < 0.0 && right >= 0.0,
                     Direction::Negative => left > 0.0 && right <= 0.0,
                 }
