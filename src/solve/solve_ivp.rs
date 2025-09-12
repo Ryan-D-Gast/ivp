@@ -6,6 +6,7 @@ use crate::{
     methods::{
         dp::{dop853, dopri5},
         rk::{rk4, rk23},
+        radau::radau5,
         settings::Settings,
     },
     ode::ODE,
@@ -148,6 +149,16 @@ where
             settings,
         ),
         Method::DOP853 => dop853(
+            f,
+            x0,
+            xend,
+            y0,
+            options.rtol,
+            options.atol,
+            Some(&mut default_solout),
+            settings,
+        ),
+        Method::Radau5 => radau5(
             f,
             x0,
             xend,

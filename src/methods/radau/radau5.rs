@@ -9,7 +9,6 @@ use crate::{
 	interpolate::Interpolate,
 	matrix::Matrix,
 	methods::{
-		hinit::hinit,
 		result::IntegrationResult,
 		settings::{Settings, Tolerance},
 	},
@@ -76,6 +75,15 @@ where
 	let hmax = settings.hmax.unwrap_or_else(|| (xend - x).abs());
 	let hmin = settings.hmin.unwrap_or(0.0);
 
+    // Max newton iterations
+    let max_newton = settings.newton_maxiter.unwrap_or(7);
+    if max_newton <= 0 {
+        errors.push(Error::NewtonMaxIterMustBePositive(0));
+    }
+
+    // Newton tolerance
+    let newton_tol = settings.newton_tol.unwrap_or(0.003_162_277_660_168_379_4);
+
 	if !errors.is_empty() {
 		return Err(errors);
 	}
@@ -86,25 +94,11 @@ where
 	f.ode(x, &y, &mut f0);
 	let mut nfev: usize = 1;
 
-	// Initial step size: use provided h0 or compute via hinit (order 5)
+	// Initial step size: use provided h0 or default to 1e-6 (signed)
 	let mut h = if let Some(h0) = settings.h0 {
 		h0
 	} else {
-		let mut f1tmp = vec![0.0; n];
-		let mut y1tmp = vec![0.0; n];
-		hinit(
-			f,
-			x,
-			&y,
-			posneg,
-			&f0,
-			&mut f1tmp,
-			&mut y1tmp,
-			5,
-			hmax,
-			&atol,
-			&rtol,
-		)
+		1.0e-6 * posneg
 	};
 	if h == 0.0 || h.signum() != posneg && posneg != 0.0 {
 		return Err(vec![Error::InvalidStepSize(h)]);
@@ -130,7 +124,7 @@ where
 	let mut k1 = vec![0.0; n];
 	let mut k2 = vec![0.0; n];
 	let mut k3 = vec![0.0; n];
-	// Stage state buffers and RHS/solve buffers (reused):
+	// Stage state buffers and RHS/solve buffers:
 	let mut y1s = vec![0.0; n];
 	let mut y2s = vec![0.0; n];
 	let mut y3s = vec![0.0; n];
@@ -140,11 +134,11 @@ where
 	let mut s1 = vec![0.0; n];
 	let mut s2 = vec![0.0; n];
 	let mut s3 = vec![0.0; n];
-	let mut dF1 = vec![0.0; n];
-	let mut dF2 = vec![0.0; n];
-	let mut dF3 = vec![0.0; n];
+	let mut df1 = vec![0.0; n];
+	let mut df2 = vec![0.0; n];
+	let mut df3 = vec![0.0; n];
 	let mut rhs23 = vec![0.0; 2 * n];
-	let mut dF23 = vec![0.0; 2 * n];
+	let mut df23 = vec![0.0; 2 * n];
 	// Error estimator buffers
 	let mut tmp = vec![0.0; n];
 	let mut f2v = vec![0.0; n];
@@ -209,7 +203,6 @@ where
 
         // Newton iteration
 		let mut newton_ok = false;
-		let max_newton = settings.newton_maxiter.unwrap_or(7);
 		for _it in 0..max_newton {
 			// Stage values
 			for i in 0..n { 
@@ -246,17 +239,17 @@ where
 			}
 			for i in 0..n { rhs1[i] += s1[i]; rhs2[i] += s2[i]; rhs3[i] += s3[i]; }
 
-			// Solve E1·dF1 = rhs1
-			dF1.copy_from_slice(&rhs1);
-			e1.lin_solve_mut(&mut dF1);
+			// Solve E1·df1 = rhs1
+			df1.copy_from_slice(&rhs1);
+			e1.lin_solve_mut(&mut df1);
 			// Solve complex pair via 2n×2n real system
 			for i in 0..n { rhs23[i] = rhs2[i]; rhs23[i + n] = rhs3[i]; }
-			dF23.copy_from_slice(&rhs23);
-			e2.lin_solve_mut(&mut dF23);
-			for i in 0..n { dF2[i] = dF23[i]; dF3[i] = dF23[i + n]; }
+			df23.copy_from_slice(&rhs23);
+			e2.lin_solve_mut(&mut df23);
+			for i in 0..n { df2[i] = df23[i]; df3[i] = df23[i + n]; }
 
 			// Update F
-			for i in 0..n { f1[i] += dF1[i]; f2[i] += dF2[i]; f3[i] += dF3[i]; }
+			for i in 0..n { f1[i] += df1[i]; f2[i] += df2[i]; f3[i] += df3[i]; }
 
 			// Update Z from F via T
 			for i in 0..n {
@@ -269,13 +262,13 @@ where
 			let mut dyno = 0.0;
 			for i in 0..n {
 				let sc = atol[i] + rtol[i] * y[i].abs();
-				let v1 = dF1[i] / sc;
-				let v2 = dF2[i] / sc;
-				let v3 = dF3[i] / sc;
+				let v1 = df1[i] / sc;
+				let v2 = df2[i] / sc;
+				let v3 = df3[i] / sc;
 				dyno += v1 * v1 + v2 * v2 + v3 * v3;
 			}
 			dyno = (dyno / (3.0 * n as Float)).sqrt();
-			if dyno <= settings.newton_tol.unwrap_or(0.03_f64.min(rtol[0].sqrt())) {
+			if dyno <= newton_tol {
 				newton_ok = true;
 				break;
 			}
@@ -433,6 +426,19 @@ where
 	})
 }
 
+pub fn contr5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+    let n = cont.len() / 4;
+    // s = (xi - (xold + h)) / h
+    let s = (xi - (xold + h)) / h;
+    let c0 = &cont[0 * n..1 * n];
+    let c1 = &cont[1 * n..2 * n];
+    let c2 = &cont[2 * n..3 * n];
+    let c3 = &cont[3 * n..4 * n];
+    for i in 0..n {
+        yi[i] = c0[i] + s * (c1[i] + (s - C2M1) * (c2[i] + (s - C1M1) * c3[i]));
+    }
+}
+
 /// Dense output: cubic at the right endpoint using `cont` coefficients.
 struct DenseRadau<'a> {
 	cont: &'a [Float], // [c0(n)=y_{n+1}, c1(n), c2(n), c3(n)]
@@ -442,16 +448,7 @@ struct DenseRadau<'a> {
 
 impl<'a> Interpolate for DenseRadau<'a> {
 	fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-		let n = self.cont.len() / 4;
-		// s = (xi - (xold + h)) / h
-		let s = (xi - (self.xold + self.h)) / self.h;
-		let c0 = &self.cont[0 * n..1 * n];
-		let c1 = &self.cont[1 * n..2 * n];
-		let c2 = &self.cont[2 * n..3 * n];
-		let c3 = &self.cont[3 * n..4 * n];
-		for i in 0..n {
-			yi[i] = c0[i] + s * (c1[i] + (s - C2M1) * (c2[i] + (s - C1M1) * c3[i]));
-		}
+        contr5(xi, yi, self.cont, self.xold, self.h);
 	}
 
 	fn get_cont(&self) -> (Vec<Float>, Float, Float) {

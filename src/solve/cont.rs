@@ -5,6 +5,7 @@ use crate::{
     methods::{
         dp::{contdp5, contdp8},
         rk::{contrk4, contrk23},
+        radau::contr5,
     },
 };
 
@@ -35,6 +36,7 @@ impl ContinuousOutput {
             Method::RK23 => (contrk23 as ContFn, 4),
             Method::DOPRI5 => (contdp5 as ContFn, 5),
             Method::DOP853 => (contdp8 as ContFn, 8),
+            Method::Radau5 => (contr5 as ContFn, 4),
         };
         let segs = segs
             .into_iter()

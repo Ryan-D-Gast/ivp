@@ -15,6 +15,8 @@ pub enum Method {
     DOP853,
     /// Classic fixed-step RK4
     RK4,
+    /// Radau 5th order implicit Runge-Kutta method
+    Radau5,
 }
 
 impl From<&str> for Method {
@@ -24,6 +26,7 @@ impl From<&str> for Method {
             "DOPRI5" | "RK45" => Method::DOPRI5,
             "DOP853" => Method::DOP853,
             "RK4" => Method::RK4,
+            "RADAU5" | "RADAU" => Method::Radau5,
             _ => Method::DOPRI5, // Default
         }
     }

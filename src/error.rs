@@ -14,6 +14,7 @@ pub enum Error {
     InvalidScaleFactors(Float, Float),
     DenseOutputDisabled,
     EvaluationOutOfRange(Float),
+    NewtonMaxIterMustBePositive(usize),
 }
 
 impl std::fmt::Display for Error {
@@ -35,6 +36,9 @@ impl std::fmt::Display for Error {
             Error::DenseOutputDisabled => write!(f, "dense output is disabled"),
             Error::EvaluationOutOfRange(t) => {
                 write!(f, "evaluation time {} is outside the covered range", t)
+            }
+            Error::NewtonMaxIterMustBePositive(v) => {
+                write!(f, "newton_maxiter must be positive (got {})", v)
             }
         }
     }
