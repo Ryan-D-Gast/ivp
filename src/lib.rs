@@ -87,11 +87,11 @@ pub(crate) type Float = f64;
 // -- Core modules --
 pub mod error;
 pub mod interpolate;
+pub mod matrix;
 pub mod ode;
 pub mod solout;
 pub mod solve;
 pub mod status;
-pub mod matrix;
 
 // -- Numerical methods --
 pub mod methods;

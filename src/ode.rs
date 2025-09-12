@@ -25,7 +25,7 @@ pub trait ODE {
     fn ode(&self, x: Float, y: &[Float], dydx: &mut [Float]);
 
     /// Events to track during integration.
-    /// 
+    ///
     /// This function is called after each successful step to check for events.
     /// The solver will find an accurate value of event(x, y) = 0 using root finding.
     /// When the event is found it will be recorded in the solution. The user can make
@@ -41,7 +41,7 @@ pub trait ODE {
     /// It describes the local behavior of the system of equations and can be used to improve
     /// the efficiency of certain solvers by providing information about the local behavior
     /// of the system of equations.
-    /// 
+    ///
     /// The Jacobian matrix `j` is a pre-allocated `dim x dim` matrix, where `dim` is the length of `y`.
     /// The user can fill the matrix via Index/IndexMut, e.g., `j[(row, col)] = value`.
     ///
@@ -85,12 +85,12 @@ pub trait ODE {
     }
 
     /// Mass matrix M in the system M y' = f(x, y).
-    /// 
+    ///
     /// The mass matrix is only supported for non-explicit solvers.
     /// e.g., Radau and BDF. By default, this is the identity matrix,
     /// which results in the standard form y' = f(x, y).
-    /// 
-    /// The mass matrix `m` is a pre-allocated `dim x dim` matrix, 
+    ///
+    /// The mass matrix `m` is a pre-allocated `dim x dim` matrix,
     /// where `dim` is the length of `y`. The user can fill the matrix via Index/IndexMut,
     /// e.g., `m[(row, col)] = value`.
     fn mass(&self, m: &mut Matrix) {

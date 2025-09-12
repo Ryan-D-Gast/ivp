@@ -34,10 +34,10 @@
 
 pub use crate::{
     interpolate::Interpolate,
+    matrix::Matrix,
     ode::ODE,
     solout::ControlFlag,
     solve::event::{Direction, EventConfig},
     solve::{Method, Options, Solution, solve_ivp},
     status::Status,
-    matrix::Matrix,
 };

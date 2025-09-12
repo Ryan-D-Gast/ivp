@@ -5,7 +5,7 @@ use crate::Float;
 use super::base::{Matrix, MatrixStorage};
 
 impl Matrix {
-    /// Solve A x = b, returning x. 
+    /// Solve A x = b, returning x.
     pub fn lin_solve(&self, b: &[Float]) -> Vec<Float> {
         let mut b_copy = b.to_vec();
         self.lin_solve_mut(&mut b_copy);

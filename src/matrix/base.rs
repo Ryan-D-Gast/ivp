@@ -97,11 +97,7 @@ impl Matrix {
             n,
             m: n,
             data,
-            storage: MatrixStorage::Banded {
-                ml,
-                mu,
-                zero: 0.0,
-            },
+            storage: MatrixStorage::Banded { ml, mu, zero: 0.0 },
         }
     }
 
