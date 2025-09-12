@@ -1,13 +1,8 @@
-//! Radau5 - 3-stage, order-5 Radau IIA implicit Runge–Kutta integrator
+//! Radau5 — 3-stage, order-5 Radau IIA implicit Runge–Kutta solver.
 //!
-//! Pragmatic Radau5 integrator:
-//! - public `radau5` function, returning `IntegrationResult` and collecting stats
-//! - validates `Settings`
-//! - simplified Newton iteration with numerical Jacobian via `ODE::jac`
-//! - dense output compatible with `SolOut` using a cubic polynomial
-//!
-//! References:
-//! - Hairer & Wanner, Solving Ordinary Differential Equations II (Radau IIA)
+//! Solves stiff ODEs/DAEs `M·y' = f(t,y)` with adaptive step-size,
+//! simplified Newton iterations (numerical Jacobian by default), and dense output.
+//! Reference: Hairer & Wanner, Solving ODEs II (Radau IIA).
 
 use crate::{
 	error::Error,
@@ -24,7 +19,7 @@ use crate::{
 	Float,
 };
 
-/// Implicit RK Radau IIA order 5 with adaptive step size and dense output.
+/// Radau IIA(5) implicit Runge–Kutta with adaptive steps and dense output.
 pub fn radau5<F, S>(
 	f: &F,
 	mut x: Float,
@@ -74,8 +69,6 @@ where
 			settings.scale_max.unwrap_or(0.0),
 		));
 	}
-	// settings.beta not used in Radau5 controller; ignore if provided
-
 	let n = y0.len();
 	let mut y = y0.to_vec();
 
@@ -86,8 +79,6 @@ where
 	if !errors.is_empty() {
 		return Err(errors);
 	}
-
-	// Error estimator will use an E1 solve following Hairer-Wanner's Radau5.
 
 	// --- Initialization ---
 	let posneg = (xend - x).signum();
@@ -120,8 +111,7 @@ where
 	}
 	h = h.clamp(-hmax, hmax);
 
-	// Dense output storage: 4 coefficient vectors of length n
-	// cont[0]=y_{n+1}, cont[1..3] per Radau5 cubic coefficients
+	// Dense output: [y_{n+1}, c1, c2, c3]
 	let mut cont = vec![0.0; n * 4];
 
 	// Initial callback (xold=x)
@@ -130,8 +120,7 @@ where
 		s.solout(x, x, &y, &interp);
 	}
 
-	// Working arrays and matrices following the algebraic Radau approach
-	// Stage increments Z (added to y at c1, c2, 1), stage transforms F, and stage RHS K
+	// Workspace
 	let mut z1 = vec![0.0; n];
 	let mut z2 = vec![0.0; n];
 	let mut z3 = vec![0.0; n];
@@ -189,11 +178,11 @@ where
 		}
 		nstep += 1;
 
-		// Jacobian and mass at (x, y)
+        // Jacobian and mass at (x, y)
 		f.jac(x, &y, &mut jac);
 		f.mass(&mut mass);
 
-		// Build E1 = fac1*M - J and E2 as 2n x 2n block with E2r = alph/h*M - J, E2i = beta/h*M
+        // Build E1=(U1/h)·M − J and E2 as a real 2n×2n block
 		let fac1 = U1 / h;
 		let alphn = ALPH / h;
 		let betan = BETA / h;
@@ -203,22 +192,22 @@ where
 				let e2r = mass[(r, c)] * alphn - jac[(r, c)];
 				let e2i = mass[(r, c)] * betan;
 				// Fill 2x2 block
-				e2[(r, c)] = e2r; // top-left
-				e2[(r, c + n)] = -e2i; // top-right
-				e2[(r + n, c)] = e2i; // bottom-left
-				e2[(r + n, c + n)] = e2r; // bottom-right
+				e2[(r, c)] = e2r;
+				e2[(r, c + n)] = -e2i;
+				e2[(r + n, c)] = e2i;
+				e2[(r + n, c + n)] = e2r;
 			}
 		}
 
-		// Initialize stage increments and transforms
+        // Initialize stage increments and transforms
 		for i in 0..n { z1[i] = 0.0; z2[i] = 0.0; z3[i] = 0.0; f1[i] = 0.0; f2[i] = 0.0; f3[i] = 0.0; }
 
-		// Stage times (constant during Newton for this step)
-	let t1 = x + C1 * h;
-	let t2 = x + C2 * h;
+        // Stage times (constant during Newton for this step)
+        let t1 = x + C1 * h;
+        let t2 = x + C2 * h;
 		let t3 = x + h;
 
-		// Newton iteration
+        // Newton iteration
 		let mut newton_ok = false;
 		let max_newton = settings.newton_maxiter.unwrap_or(7);
 		for _it in 0..max_newton {
@@ -235,7 +224,7 @@ where
 			f.ode(t3, &y3s, &mut k3);
 			nfev += 3;
 
-			// Form RHS via T^{-1} combination of k
+			// Form RHS via T^{-1}·k
 			for i in 0..n {
 				rhs1[i] = TINV00 * k1[i] + TINV01 * k2[i] + TINV02 * k3[i];
 				rhs2[i] = TINV10 * k1[i] + TINV11 * k2[i] + TINV12 * k3[i];
@@ -257,10 +246,10 @@ where
 			}
 			for i in 0..n { rhs1[i] += s1[i]; rhs2[i] += s2[i]; rhs3[i] += s3[i]; }
 
-			// Solve E1 * dF1 = rhs1
+			// Solve E1·dF1 = rhs1
 			dF1.copy_from_slice(&rhs1);
 			e1.lin_solve_mut(&mut dF1);
-			// Solve complex pair via 2n x 2n real system
+			// Solve complex pair via 2n×2n real system
 			for i in 0..n { rhs23[i] = rhs2[i]; rhs23[i + n] = rhs3[i]; }
 			dF23.copy_from_slice(&rhs23);
 			e2.lin_solve_mut(&mut dF23);
@@ -269,7 +258,7 @@ where
 			// Update F
 			for i in 0..n { f1[i] += dF1[i]; f2[i] += dF2[i]; f3[i] += dF3[i]; }
 
-			// Update Z from F via T matrix
+			// Update Z from F via T
 			for i in 0..n {
 				z1[i] = T00 * f1[i] + T01 * f2[i] + T02 * f3[i];
 				z2[i] = T10 * f1[i] + T11 * f2[i] + T12 * f3[i];
@@ -306,19 +295,16 @@ where
 			continue;
 		}
 
-		// Compute solution at end of step using increment z3
+	    // Solution at end of step using z3
 		let mut y1 = y.clone();
 		for i in 0..n { y1[i] = y[i] + z3[i]; }
 
-		// Error estimate (Radau5-style via E1 solve with mass matrix):
-		// hee_k = dd_k / h; form tmp = hee1*Z1 + hee2*Z2 + hee3*Z3;
-		// f2 = M * tmp; cont = f2 + f(x_n, y_n);
-		// Solve E1 * cont = cont, with E1 = fac1*M - J, fac1 = U1/h.
+	    // Error estimate (E1-based): hee=dd/h; tmp=Σ hee·Z; cont=f(xn,yn)+M·tmp; solve E1·cont=cont
 		let hee1 = DD1 / h;
 		let hee2 = DD2 / h;
 		let hee3 = DD3 / h;
 		for i in 0..n { tmp[i] = hee1 * z1[i] + hee2 * z2[i] + hee3 * z3[i]; }
-		// f2 = M * tmp
+	    // f2 = M·tmp
 		for i in 0..n {
 			let mut sum = 0.0;
 			for j in 0..n {
@@ -326,9 +312,9 @@ where
 			}
 			f2v[i] = sum;
 		}
-		// cont = f(x_n, y_n) + f2
+	    // cont = f(x_n, y_n) + f2
 		for i in 0..n { contv[i] = f0[i] + f2v[i]; }
-		// Build and solve E1 * cont = cont, E1 = fac1*M - J
+	    // Solve E1·cont = cont, E1 = (U1/h)·M − J
 		let fac1 = U1 / h;
 		for r in 0..n { for c in 0..n { e1[(r, c)] = mass[(r, c)] * fac1 - jac[(r, c)]; } }
 		e1.lin_solve_mut(&mut contv);
@@ -339,7 +325,7 @@ where
 			err += e * e;
 		}
 		let mut err = (err / n as Float).sqrt().max(1e-10);
-		// Optional refinement: on first or rejected step and large error
+	    // Optional refinement on first/rejected step
 		if err >= 1.0 && (naccpt == 0 || nrejct > 0) {
 			// cont = y + cont; f1 = f(x, cont)
 			let mut ytmp = y.clone();
@@ -359,8 +345,7 @@ where
 			err = (err / n as Float).sqrt().max(1e-10);
 		}
 
-		// Step size control
-		// Classic Radau controller: hnew = h / clamp(err^(1/4)/safety, [facc2, facc1])
+	    // Step-size control: hnew = h / clamp(err^(1/4)/safety, [facc2, facc1])
 		let mut quot = (err.max(1e-10)).powf(0.25) / safety_factor;
 		quot = facc2.max(quot.min(facc1));
 		let mut hnew = h / quot;
@@ -369,23 +354,16 @@ where
 			// accept
 			naccpt += 1;
 
-			// Dense output coefficients per Radau5 (cubic at right endpoint)
-			// Compute stage increments Z_i = z_i - y (using left-end y)
+			// Dense output coefficients (cubic at right endpoint)
 			let c1m1 = C1M1;
 			let c2m1 = C2M1;
 			let c1mc2 = C1MC2;
 			for i in 0..n {
-				// cont0 = y_{n+1}
 				cont[0 * n + i] = y1[i];
-				// cont1 = (Z2 - Z3)/(c2-1)
 				let cont1i = (z2[i] - z3[i]) / c2m1;
-				// ak = (Z1 - Z2)/(c1 - c2)
-					let ak = (z1[i] - z2[i]) / c1mc2;
-				// acont3 = (ak - Z1/c1)/c2
-					let acont3 = (ak - (z1[i] / C1)) / C2;
-				// cont2 = (ak - cont1)/(c1-1)
+				let ak = (z1[i] - z2[i]) / c1mc2;
+				let acont3 = (ak - (z1[i] / C1)) / C2;
 				let cont2i = (ak - cont1i) / c1m1;
-				// cont3 = cont2 - acont3
 				let cont3i = cont2i - acont3;
 				cont[1 * n + i] = cont1i;
 				cont[2 * n + i] = cont2i;
@@ -455,8 +433,7 @@ where
 	})
 }
 
-/// Dense output for Radau5 compatible with `SolOut`.
-/// Cubic polynomial based at the right endpoint using coefficients in `cont`.
+/// Dense output: cubic at the right endpoint using `cont` coefficients.
 struct DenseRadau<'a> {
 	cont: &'a [Float], // [c0(n)=y_{n+1}, c1(n), c2(n), c3(n)]
 	xold: Float,
@@ -466,8 +443,7 @@ struct DenseRadau<'a> {
 impl<'a> Interpolate for DenseRadau<'a> {
 	fn interpolate(&self, xi: Float, yi: &mut [Float]) {
 		let n = self.cont.len() / 4;
-		// s = (t - t_{n+1}) / h = theta - 1, but since q = (xi - (xold + h)) / h = (xi - x) / h
-		// and x = xold + h, so s = q
+		// s = (xi - (xold + h)) / h
 		let s = (xi - (self.xold + self.h)) / self.h;
 		let c0 = &self.cont[0 * n..1 * n];
 		let c1 = &self.cont[1 * n..2 * n];
