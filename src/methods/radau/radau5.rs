@@ -8,7 +8,7 @@ use crate::{
     Float,
     error::Error,
     interpolate::Interpolate,
-    matrix::Matrix,
+    matrix::{Matrix, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{
         result::IntegrationResult,
         settings::{Settings, Tolerance},
@@ -128,112 +128,216 @@ where
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
+    let mut y1 = vec![0.0; n];
+    let mut y2 = vec![0.0; n];
+    let mut y3 = vec![0.0; n];
+    let mut scal = vec![0.0; n];
     // Stage state buffers and RHS/solve buffers:
-    let mut y1s = vec![0.0; n];
-    let mut y2s = vec![0.0; n];
-    let mut y3s = vec![0.0; n];
-    let mut rhs1 = vec![0.0; n];
-    let mut rhs2 = vec![0.0; n];
-    let mut rhs3 = vec![0.0; n];
-    let mut s1 = vec![0.0; n];
-    let mut s2 = vec![0.0; n];
-    let mut s3 = vec![0.0; n];
-    let mut df1 = vec![0.0; n];
-    let mut df2 = vec![0.0; n];
-    let mut df3 = vec![0.0; n];
-    let mut rhs23 = vec![0.0; 2 * n];
-    let mut df23 = vec![0.0; 2 * n];
-    // Error estimator buffers
-    let mut tmp = vec![0.0; n];
+    let mut f1v = vec![0.0; n];
     let mut f2v = vec![0.0; n];
     let mut contv = vec![0.0; n];
-    let mut f1tmp = vec![0.0; n];
+    // Error estimator buffers
     let mut jac = Matrix::zeros(n, n);
     let mut mass = Matrix::identity(n);
     let mut e1 = Matrix::zeros(n, n);
-    let mut e2 = Matrix::zeros(2 * n, 2 * n);
+    let mut e2r = Matrix::zeros(n, n);
+    let mut e2i = Matrix::zeros(n, n);
+    let mut ip1 = vec![0; n];
+    let mut ip2 = vec![0; 2 * n];
 
     let mut nstep: usize = 0;
     let mut naccpt: usize = 0;
     let mut nrejct: usize = 0;
+    let mut nsol: usize = 0;
+    let mut ndec: usize = 0;
+    let mut njac: usize = 0;
     let mut status = Status::Success;
     let mut last = false;
+    let mut singular_count = 0;
+    let mut faccon: Float = 1.0;
+    let mut theta: Float;
+    let thet: Float = 0.001;
+    let mut dynold: Float = 0.0;
+    let mut thqold: Float = 0.0;
+    let mut err: Float;
+    let mut hnew: Float;
+    let mut reject = false;
+    let mut first = true;
+    let mut call_jac = true;
+    let mut call_decomp = true;
+    let mut qt;
+    let mut hold = h;
+    let cfac: Float = 13.5;
+    let facl: Float = 5.0;
+    let facr: Float = 0.125;
+    let mut fac: Float;
+    let mut xold;
+    let predictive = true;
+    let mut quot: Float;
+    let mut h_acc: Float = 0.0;
+    let mut hhfac: Float = h;
+    let mut err_acc: Float = 0.0;
+    let quot1: Float = 1.0;
+    let quot2: Float = 1.2;
+
+    // Temp index
+    let index2 = false;
+    let index3 = false;
+    let nind1 = 0;
+    let nind2 = 0;
+    let nind3 = 0;
+
+    // Initial mass matrix
+    f.mass(&mut mass);
+
+    // Error scale
+    for i in 0..n {
+        scal[i] = atol[i] + rtol[i] * y[i].abs();
+    }
 
     // --- Main loop ---
-    while posneg * (xend - x) > 0.0 {
+    'main: loop {
+        if posneg * (xend - x) <= 0.0 {
+            break;
+        }
+
+        if call_jac {
+            // Jacobian and mass at (x, y)
+            f.jac(x, &y, &mut jac);
+            njac += 1;
+        }
+
+        if call_decomp {
+            // Build E1 and E2 matrices
+            let fac1 = U1 / h;
+            let alphn = ALPH / h;
+            let betan = BETA / h;
+            for r in 0..n {
+                for c in 0..n {
+                    // E1 = (U1/h)·M − J
+                    e1[(r, c)] = mass[(r, c)] * fac1 - jac[(r, c)];
+                    e2r[(r, c)] = mass[(r, c)] * alphn - jac[(r, c)];
+                    e2i[(r, c)] = mass[(r, c)] * betan;
+                }
+            }
+
+            // LU decomp of real matrix E1
+            if lu_decomp(&mut e1, &mut ip1).is_err() {
+                singular_count += 1;
+                if singular_count > 5 {
+                    status = Status::SingularMatrix;
+                    break;
+                }
+            }
+
+            // LU decomp of complex matrix E2
+            if lu_decomp_complex(&mut e2r, &mut e2i, &mut ip2).is_err() {
+                singular_count += 1;
+                if singular_count > 5 {
+                    status = Status::SingularMatrix;
+                    break;
+                }
+            }
+        }
+
+        // Main step begins
+        nstep += 1;
+
+        // Max step guard
         if nstep > nmax {
             status = Status::NeedLargerNmax;
             break;
         }
+
+        // Step size guard
         if 0.1 * h.abs() <= x.abs() * uround {
             status = Status::StepSizeTooSmall;
             break;
         }
 
+        // Adjust last step to end exactly at xend
         if (x + 1.01 * h - xend) * posneg > 0.0 {
             h = xend - x;
             last = true;
         }
-        nstep += 1;
 
-        // Jacobian and mass at (x, y)
-        f.jac(x, &y, &mut jac);
-        f.mass(&mut mass);
-
-        // Build E1=(U1/h)·M − J and E2 as a real 2n×2n block
-        let fac1 = U1 / h;
-        let alphn = ALPH / h;
-        let betan = BETA / h;
-        for r in 0..n {
-            for c in 0..n {
-                e1[(r, c)] = mass[(r, c)] * fac1 - jac[(r, c)];
-                let e2r = mass[(r, c)] * alphn - jac[(r, c)];
-                let e2i = mass[(r, c)] * betan;
-                // Fill 2x2 block
-                e2[(r, c)] = e2r;
-                e2[(r, c + n)] = -e2i;
-                e2[(r + n, c)] = e2i;
-                e2[(r + n, c + n)] = e2r;
+        // Account for index 2 and 3 algebraic variables
+        if index2 {
+            for i in nind1..(nind1 + nind2) {
+                scal[i] /= hhfac;
+            }
+        }
+        if index3 {
+            for i in (nind1 + nind2)..(nind1 + nind2 + nind3) {
+                scal[i] /= hhfac * hhfac;
             }
         }
 
         // Initialize stage increments and transforms
-        for i in 0..n {
-            z1[i] = 0.0;
-            z2[i] = 0.0;
-            z3[i] = 0.0;
-            f1[i] = 0.0;
-            f2[i] = 0.0;
-            f3[i] = 0.0;
+        if first {
+            for i in 0..n {
+                z1[i] = 0.0;
+                z2[i] = 0.0;
+                z3[i] = 0.0;
+                f1[i] = 0.0;
+                f2[i] = 0.0;
+                f3[i] = 0.0;
+            }
+        } else {
+            let c3q = h / hold;
+            let c1q = C1 * c3q;
+            let c2q = C2 * c3q;
+
+            for i in 0..n {
+                let ak1 = cont[1 * n + i];
+                let ak2 = cont[2 * n + i];
+                let ak3 = cont[3 * n + i];
+
+                z1[i] = (ak1 + (ak2 + ak3 * (c1q - C1M1)) * (c1q - C2M1)) * c1q;
+                z2[i] = (ak1 + (ak2 + ak3 * (c2q - C1M1)) * (c2q - C2M1)) * c2q;
+                z3[i] = (ak1 + (ak2 + ak3 * (c3q - C1M1)) * (c3q - C2M1)) * c3q;
+
+                f1[i] = z1[i] * TINV00 + z2[i] * TINV01 + z3[i] * TINV02;
+                f2[i] = z1[i] * TINV10 + z2[i] * TINV11 + z3[i] * TINV12;
+                f3[i] = z1[i] * TINV20 + z2[i] * TINV21 + z3[i] * TINV22;
+            }
         }
 
-        // Stage times (constant during Newton for this step)
-        let t1 = x + C1 * h;
-        let t2 = x + C2 * h;
-        let t3 = x + h;
-
-        // Newton iteration
-        let mut newton_ok = false;
-        for _it in 0..max_newton {
-            // Stage values
-            for i in 0..n {
-                y1s[i] = y[i] + z1[i];
-                y2s[i] = y[i] + z2[i];
-                y3s[i] = y[i] + z3[i];
+        // Loop for simplified newton iteration
+        faccon = faccon.max(uround).powf(0.8);
+        theta = thet.abs();
+        let mut newt_iter = 0;
+        'newton: loop {
+            if newt_iter >= max_newton {
+                break;
             }
+            newt_iter += 1;
 
-            // Evaluate RHS at stages
-            f.ode(t1, &y1s, &mut k1);
-            f.ode(t2, &y2s, &mut k2);
-            f.ode(t3, &y3s, &mut k3);
+            // Compute the stages
+            let t1 = x + C1 * h;
+            let t2 = x + C2 * h;
+            let t3 = x + h;
+            for i in 0..n {
+                y1[i] = y[i] + z1[i];
+                y2[i] = y[i] + z2[i];
+                y3[i] = y[i] + z3[i];
+            }
+            f.ode(t1, &y1, &mut k1);
+            f.ode(t2, &y2, &mut k2);
+            f.ode(t3, &y3, &mut k3);
             nfev += 3;
 
-            // Form RHS via T^{-1}·k
+            // Solve the linear systems
             for i in 0..n {
-                rhs1[i] = TINV00 * k1[i] + TINV01 * k2[i] + TINV02 * k3[i];
-                rhs2[i] = TINV10 * k1[i] + TINV11 * k2[i] + TINV12 * k3[i];
-                rhs3[i] = TINV20 * k1[i] + TINV21 * k2[i] + TINV22 * k3[i];
+                z1[i] = TINV00 * k1[i] + TINV01 * k2[i] + TINV02 * k3[i];
+                z2[i] = TINV10 * k1[i] + TINV11 * k2[i] + TINV12 * k3[i];
+                z3[i] = TINV20 * k1[i] + TINV21 * k2[i] + TINV22 * k3[i];
             }
+
+            // Might be a duplicate.
+            let fac1 = U1 / h;
+            let alphn = ALPH / h;
+            let betan = BETA / h;
 
             // Add mass contributions from current F
             for i in 0..n {
@@ -246,154 +350,184 @@ where
                     sum2 -= mij * f2[j];
                     sum3 -= mij * f3[j];
                 }
-                s1[i] = sum1 * fac1;
-                s2[i] = sum2 * alphn - sum3 * betan;
-                s3[i] = sum3 * alphn + sum2 * betan;
-            }
-            for i in 0..n {
-                rhs1[i] += s1[i];
-                rhs2[i] += s2[i];
-                rhs3[i] += s3[i];
+                z1[i] = z1[i] + sum1 * fac1;
+                z2[i] = z2[i] + sum2 * alphn - sum3 * betan;
+                z3[i] = z3[i] + sum3 * alphn + sum2 * betan;
             }
 
-            // Solve E1·df1 = rhs1
-            df1.copy_from_slice(&rhs1);
-            e1.lin_solve_mut(&mut df1);
-            // Solve complex pair via 2n×2n real system
-            for i in 0..n {
-                rhs23[i] = rhs2[i];
-                rhs23[i + n] = rhs3[i];
-            }
-            df23.copy_from_slice(&rhs23);
-            e2.lin_solve_mut(&mut df23);
-            for i in 0..n {
-                df2[i] = df23[i];
-                df3[i] = df23[i + n];
-            }
+            // Solve E1 * Z1 = RHS1 (real system)
+            lin_solve(&e1, &mut z1, &ip1);
 
-            // Update F
-            for i in 0..n {
-                f1[i] += df1[i];
-                f2[i] += df2[i];
-                f3[i] += df3[i];
-            }
+            // Solve E2 * [Z2; Z3] = [RHS2; RHS3] (complex system)
+            lin_solve_complex(&e2r, &e2i, &mut z2, &mut z3, &ip2);
 
-            // Update Z from F via T
-            for i in 0..n {
-                z1[i] = T00 * f1[i] + T01 * f2[i] + T02 * f3[i];
-                z2[i] = T10 * f1[i] + T11 * f2[i] + T12 * f3[i];
-                z3[i] = T20 * f1[i] + f2[i];
-            }
+            nsol += 2;
+            ndec += 1;
 
             // Convergence based on Newton correction norm
             let mut dyno = 0.0;
             for i in 0..n {
                 let sc = atol[i] + rtol[i] * y[i].abs();
-                let v1 = df1[i] / sc;
-                let v2 = df2[i] / sc;
-                let v3 = df3[i] / sc;
+                let v1 = z1[i] / sc;
+                let v2 = z2[i] / sc;
+                let v3 = z3[i] / sc;
                 dyno += v1 * v1 + v2 * v2 + v3 * v3;
             }
             dyno = (dyno / (3.0 * n as Float)).sqrt();
-            if dyno <= newton_tol {
-                newton_ok = true;
-                break;
+
+            // Bad convergence or number of iterations is too large
+            if newt_iter > 1 && newt_iter < max_newton {
+                let thq = dyno / dynold;
+                if newt_iter == 2 {
+                    theta = thq;
+                } else {
+                    theta = (thq * thqold).sqrt();
+                }
+                thqold = thq;
+                if theta < 0.99 {
+                    faccon = theta / (1.0 - theta);
+                    let remaining_iters = (max_newton - 1 - newt_iter) as Float;
+                    let dyth = faccon * dyno * theta.powf(remaining_iters) / newton_tol;
+                    if dyth >= 1.0 {
+                        let qnewt = 1e-4f64.max(20.0f64.min(dyth as f64)) as Float;
+                        let exponent = -1.0 / (4.0 + remaining_iters);
+                        hhfac = 0.8 * qnewt.powf(exponent);
+                        h *= hhfac;
+                        status = Status::PoorConvergence; // Using appropriate status
+                        nrejct += 1;
+                        last = false;
+                        break 'newton;
+                    }
+                } else {
+                    // Unexpected step rejection - continue with reduced step
+                    let quot = facc2.max(facc1.min(1.5));
+                    let hnew = (h / quot).clamp(-hmax, hmax);
+                    if h.abs() <= hmin || hnew.abs() >= h.abs() {
+                        status = Status::StepSizeTooSmall;
+                        break 'newton;
+                    }
+                    h = hnew;
+                    nrejct += 1;
+                    last = false;
+                    break 'newton;
+                }
+            }
+            dynold = dyno.max(uround);
+
+            // Compute new F and Z
+            for i in 0..n {
+                f1[i] += z1[i];
+                f2[i] += z2[i];
+                f3[i] += z3[i];
+            }
+
+            for i in 0..n {
+                z1[i] = f1[i] * T00 + f2[i] * T01 + f3[i] * T02;
+                z2[i] = f1[i] * T10 + f2[i] * T11 + f3[i] * T12;
+                z3[i] = f1[i] * T20 + f2[i];
+            }
+
+            // Check Newton tolerance
+            if faccon * dyno > newton_tol {
+                continue 'newton;
+            } else {
+                break 'newton;
             }
         }
 
-        if !newton_ok {
-            // Reduce step and retry
-            let quot = facc2.max(facc1.min(1.5));
-            let hnew = (h / quot).clamp(-hmax, hmax);
-            if h.abs() <= hmin || hnew.abs() >= h.abs() {
-                status = Status::StepSizeTooSmall;
-                break;
-            }
-            h = hnew;
-            nrejct += 1;
-            last = false;
-            continue;
-        }
-
-        // Solution at end of step using z3
-        let mut y1 = y.clone();
-        for i in 0..n {
-            y1[i] = y[i] + z3[i];
-        }
-
-        // Error estimate (E1-based): hee=dd/h; tmp=Σ hee·Z; cont=f(xn,yn)+M·tmp; solve E1·cont=cont
+        // Error estimate (E1-based): hee=dd/h; f1v=Σ hee·Z; contv=f(xn,yn)+M·f1v; solve E1·cont=cont
         let hee1 = DD1 / h;
         let hee2 = DD2 / h;
         let hee3 = DD3 / h;
         for i in 0..n {
-            tmp[i] = hee1 * z1[i] + hee2 * z2[i] + hee3 * z3[i];
+            f1v[i] = hee1 * z1[i] + hee2 * z2[i] + hee3 * z3[i];
+            f2v[i] = 0.0;
+            contv[i] = 0.0;
         }
-        // f2 = M·tmp
         for i in 0..n {
             let mut sum = 0.0;
             for j in 0..n {
-                sum += mass[(i, j)] * tmp[j];
+                sum += mass[(i, j)] * f1v[j];
             }
             f2v[i] = sum;
+            contv[i] = sum + f0[i];
         }
-        // cont = f(x_n, y_n) + f2
+        lin_solve(&e1, &mut contv, &ip1);
+        nsol += 1;
+
+        // Error estimate
+        err = 0.0;
         for i in 0..n {
-            contv[i] = f0[i] + f2v[i];
+            let r = cont[i] / scal[i];
+            err += r * r;
         }
-        // Solve E1·cont = cont, E1 = (U1/h)·M − J
-        let fac1 = U1 / h;
-        for r in 0..n {
-            for c in 0..n {
-                e1[(r, c)] = mass[(r, c)] * fac1 - jac[(r, c)];
-            }
-        }
-        e1.lin_solve_mut(&mut contv);
-        let mut err = 0.0;
-        for i in 0..n {
-            let sk = atol[i] + rtol[i] * y1[i].abs();
-            let e = contv[i] / sk;
-            err += e * e;
-        }
-        let mut err = (err / n as Float).sqrt().max(1e-10);
+        err = (err / n as Float).sqrt().max(1e-10);
+
         // Optional refinement on first/rejected step
-        if err >= 1.0 && (naccpt == 0 || nrejct > 0) {
-            // cont = y + cont; f1 = f(x, cont)
-            let mut ytmp = y.clone();
+        if err >= 1.0 && (first || reject) {
             for i in 0..n {
-                ytmp[i] += contv[i];
+                contv[i] = y[i] + contv[i];
             }
-            f.ode(x, &ytmp, &mut f1tmp);
+            f.ode(x, &contv, &mut f1v);
             nfev += 1;
-            // cont = f1tmp + f2; solve again
+
+            // cont = f1v + f2; solve again
             for i in 0..n {
-                contv[i] = f1tmp[i] + f2v[i];
+                contv[i] = f1v[i] + f2v[i];
             }
-            e1.lin_solve_mut(&mut contv);
-            // recompute error
+            lin_solve(&e1, &mut contv, &ip1);
+            nfev += 1;
+
+            // Recompute error
             err = 0.0;
             for i in 0..n {
-                let sk = atol[i] + rtol[i] * y1[i].abs();
-                let e = contv[i] / sk;
-                err += e * e;
+                let r = cont[i] / scal[i];
+                err += r * r;
             }
             err = (err / n as Float).sqrt().max(1e-10);
         }
 
-        // Step-size control: hnew = h / clamp(err^(1/4)/safety, [facc2, facc1])
-        let mut quot = (err.max(1e-10)).powf(0.25) / safety_factor;
-        quot = facc2.max(quot.min(facc1));
-        let mut hnew = h / quot;
+        // Computation of hnew
+        fac = safety_factor.min(cfac / (newt_iter as Float + 2.0 * max_newton as Float));
+        quot = facr.max(facl.min(err.powf(0.25) / fac));
+        hnew = h / quot;
 
+        // Accept or reject step
         if err <= 1.0 {
-            // accept
+            // Step accepted
             naccpt += 1;
 
-            // Dense output coefficients (cubic at right endpoint)
+            // Predictive Gustafsson controller
+            if predictive {
+                if first {
+                    let mut facgus = h_acc / h
+                        * (err * err / err_acc).powf(0.25)
+                        / safety_factor;
+                    facgus = facr.max(facl.min(facgus));
+                    quot = quot.max(facgus);
+                    hnew = h / quot;
+                }
+                h_acc = h;
+                err_acc = err.max(1e-2);
+            }
+
+            // Update solution
+            for i in 0..n {
+                y[i] += z3[i];
+            }
+            xold = x;
+            x += h;
+
+            // New derivative at x+h
+            f.ode(x, &y, &mut f0);
+            nfev += 1;
+
+            // Dense output coefficients
             let c1m1 = C1M1;
             let c2m1 = C2M1;
             let c1mc2 = C1MC2;
             for i in 0..n {
-                cont[0 * n + i] = y1[i];
+                cont[0 * n + i] = y[i];
                 let cont1i = (z2[i] - z3[i]) / c2m1;
                 let ak = (z1[i] - z2[i]) / c1mc2;
                 let acont3 = (ak - (z1[i] / C1)) / C2;
@@ -404,13 +538,19 @@ where
                 cont[3 * n + i] = cont3i;
             }
 
-            // Update state
-            y.copy_from_slice(&y1);
-            let xold = x;
-            x += h;
-            // update derivative at new point for next step
-            f.ode(x, &y, &mut f0);
-            nfev += 1;
+            // Compute error scale
+            for i in 0..n {
+                scal[i] = atol[i] + rtol[i] * y[i].abs();
+            }
+
+            // Constrain new step size
+            hnew = hnew.abs().clamp(hmin, hmax) * posneg;
+
+            // Prevent oscillations due to previous step rejections
+            if reject {
+                hnew = posneg * hnew.abs().min(h.abs());
+                reject = false;
+            }
 
             // Callback
             if let Some(ref mut s) = solout {
@@ -438,29 +578,42 @@ where
                 }
             }
 
-            if last {
-                h = hnew;
-                status = Status::Success;
-                break;
+            // Sophisticated step size control
+            qt = hnew / h;
+            hhfac = h;
+            if theta < thet && qt > quot1 && qt < quot2 {
+                call_decomp = false;
+                call_jac = false;
+                continue 'main;
+            } else {
+                call_decomp = true;
+                call_jac = true;
             }
 
-            // step size limits
-            if hnew.abs() > hmax {
-                hnew = hmax.copysign(posneg);
-            }
+            hold = h;
             h = hnew;
-        } else {
-            // reject
-            let mut quot_rej = (err.max(1e-10)).powf(0.25) / safety_factor;
-            quot_rej = facc2.max(quot_rej.min(facc1));
-            let htry = (h / quot_rej).clamp(-hmax, hmax);
-            if h.abs() <= hmin || htry.abs() >= h.abs() {
-                status = Status::StepSizeTooSmall;
-                break;
+
+            if first {
+                first = false;
             }
-            h = htry;
-            nrejct += 1;
-            last = false;
+            
+            if last {
+                status = Status::Success;
+                break 'main;
+            }
+        } else {
+            // Step rejected
+            reject = true;
+
+            // If first step, reduce more aggressively
+            if first {
+                hnew *= 0.1;
+                hhfac = 0.1;
+            } else {
+                hhfac = hnew / h;
+            }
+
+            h = hnew.abs().clamp(hmin, hmax) * posneg;
         }
     }
 
@@ -470,6 +623,9 @@ where
         h,
         status,
         nfev,
+        njac,
+        nsol,
+        ndec,
         nstep,
         naccpt,
         nrejct,
