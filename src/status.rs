@@ -7,4 +7,6 @@ pub enum Status {
     NeedLargerNmax,
     StepSizeTooSmall,
     ProbablyStiff,
+    SingularMatrix,
+    PoorConvergence,
 }

@@ -15,6 +15,12 @@ pub enum Error {
     DenseOutputDisabled,
     EvaluationOutOfRange(Float),
     NewtonMaxIterMustBePositive(usize),
+    PivotSizeMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    SingularMatrix,
+    NonSquareMatrix { rows: usize, cols: usize },
 }
 
 impl std::fmt::Display for Error {
@@ -39,6 +45,15 @@ impl std::fmt::Display for Error {
             }
             Error::NewtonMaxIterMustBePositive(v) => {
                 write!(f, "newton_maxiter must be positive (got {})", v)
+            }
+            Error::PivotSizeMismatch { expected, actual } => write!(
+                f,
+                "pivot slice size mismatch: expected {}, got {}",
+                expected, actual
+            ),
+            Error::SingularMatrix => write!(f, "matrix is singular"),
+            Error::NonSquareMatrix { rows, cols } => {
+                write!(f, "matrix must be square (got {} rows and {} columns)", rows, cols)
             }
         }
     }
