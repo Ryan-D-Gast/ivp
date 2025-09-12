@@ -72,9 +72,6 @@ fn main() {
     match solve_ivp(&cr3bp, t0, tf, &y0, options) {
         Ok(sol) => {
             println!("Final status: {:?}", sol.status);
-            if let (Some(&t_last), Some(y_last)) = (sol.t.last(), sol.y.last()) {
-                println!("Final state: t = {:.5}, y = {:.5?}", t_last, y_last);
-            }
             println!("Number of function evaluations: {}", sol.nfev);
             println!("Number of steps taken: {}", sol.nstep);
             println!("Number of accepted steps: {}", sol.naccpt);
