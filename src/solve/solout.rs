@@ -165,14 +165,12 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
         }
         // If t_eval is provided, interpolate and store values within (xold, x]
         if let Some(te) = self.t_eval.as_ref() {
-            // Handle the initial call (xold == x) -> only include exact match
+            // Handle the initial call (xold == x) -> push provided y directly
             let mut i = self.next_idx;
             if (xold - x).abs() <= self.tol {
                 while i < te.len() && (te[i] - x).abs() <= self.tol {
-                    let mut yi = vec![0.0; y.len()];
-                    interpolator.interpolate(te[i], &mut yi);
                     self.t.push(te[i]);
-                    self.y.push(yi);
+                    self.y.push(y.to_vec());
                     i += 1;
                 }
             } else {
