@@ -23,13 +23,13 @@ impl ODE for VanDerPol {
 }
 
 fn main() {
-    let van_der_pol = VanDerPol { eps: 1e-3 };
+    let van_der_pol = VanDerPol { eps: 1e-6 };
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [2.0, 0.0];
     let t_eval = (0..=20).map(|i| i as f64 * 0.1).collect();
     let options = Options::builder()
-        .method(Method::DOP853)
+        .method(Method::Radau5)
         .rtol(1e-9)
         .atol(1e-9)
         .t_eval(t_eval)
@@ -42,6 +42,9 @@ fn main() {
                 println!("Final State: x = {:.5}, y = {:?}", t_last, y_last);
             }
             println!("Number of function evaluations: {}", sol.nfev);
+            println!("Number of Jacobian evaluations: {}", sol.njev);
+            println!("Number of linear solves: {}", sol.nsol);
+            println!("Number of LU decompositions: {}", sol.ndec);
             println!("Number of steps taken: {}", sol.nstep);
             println!("Number of accepted steps: {}", sol.naccpt);
             println!("Number of rejected steps: {}", sol.nrejct);
