@@ -157,7 +157,7 @@ where
         y: y.to_vec(),
         h,
         nfev,
-        njac: 0,
+        njev: 0,
         nsol: 0,
         ndec: 0,
         nstep,

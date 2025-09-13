@@ -143,39 +143,39 @@ where
     let mut ip2 = vec![0; n];
 
     let mut nstep: usize = 0;
-    let mut naccpt: usize = 0;
-    let mut nrejct: usize = 0;
+    let mut njev: usize = 0;
     let mut nsol: usize = 0;
     let mut ndec: usize = 0;
-    let mut njac: usize = 0;
+    let mut naccpt: usize = 0;
+    let mut nrejct: usize = 0;
     let mut status = Status::Success;
-    let mut last = false;
     let mut singular_count = 0;
     let mut faccon: Float = 1.0;
-    let mut theta: Float;
     let mut dynold: Float = 0.0;
     let mut thqold: Float = 0.0;
+    let mut hold = h;
+    let mut theta: Float;
     let mut err: Float;
     let mut hnew: Float;
+    let mut last = false;
     let mut reject = false;
     let mut first = true;
     let mut call_jac = true;
     let mut call_decomp = true;
-    let mut qt;
-    let mut hold = h;
     let mut fac: Float;
     let mut xold;
+    let mut qt;
     let mut quot: Float;
     let mut h_acc: Float = 0.0;
     let mut hhfac: Float = h;
     let mut err_acc: Float = 0.0;
     let mut xph;
     let mut dyno: Float;
+    let predictive = true;
     let quot1: Float = 1.0;
     let quot2: Float = 1.2;
     let thet: Float = 0.001;
     let cfac: Float = 13.5;
-    let predictive = true;
 
     // Temp index
     let index2 = false;
@@ -201,7 +201,7 @@ where
         if call_jac {
             // Jacobian and mass at (x, y)
             f.jac(x, &y, &mut jac);
-            njac += 1;
+            njev += 1;
         }
 
         if call_decomp {
@@ -555,7 +555,7 @@ where
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
                         status = Status::Interrupted;
-                        break;
+                        break 'main;
                     }
                     ControlFlag::ModifiedSolution(nx, ny) => {
                         x = nx;
@@ -623,7 +623,7 @@ where
         h,
         status,
         nfev,
-        njac,
+        njev,
         nsol,
         ndec,
         nstep,

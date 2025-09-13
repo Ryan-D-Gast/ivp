@@ -373,7 +373,7 @@ where
         h,
         status,
         nfev,
-        njac: 0,
+        njev: 0,
         nsol: 0,
         ndec: 0,
         nstep,
