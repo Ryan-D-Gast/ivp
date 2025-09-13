@@ -249,7 +249,7 @@ where
             ndec += 2;
         }
 
-        // Main step begins
+        // --- Integration step ---
         nstep += 1;
 
         // Max step guard
@@ -307,7 +307,7 @@ where
             }
         }
 
-        // Loop for simplified newton iteration
+        // --- Loop for simplified newton iteration ---
         faccon = faccon.max(uround).powf(0.8);
         theta = thet.abs();
         let mut newt_iter = 0;
@@ -324,9 +324,8 @@ where
                 last = false;
                 continue 'main;
             }
-            newt_iter += 1;
 
-            // Compute the stages
+            // --- Compute the stages ---
             for i in 0..n {
                 cont[i] = y[i] + z1[i];
             }
@@ -341,7 +340,7 @@ where
             f.ode(xph, &cont, &mut z3);
             nfev += 3;
 
-            // Solve the linear systems
+            // --- Solve the linear systems ---
             for i in 0..n {
                 z1[i] = TI00 * z1[i] + TI01 * z2[i] + TI02 * z3[i];
                 z2[i] = TI10 * z1[i] + TI11 * z2[i] + TI12 * z3[i];
@@ -376,6 +375,7 @@ where
             lin_solve_complex(&e2r, &e2i, &mut z2, &mut z3, &ip2);
 
             nsol += 2;
+            newt_iter += 1;
 
             // Compute dynamic norm
             dyno = 0.0;
@@ -448,7 +448,7 @@ where
             }
         }
 
-        // Error estimate (E1-based): hee=dd/h; f1=Σ hee·Z; contv=f(xn,yn)+M·f1; solve E1·cont=cont
+        // --- Error estimation ---
         let hee1 = DD1 / h;
         let hee2 = DD2 / h;
         let hee3 = DD3 / h;
@@ -467,7 +467,6 @@ where
         lin_solve(&e1, &mut cont, &ip1);
         nsol += 1;
 
-        // Error estimate
         err = 0.0;
         for i in 0..n {
             let r = cont[i] / scal[i];
@@ -499,14 +498,13 @@ where
             err = (err / n as Float).sqrt().max(1e-10);
         }
 
-        // Computation of hnew
+        // --- Computation of hnew ---
         fac = safety_factor.min(cfac / (newt_iter as Float + 2.0 * max_newton as Float));
         quot = facc2.max(facc1.min(err.powf(0.25) / fac));
         hnew = h / quot;
 
-        // Accept or reject step
         if err <= 1.0 {
-            // Step accepted
+            // --- Step accepted ---
             naccpt += 1;
             first = false;
 
@@ -603,7 +601,7 @@ where
             }
             hhfac = h;
         } else {
-            // Step rejected
+            // --- Step rejected ---
             nrejct += 1;
             reject = true;
             last = false;
