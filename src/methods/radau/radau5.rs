@@ -78,24 +78,30 @@ where
         errors.push(Error::NewtonMaxIterMustBePositive(0));
     }
 
+    // Adjust tolerances
+    let expm = 2.0 / 3.0;
+    let n = y0.len();
+    for i in 0..n {
+        let quot = atol[i] / rtol[i];
+        rtol[i] = 0.1 * rtol[i].powf(expm);
+        atol[i] = rtol[i] * quot;
+    }
+
     // Newton tolerance
-    let newton_tol = settings.newton_tol.unwrap_or(0.003_162_277_660_168_379_4);
+    let newton_tol = match settings.newton_tol {
+        Some(v) => v,
+        None => {
+            let tolst = rtol[0];
+            (10.0 * uround / tolst).max(0.03f64.min(tolst.sqrt()))
+        }
+    };
 
     if !errors.is_empty() {
         return Err(errors);
     }
 
     // --- Initialization ---
-    let n = y0.len();
     let mut y = y0.to_vec();
-
-    // Adjust tolerances
-    let expm = 2.0 / 3.0;
-    for i in 0..n {
-        let quot = atol[i] / rtol[i];
-        rtol[i] = 0.1 * rtol[i].powf(expm);
-        atol[i] = rtol[i] * quot;
-    }
 
     let posneg = (xend - x).signum();
     let mut f0 = vec![0.0; n];
