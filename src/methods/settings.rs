@@ -114,5 +114,3 @@ impl std::ops::IndexMut<usize> for Tolerance {
         }
     }
 }
-
-// No separate Storage enum; use `matrix::MatrixStorage` throughout.
