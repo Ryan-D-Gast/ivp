@@ -1,4 +1,4 @@
-//! Amplifier DAE (index-1) solved with Radau5
+//! # Example: Amplifier DAE (index-1)
 //!
 //! Based on Hairer & Wanner, Solving ODEs II. Demonstrates the mass-matrix
 //! formulation `M y' = f(t,y)` with a singular M.
