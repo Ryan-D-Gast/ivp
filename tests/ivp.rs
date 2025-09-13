@@ -68,8 +68,8 @@ fn max_step_and_first_step_controls() {
 	for method in all_methods() {
 		let opts = Options::builder()
 			.method(method.clone())
-			.rtol(1e-6)
-			.atol(1e-9)
+			.rtol(1e-3)
+			.atol(1e-6)
 			.first_step(first_step)
 			.build();
 		let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");

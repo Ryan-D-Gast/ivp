@@ -155,8 +155,10 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
         // Update yold for next step
         self.yold = y.to_vec();
 
-        // Optionally collect dense coefficients for this accepted step
-        if self.collect_dense {
+        // Optionally collect dense coefficients for this accepted step.
+        // Skip the very first callback where x == xold (no actual step),
+        // as some methods haven't initialized dense coefficients yet.
+        if self.collect_dense && x != xold {
             let (cont, cxold, h) = interpolator.get_cont();
             // Skip degenerate segments
             if h != 0.0 {
