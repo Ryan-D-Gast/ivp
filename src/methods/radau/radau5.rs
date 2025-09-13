@@ -62,8 +62,8 @@ where
     // Step-size scaling bounds: clamp factor quot in [facc2, facc1]
     let scale_min = settings.scale_min.unwrap_or(0.2);
     let scale_max = settings.scale_max.unwrap_or(8.0);
-    let facc1 = 1.0 / scale_min;
-    let facc2 = 1.0 / scale_max;
+    let facl = 1.0 / scale_min;
+    let facr = 1.0 / scale_max;
     if scale_min <= 0.0 || !(scale_min < scale_max) {
         errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
     }
@@ -353,7 +353,6 @@ where
                 z3[i] = TI20 * a1 + TI21 * a2 + TI22 * a3;
             }
 
-            // Might be a duplicate.
             let fac1 = U1 / h;
             let alphn = ALPH / h;
             let betan = BETA / h;
@@ -412,7 +411,7 @@ where
                         let exponent = -1.0 / (4.0 + remaining_iters);
                         hhfac = 0.8 * qnewt.powf(exponent);
                         h *= hhfac;
-                        status = Status::PoorConvergence; // Using appropriate status
+                        status = Status::PoorConvergence;
                         nrejct += 1;
                         last = false;
                         break 'newton;
@@ -461,7 +460,6 @@ where
         let hee3 = DD3 / h;
         for i in 0..n {
             f1[i] = hee1 * z1[i] + hee2 * z2[i] + hee3 * z3[i];
-            f2[i] = 0.0;
         }
         for i in 0..n {
             let mut sum = 0.0;
@@ -474,6 +472,7 @@ where
         lin_solve(&e1, &mut cont, &ip1);
         nsol += 1;
 
+        // Error estimate
         err = 0.0;
         for i in 0..n {
             let r = cont[i] / scal[i];
@@ -507,7 +506,7 @@ where
 
         // --- Computation of hnew ---
         fac = safety_factor.min(cfac / (newt_iter as Float + 2.0 * max_newton as Float));
-        quot = facc2.max(facc1.min(err.powf(0.25) / fac));
+        quot = facr.max(facl.min(err.powf(0.25) / fac));
         hnew = h / quot;
 
         if err <= 1.0 {
@@ -519,7 +518,7 @@ where
             if predictive {
                 if naccpt > 1 {
                     let mut facgus = (h_acc / h) * (err * err / err_acc).powf(0.25) / safety_factor;
-                    facgus = facc2.max(facc1.min(facgus));
+                    facgus = facr.max(facl.min(facgus));
                     quot = quot.max(facgus);
                     hnew = h / quot;
                 }
