@@ -61,7 +61,7 @@ where
     };
     // Step-size scaling bounds: clamp factor quot in [facc2, facc1]
     let scale_min = settings.scale_min.unwrap_or(0.2);
-    let scale_max = settings.scale_max.unwrap_or(5.0);
+    let scale_max = settings.scale_max.unwrap_or(8.0);
     let facc1 = 1.0 / scale_min;
     let facc2 = 1.0 / scale_max;
     if scale_min <= 0.0 || !(scale_min < scale_max) {
@@ -609,7 +609,9 @@ where
             hhfac = h;
         } else {
             // --- Step rejected ---
-            nrejct += 1;
+            if naccpt > 0 {
+                nrejct += 1;
+            }
             reject = true;
             last = false;
 
