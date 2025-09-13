@@ -1,5 +1,6 @@
 //! Settings for numerical integrators
 
+use std::ops::{Index, IndexMut};
 use bon::Builder;
 
 use crate::{Float, matrix::MatrixStorage};
@@ -95,7 +96,7 @@ impl From<Vec<Float>> for Tolerance {
     }
 }
 
-impl std::ops::Index<usize> for Tolerance {
+impl Index<usize> for Tolerance {
     type Output = Float;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -106,7 +107,7 @@ impl std::ops::Index<usize> for Tolerance {
     }
 }
 
-impl std::ops::IndexMut<usize> for Tolerance {
+impl IndexMut<usize> for Tolerance {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         match self {
             Tolerance::Scalar(v) => v,
