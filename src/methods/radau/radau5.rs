@@ -531,6 +531,7 @@ where
             hold = h;
             x = xph;
 
+            // Dense output coefficients and update y
             for i in 0..n {
                 y[i] += z3[i];
                 let ak = (z1[i] - z2[i]) / C1MC2;
@@ -571,7 +572,6 @@ where
                     }
                 }
             }
-            call_jac = false;
 
             if last {
                 h = hnew;
@@ -606,9 +606,16 @@ where
                 h = hnew;
             }
             hhfac = h;
+            call_decomp = true;
+            if theta < thet {
+                call_jac = false;
+            } else {
+                call_jac = true;
+            }
         } else {
             // --- Step rejected ---
             reject = true;
+            call_decomp = true;
             last = false;
 
             // If first step, reduce more aggressively
