@@ -297,9 +297,9 @@ where
                 let ak2 = cont[2 * n + i];
                 let ak3 = cont[3 * n + i];
 
-                z1[i] = (ak1 + (ak2 + ak3 * (c1q - C1M1)) * (c1q - C2M1)) * c1q;
-                z2[i] = (ak1 + (ak2 + ak3 * (c2q - C1M1)) * (c2q - C2M1)) * c2q;
-                z3[i] = (ak1 + (ak2 + ak3 * (c3q - C1M1)) * (c3q - C2M1)) * c3q;
+                z1[i] = c1q*(ak1+(c1q-C2M1)*(ak2+(c1q-C1M1)*ak3));
+                z2[i] = c2q*(ak1+(c2q-C2M1)*(ak2+(c2q-C1M1)*ak3));
+                z3[i] = c3q*(ak1+(c3q-C2M1)*(ak2+(c3q-C1M1)*ak3));
 
                 f1[i] = z1[i] * TI00 + z2[i] * TI01 + z3[i] * TI02;
                 f2[i] = z1[i] * TI10 + z2[i] * TI11 + z3[i] * TI12;
@@ -662,22 +662,20 @@ impl<'a> Interpolate for DenseRadau<'a> {
     }
 }
 
-// Nodes (abscissae) in [0,1]
+// --- Radau IIA(5) coefficients ---
 const C1: Float = 0.155_051_025_721_682_2;
 const C2: Float = 0.644_948_974_278_317_8;
-const C1M1: Float = C1 - 1.0;
-const C2M1: Float = C2 - 1.0;
-const C1MC2: Float = C1 - C2;
-
-// Error estimation and splitting constants
+const C1M1: Float = -0.844_948_974_278_317_8;
+const C2M1: Float = -0.355_051_025_721_682_2;
+const C1MC2: Float = -0.489_897_948_556_635_6;
 const DD1: Float = -10.048_809_399_827_416;
 const DD2: Float = 1.382_142_733_160_749;
 const DD3: Float = -0.333_333_333_333_333_3;
-const U1: Float = 3.637_834_252_744_496; // real system coefficient
+const U1: Float = 3.637_834_252_744_496;
 const ALPH: Float = 2.681_082_873_627_752_3;
 const BETA: Float = 3.050_430_199_247_410_5;
 
-// Transformation matrix T (3x3) constants
+// Transformation matrix 
 const T00: Float = 9.123_239_487_089_295E-2;
 const T01: Float = -1.412_552_950_209_542E-1;
 const T02: Float = -3.002_919_410_514_742_4E-2;
@@ -686,7 +684,7 @@ const T11: Float = 2.041_293_522_937_999_4E-1;
 const T12: Float = 3.829_421_127_572_619E-1;
 const T20: Float = 9.660_481_826_150_93E-1;
 
-// Inverse transformation matrix T^{-1} constants
+// Inverse transformation matrix
 const TI00: Float = 4.325_579_890_063_155;
 const TI01: Float = 3.391_992_518_158_098_4E-1;
 const TI02: Float = 5.417_705_399_358_749E-1;
