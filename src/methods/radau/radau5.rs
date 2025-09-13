@@ -67,8 +67,6 @@ where
     if scale_min <= 0.0 || !(scale_min < scale_max) {
         errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
     }
-    let n = y0.len();
-    let mut y = y0.to_vec();
 
     // hmax and hmin
     let hmax = settings.hmax.unwrap_or_else(|| (xend - x).abs());
@@ -88,6 +86,8 @@ where
     }
 
     // --- Initialization ---
+    let n = y0.len();
+    let mut y = y0.to_vec();
 
     // Adjust tolerances
     let expm = 2.0 / 3.0;
@@ -194,10 +194,6 @@ where
 
     // --- Main loop ---
     'main: loop {
-        if posneg * (xend - x) <= 0.0 {
-            break;
-        }
-
         if call_jac {
             // Jacobian and mass at (x, y)
             f.jac(x, &y, &mut jac);
@@ -322,6 +318,7 @@ where
                 hhfac = 0.5;
                 reject = true;
                 last = false;
+                call_decomp = true;
                 continue 'main;
             }
 
@@ -422,6 +419,7 @@ where
                     hhfac = 0.5;
                     reject = true;
                     last = false;
+                    call_decomp = true;
                     continue 'main;
                 }
             }

@@ -32,7 +32,7 @@ pub trait ODE {
     /// events terminate, or the direction of zero crossing, configurable via `EventConfig`.
     #[allow(unused_variables)]
     fn event(&self, x: Float, y: &[Float], event: &mut EventConfig) -> Float {
-        0.0
+        1.0
     }
 
     /// Jacobian matrix J = df/dy
