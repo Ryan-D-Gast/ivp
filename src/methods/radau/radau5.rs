@@ -609,9 +609,6 @@ where
             hhfac = h;
         } else {
             // --- Step rejected ---
-            if naccpt > 0 {
-                nrejct += 1;
-            }
             reject = true;
             last = false;
 
@@ -620,6 +617,7 @@ where
                 h *= 0.1;
                 hhfac = 0.1;
             } else {
+                nrejct += 1;
                 hhfac = hnew / h;
                 h = hnew;
             }
