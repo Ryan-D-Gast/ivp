@@ -117,6 +117,8 @@ where
         .maybe_h0(options.first_step)
         .maybe_hmax(options.max_step)
         .maybe_hmin(options.min_step)
+        .jac_storage(options.jac_storage)
+        .mass_storage(options.mass_storage)
         .build();
 
     // Prepare the default SolOut (wrapping user callback if provided)

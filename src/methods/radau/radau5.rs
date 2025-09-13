@@ -96,12 +96,36 @@ where
         }
     };
 
+    // Differential Algebraic equation index settings
+    let index2 = settings.index2.unwrap_or(false);
+    let index3 = settings.index3.unwrap_or(false);
+    let nind1 = settings.nind1.unwrap_or(0);
+    let nind2 = settings.nind2.unwrap_or(0);
+    let nind3 = settings.nind3.unwrap_or(0);
+
+    // Validate partition if any index flag is set
+    if index2 || index3 || nind1 + nind2 + nind3 > 0 {
+        if nind1 + nind2 + nind3 != n {
+            errors.push(Error::InvalidDAEPartition { n, nind1, nind2, nind3 });
+        }
+        if (index2 && nind2 == 0) || (index3 && nind3 == 0) {
+            errors.push(Error::InvalidDAEPartition { n, nind1, nind2, nind3 });
+        }
+        if !index2 && nind2 > 0 || !index3 && nind3 > 0 {
+            errors.push(Error::InconsistentIndexFlags { index2, index3 });
+        }
+    }
+
     if !errors.is_empty() {
         return Err(errors);
     }
 
     // --- Initialization ---
     let mut y = y0.to_vec();
+
+    // Jacobian and mass matrices with user-preferred storage
+    let mut jac = Matrix::from_storage(n, n, settings.jac_storage);
+    let mut mass = Matrix::from_storage(n, n, settings.mass_storage);
 
     let posneg = (xend - x).signum();
     let mut f0 = vec![0.0; n];
@@ -140,8 +164,6 @@ where
     let mut f2 = vec![0.0; n];
     let mut f3 = vec![0.0; n];
     let mut scal = vec![0.0; n];
-    let mut jac = Matrix::zeros(n, n);
-    let mut mass = Matrix::identity(n);
     let mut e1 = Matrix::zeros(n, n);
     let mut e2r = Matrix::zeros(n, n);
     let mut e2i = Matrix::zeros(n, n);
@@ -182,13 +204,6 @@ where
     let quot2: Float = 1.2;
     let thet: Float = 0.001;
     let cfac: Float = safety_factor * (1.0 + 2.0 * (max_newton as Float));
-
-    // Temp index
-    let index2 = false;
-    let index3 = false;
-    let nind1 = 0;
-    let nind2 = 0;
-    let nind3 = 0;
 
     // Initial mass matrix
     f.mass(&mut mass);
@@ -582,6 +597,9 @@ where
             f.ode(x, &y, &mut f0);
             nfev += 1;
 
+            // Step accepted so we can reset singular counter
+            singular_count = 0;
+
             // Constrain new step size
             hnew = hnew.abs().clamp(hmin, hmax) * posneg;
 
@@ -660,7 +678,7 @@ pub fn contr5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float
 
 /// Dense output: cubic at the right endpoint using `cont` coefficients.
 struct DenseRadau<'a> {
-    cont: &'a [Float], // [c0(n)=y_{n+1}, c1(n), c2(n), c3(n)]
+    cont: &'a [Float],
     xold: Float,
     h: Float,
 }

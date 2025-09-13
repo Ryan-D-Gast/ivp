@@ -2,7 +2,8 @@
 
 use bon::Builder;
 
-use crate::Float;
+use crate::{Float, matrix::MatrixStorage};
+
 
 #[derive(Builder)]
 /// Settings for the numerical integrators
@@ -34,6 +35,30 @@ pub struct Settings {
     pub newton_maxiter: Option<usize>,
     /// Newton iteration tolerance.
     pub newton_tol: Option<Float>,
+
+    /// Treat system as semi-explicit DAE with index-2 variables present.
+    /// If `true`, variables in the ranges defined by `nind*` will be scaled
+    /// according to Radau IIA index-handling rules.
+    pub index2: Option<bool>,
+    /// Treat system as semi-explicit DAE with index-3 variables present.
+    /// If `true`, variables in the ranges defined by `nind*` will be scaled
+    /// according to Radau IIA index-handling rules.
+    pub index3: Option<bool>,
+    /// Number of differential (index-1) variables at the start of the state vector.
+    pub nind1: Option<usize>,
+    /// Number of algebraic index-2 variables following the first block.
+    pub nind2: Option<usize>,
+    /// Number of algebraic index-3 variables following the first two blocks.
+    pub nind3: Option<usize>,
+
+    /// Preferred storage for the user-supplied Jacobian `jac(x,y,J)`.
+    /// Default: `MatrixStorage::Full` (dense writable)
+    #[builder(default = MatrixStorage::Full)]
+    pub jac_storage: MatrixStorage,
+    /// Preferred storage for the user-supplied mass matrix `mass(M)`.
+    /// Default: `MatrixStorage::Identity` (implicit identity)
+    #[builder(default = MatrixStorage::Identity)]
+    pub mass_storage: MatrixStorage,
 }
 
 /// Tolerance enum to allow scalar or vector tolerances
@@ -89,3 +114,5 @@ impl std::ops::IndexMut<usize> for Tolerance {
         }
     }
 }
+
+// No separate Storage enum; use `matrix::MatrixStorage` throughout.

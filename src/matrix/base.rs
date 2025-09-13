@@ -11,8 +11,8 @@ pub enum MatrixStorage {
     Full,
     /// Banded matrix with lower (ml) and upper (mu) bandwidth.
     /// Compact diagonal storage with shape (ml+mu+1, ncols), row-major per diagonal.
-    /// Off-band reads return `zero`.
-    Banded { ml: usize, mu: usize, zero: Float },
+    /// Off-band reads return a shared constant zero.
+    Banded { ml: usize, mu: usize },
 }
 
 /// Generic matrix for linear algebra (typically square in current use).
@@ -57,6 +57,16 @@ impl Matrix {
         }
     }
 
+    /// Creates a matrix from a storage type.
+    pub fn from_storage(n: usize, m: usize, storage: MatrixStorage) -> Self {
+        let data = match storage {
+            MatrixStorage::Identity => vec![1.0, 0.0],
+            MatrixStorage::Full => vec![0.0; n * m],
+            MatrixStorage::Banded { ml, mu } => vec![0.0; (ml + mu + 1) * n],
+        };
+        Matrix { n, m, data, storage }
+    }
+
     /// Full matrix from a row-major vector of length n*m.
     pub fn full(n: usize, m: usize) -> Self {
         let data = vec![0.0; n * m];
@@ -97,7 +107,7 @@ impl Matrix {
             n,
             m: n,
             data,
-            storage: MatrixStorage::Banded { ml, mu, zero: 0.0 },
+            storage: MatrixStorage::Banded { ml, mu },
         }
     }
 
@@ -105,16 +115,7 @@ impl Matrix {
     pub fn diagonal(diag: Vec<Float>) -> Self {
         let n = diag.len();
         // With ml=mu=0, storage is (1,n), so `diag` maps directly to row 0.
-        Matrix {
-            n,
-            m: n,
-            data: diag,
-            storage: MatrixStorage::Banded {
-                ml: 0,
-                mu: 0,
-                zero: 0.0,
-            },
-        }
+        Matrix { n, m: n, data: diag, storage: MatrixStorage::Banded { ml: 0, mu: 0 } }
     }
 
     /// Zero lower-triangular matrix (ml = n-1, mu = 0).
@@ -134,35 +135,20 @@ impl Matrix {
 
     /// Checks if the matrix is an identity matrix.
     pub fn is_identity(&self) -> bool {
-        if let MatrixStorage::Identity = self.storage {
-            return true;
-        } else if let MatrixStorage::Full = self.storage {
-            for i in 0..self.n {
-                for j in 0..self.m {
-                    if i == j && self.data[i * self.m + j] != 1.0 {
-                        return false;
-                    } else if i != j && self.data[i * self.m + j] != 0.0 {
-                        return false;
+        match self.storage {
+            MatrixStorage::Identity => true,
+            _ => {
+                for i in 0..self.n {
+                    for j in 0..self.m {
+                        let val = self[(i, j)];
+                        if i == j {
+                            if val != 1.0 { return false; }
+                        } else if val != 0.0 { return false; }
                     }
                 }
-            }
-        } else if let MatrixStorage::Banded {
-            ml: _ml,
-            mu: _mu,
-            zero,
-        } = self.storage
-        {
-            for i in 0..self.n {
-                for j in 0..self.m {
-                    if i == j && self.data[i * self.m + j] != 1.0 {
-                        return false;
-                    } else if i != j && self.data[i * self.m + j] != zero {
-                        return false;
-                    }
-                }
+                true
             }
         }
-        true
     }
 
     /// Swap two rows in-place for Full storage. For Banded storage, performs a logical swap

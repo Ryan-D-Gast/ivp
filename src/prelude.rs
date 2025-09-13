@@ -34,7 +34,7 @@
 
 pub use crate::{
     interpolate::Interpolate,
-    matrix::Matrix,
+    matrix::{Matrix, MatrixStorage},
     ode::ODE,
     solout::ControlFlag,
     solve::event::{Direction, EventConfig},

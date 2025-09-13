@@ -23,10 +23,10 @@ impl Index<(usize, usize)> for Matrix {
                 }
             }
             MatrixStorage::Full => &self.data[i * self.m + j],
-            MatrixStorage::Banded { ml, mu, zero } => {
+            MatrixStorage::Banded { ml, mu } => {
                 let k = i as isize - j as isize;
                 if k < -(*mu as isize) || k > *ml as isize {
-                    zero
+                    &0.0
                 } else {
                     let row = (k + *mu as isize) as usize;
                     &self.data[row * self.m + j]
@@ -47,7 +47,7 @@ impl IndexMut<(usize, usize)> for Matrix {
                     "cannot mutate Identity matrix via indexing; convert explicitly to Full first"
                 )
             }
-            MatrixStorage::Banded { ml, mu, .. } => {
+            MatrixStorage::Banded { ml, mu } => {
                 let k = i as isize - j as isize;
                 if k >= -(*mu as isize) && k <= *ml as isize {
                     let row = (k + *mu as isize) as usize;

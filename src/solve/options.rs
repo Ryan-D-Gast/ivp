@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, methods::settings::Tolerance};
+use crate::{Float, methods::settings::Tolerance, matrix::MatrixStorage};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
@@ -59,4 +59,10 @@ pub struct Options {
     /// evaluate the solution at arbitrary times inside the integration range.
     #[builder(default = false)]
     pub dense_output: bool,
+    /// Preferred storage for Jacobian
+    #[builder(default = MatrixStorage::Full)]
+    pub jac_storage: MatrixStorage,
+    /// Preferred storage for Mass matrix
+    #[builder(default = MatrixStorage::Identity)]
+    pub mass_storage: MatrixStorage,
 }

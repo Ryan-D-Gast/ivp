@@ -84,7 +84,6 @@ impl Sub for Matrix {
                     storage: MatrixStorage::Banded {
                         ml: ml_out,
                         mu: mu_out,
-                        zero: 0.0,
                     },
                 };
                 // Add first banded

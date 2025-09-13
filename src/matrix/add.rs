@@ -96,7 +96,6 @@ impl Add for Matrix {
                     storage: MatrixStorage::Banded {
                         ml: ml_out,
                         mu: mu_out,
-                        zero: 0.0,
                     },
                 };
                 // First input accumulate

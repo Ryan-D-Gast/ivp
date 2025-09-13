@@ -26,7 +26,6 @@ impl Matrix {
                     storage: MatrixStorage::Banded {
                         ml: *ml,
                         mu: *mu,
-                        zero: 0.0,
                     },
                 }
             }
@@ -44,7 +43,6 @@ impl Matrix {
                 self.storage = MatrixStorage::Banded {
                     ml: 0,
                     mu: 0,
-                    zero: 0.0,
                 };
             }
             MatrixStorage::Full => {
