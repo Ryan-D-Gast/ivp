@@ -41,7 +41,7 @@ impl Matrix {
             n,
             m: n,
             // Keep [one, zero] so indexing can return references.
-            data: vec![0.0, 1.0],
+            data: vec![1.0, 0.0],
             storage: MatrixStorage::Identity,
         }
     }
