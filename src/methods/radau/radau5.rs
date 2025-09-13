@@ -24,8 +24,8 @@ pub fn radau5<F, S>(
     mut x: Float,
     xend: Float,
     y0: &[Float],
-    rtol: Tolerance,
-    atol: Tolerance,
+    mut rtol: Tolerance,
+    mut atol: Tolerance,
     mut solout: Option<&mut S>,
     settings: Settings,
 ) -> Result<IntegrationResult, Vec<Error>>
@@ -60,13 +60,12 @@ where
         None => 0.9,
     };
     // Step-size scaling bounds: clamp factor quot in [facc2, facc1]
-    let facc1 = settings.scale_min.map(|v| 1.0 / v).unwrap_or(5.0);
-    let facc2 = settings.scale_max.map(|v| 1.0 / v).unwrap_or(0.125);
-    if facc1 <= 0.0 || !(facc2 < facc1) {
-        errors.push(Error::InvalidScaleFactors(
-            settings.scale_min.unwrap_or(0.0),
-            settings.scale_max.unwrap_or(0.0),
-        ));
+    let scale_min = settings.scale_min.unwrap_or(0.2);
+    let scale_max = settings.scale_max.unwrap_or(5.0);
+    let facc1 = 1.0 / scale_min;
+    let facc2 = 1.0 / scale_max;
+    if scale_min <= 0.0 || !(scale_min < scale_max) {
+        errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
     }
     let n = y0.len();
     let mut y = y0.to_vec();
@@ -89,6 +88,15 @@ where
     }
 
     // --- Initialization ---
+
+    // Adjust tolerances
+    let expm = 2.0 / 3.0;
+    for i in 0..n {
+        let quot = atol[i] / rtol[i];
+        rtol[i] = 0.1 * rtol[i].powf(expm);
+        atol[i] = rtol[i] * quot;
+    }
+
     let posneg = (xend - x).signum();
     let mut f0 = vec![0.0; n];
     f.ode(x, &y, &mut f0);
@@ -128,22 +136,17 @@ where
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
-    let mut y1 = vec![0.0; n];
-    let mut y2 = vec![0.0; n];
-    let mut y3 = vec![0.0; n];
     let mut scal = vec![0.0; n];
-    // Stage state buffers and RHS/solve buffers:
     let mut f1v = vec![0.0; n];
     let mut f2v = vec![0.0; n];
     let mut contv = vec![0.0; n];
-    // Error estimator buffers
     let mut jac = Matrix::zeros(n, n);
     let mut mass = Matrix::identity(n);
     let mut e1 = Matrix::zeros(n, n);
     let mut e2r = Matrix::zeros(n, n);
     let mut e2i = Matrix::zeros(n, n);
     let mut ip1 = vec![0; n];
-    let mut ip2 = vec![0; 2 * n];
+    let mut ip2 = vec![0; n];
 
     let mut nstep: usize = 0;
     let mut naccpt: usize = 0;
@@ -156,7 +159,6 @@ where
     let mut singular_count = 0;
     let mut faccon: Float = 1.0;
     let mut theta: Float;
-    let thet: Float = 0.001;
     let mut dynold: Float = 0.0;
     let mut thqold: Float = 0.0;
     let mut err: Float;
@@ -167,18 +169,19 @@ where
     let mut call_decomp = true;
     let mut qt;
     let mut hold = h;
-    let cfac: Float = 13.5;
-    let facl: Float = 5.0;
-    let facr: Float = 0.125;
     let mut fac: Float;
     let mut xold;
-    let predictive = true;
     let mut quot: Float;
     let mut h_acc: Float = 0.0;
     let mut hhfac: Float = h;
     let mut err_acc: Float = 0.0;
+    let mut xph;
+    let mut dyno: Float;
     let quot1: Float = 1.0;
     let quot2: Float = 1.2;
+    let thet: Float = 0.001;
+    let cfac: Float = 13.5;
+    let predictive = true;
 
     // Temp index
     let index2 = false;
@@ -238,6 +241,8 @@ where
                     break;
                 }
             }
+            // Count both decompositions
+            ndec += 2;
         }
 
         // Main step begins
@@ -272,6 +277,7 @@ where
                 scal[i] /= hhfac * hhfac;
             }
         }
+        xph = x + h;
 
         // Initialize stage increments and transforms
         if first {
@@ -297,9 +303,9 @@ where
                 z2[i] = (ak1 + (ak2 + ak3 * (c2q - C1M1)) * (c2q - C2M1)) * c2q;
                 z3[i] = (ak1 + (ak2 + ak3 * (c3q - C1M1)) * (c3q - C2M1)) * c3q;
 
-                f1[i] = z1[i] * TINV00 + z2[i] * TINV01 + z3[i] * TINV02;
-                f2[i] = z1[i] * TINV10 + z2[i] * TINV11 + z3[i] * TINV12;
-                f3[i] = z1[i] * TINV20 + z2[i] * TINV21 + z3[i] * TINV22;
+                f1[i] = z1[i] * TI00 + z2[i] * TI01 + z3[i] * TI02;
+                f2[i] = z1[i] * TI10 + z2[i] * TI11 + z3[i] * TI12;
+                f3[i] = z1[i] * TI20 + z2[i] * TI21 + z3[i] * TI22;
             }
         }
 
@@ -314,24 +320,25 @@ where
             newt_iter += 1;
 
             // Compute the stages
-            let t1 = x + C1 * h;
-            let t2 = x + C2 * h;
-            let t3 = x + h;
             for i in 0..n {
-                y1[i] = y[i] + z1[i];
-                y2[i] = y[i] + z2[i];
-                y3[i] = y[i] + z3[i];
+                cont[i] = y[i] + z1[i];
             }
-            f.ode(t1, &y1, &mut k1);
-            f.ode(t2, &y2, &mut k2);
-            f.ode(t3, &y3, &mut k3);
+            f.ode(x + C1 * h, &cont, &mut k1);
+            for i in 0..n {
+                cont[i] = y[i] + z2[i];
+            }
+            f.ode(x + C2 * h, &cont, &mut k2);
+            for i in 0..n {
+                cont[i] = y[i] + z3[i];
+            }
+            f.ode(xph, &cont, &mut k3);
             nfev += 3;
 
             // Solve the linear systems
             for i in 0..n {
-                z1[i] = TINV00 * k1[i] + TINV01 * k2[i] + TINV02 * k3[i];
-                z2[i] = TINV10 * k1[i] + TINV11 * k2[i] + TINV12 * k3[i];
-                z3[i] = TINV20 * k1[i] + TINV21 * k2[i] + TINV22 * k3[i];
+                z1[i] = TI00 * k1[i] + TI01 * k2[i] + TI02 * k3[i];
+                z2[i] = TI10 * k1[i] + TI11 * k2[i] + TI12 * k3[i];
+                z3[i] = TI20 * k1[i] + TI21 * k2[i] + TI22 * k3[i];
             }
 
             // Might be a duplicate.
@@ -362,15 +369,14 @@ where
             lin_solve_complex(&e2r, &e2i, &mut z2, &mut z3, &ip2);
 
             nsol += 2;
-            ndec += 1;
 
-            // Convergence based on Newton correction norm
-            let mut dyno = 0.0;
+            // Compute dynamic norm
+            dyno = 0.0;
             for i in 0..n {
-                let sc = atol[i] + rtol[i] * y[i].abs();
-                let v1 = z1[i] / sc;
-                let v2 = z2[i] / sc;
-                let v3 = z3[i] / sc;
+                let denom = scal[i];
+                let v1 = z1[i] / denom;
+                let v2 = z2[i] / denom;
+                let v3 = z3[i] / denom;
                 dyno += v1 * v1 + v2 * v2 + v3 * v3;
             }
             dyno = (dyno / (3.0 * n as Float)).sqrt();
@@ -458,7 +464,7 @@ where
         // Error estimate
         err = 0.0;
         for i in 0..n {
-            let r = cont[i] / scal[i];
+            let r = contv[i] / scal[i];
             err += r * r;
         }
         err = (err / n as Float).sqrt().max(1e-10);
@@ -471,17 +477,17 @@ where
             f.ode(x, &contv, &mut f1v);
             nfev += 1;
 
-            // cont = f1v + f2; solve again
+            // contv = f1v + f2; solve again
             for i in 0..n {
                 contv[i] = f1v[i] + f2v[i];
             }
             lin_solve(&e1, &mut contv, &ip1);
-            nfev += 1;
+            nsol += 1;
 
             // Recompute error
             err = 0.0;
             for i in 0..n {
-                let r = cont[i] / scal[i];
+                let r = contv[i] / scal[i];
                 err += r * r;
             }
             err = (err / n as Float).sqrt().max(1e-10);
@@ -489,21 +495,20 @@ where
 
         // Computation of hnew
         fac = safety_factor.min(cfac / (newt_iter as Float + 2.0 * max_newton as Float));
-        quot = facr.max(facl.min(err.powf(0.25) / fac));
+        quot = facc2.max(facc1.min(err.powf(0.25) / fac));
         hnew = h / quot;
 
         // Accept or reject step
         if err <= 1.0 {
             // Step accepted
             naccpt += 1;
+            first = false;
 
-            // Predictive Gustafsson controller
+            // Predictive Gustafsson controller (use previous accepted step if available)
             if predictive {
-                if first {
-                    let mut facgus = h_acc / h
-                        * (err * err / err_acc).powf(0.25)
-                        / safety_factor;
-                    facgus = facr.max(facl.min(facgus));
+                if naccpt > 1 {
+                    let mut facgus = (h_acc / h) * (err * err / err_acc).powf(0.25) / safety_factor;
+                    facgus = facc2.max(facc1.min(facgus));
                     quot = quot.max(facgus);
                     hnew = h / quot;
                 }
@@ -512,44 +517,23 @@ where
             }
 
             // Update solution
+            xold = x;
+            hold = h;
+            x = xph;
+
             for i in 0..n {
                 y[i] += z3[i];
-            }
-            xold = x;
-            x += h;
-
-            // New derivative at x+h
-            f.ode(x, &y, &mut f0);
-            nfev += 1;
-
-            // Dense output coefficients
-            let c1m1 = C1M1;
-            let c2m1 = C2M1;
-            let c1mc2 = C1MC2;
-            for i in 0..n {
-                cont[0 * n + i] = y[i];
-                let cont1i = (z2[i] - z3[i]) / c2m1;
-                let ak = (z1[i] - z2[i]) / c1mc2;
+                let ak = (z1[i] - z2[i]) / C1MC2;
                 let acont3 = (ak - (z1[i] / C1)) / C2;
-                let cont2i = (ak - cont1i) / c1m1;
-                let cont3i = cont2i - acont3;
-                cont[1 * n + i] = cont1i;
-                cont[2 * n + i] = cont2i;
-                cont[3 * n + i] = cont3i;
+                cont[0 * n + i] = y[i];
+                cont[1 * n + i] = (z2[i] - z3[i]) / C2M1;
+                cont[2 * n + i] = (ak - cont[1 * n + i]) / C1M1;
+                cont[3 * n + i] = cont[2 * n + i] - acont3;
             }
 
             // Compute error scale
             for i in 0..n {
                 scal[i] = atol[i] + rtol[i] * y[i].abs();
-            }
-
-            // Constrain new step size
-            hnew = hnew.abs().clamp(hmin, hmax) * posneg;
-
-            // Prevent oscillations due to previous step rejections
-            if reject {
-                hnew = posneg * hnew.abs().min(h.abs());
-                reject = false;
             }
 
             // Callback
@@ -577,43 +561,58 @@ where
                     }
                 }
             }
+            call_jac = false;
 
-            // Sophisticated step size control
-            qt = hnew / h;
-            hhfac = h;
-            if theta < thet && qt > quot1 && qt < quot2 {
-                call_decomp = false;
-                call_jac = false;
-                continue 'main;
-            } else {
-                call_decomp = true;
-                call_jac = true;
-            }
-
-            hold = h;
-            h = hnew;
-
-            if first {
-                first = false;
-            }
-            
             if last {
-                status = Status::Success;
+                h = hnew;
                 break 'main;
             }
+
+            // New derivative at x+h
+            f.ode(x, &y, &mut f0);
+            nfev += 1;
+
+            // Constrain new step size
+            hnew = hnew.abs().clamp(hmin, hmax) * posneg;
+
+            // Prevent oscillations due to previous step rejections
+            if reject {
+                hnew = posneg * hnew.abs().min(h.abs());
+                reject = false;
+            }
+
+            // Sophisticated step size control
+            if (x + hnew/quot1 - xend) * posneg >= 0.0 {
+                h = xend - x;
+                last = true;
+            } else {
+                qt = hnew / h;
+                hhfac = h;
+                if theta < thet && qt > quot1 && qt < quot2 {
+                    call_decomp = false;
+                    call_jac = false;
+                    continue 'main;
+                } else {
+                    call_decomp = true;
+                    call_jac = true;
+                }
+                h = hnew;
+            }
+            hhfac = h;
         } else {
             // Step rejected
+            nrejct += 1;
             reject = true;
+            last = false;
 
             // If first step, reduce more aggressively
             if first {
-                hnew *= 0.1;
+                h *= 0.1;
                 hhfac = 0.1;
             } else {
                 hhfac = hnew / h;
+                h = hnew;
             }
-
-            h = hnew.abs().clamp(hmin, hmax) * posneg;
         }
     }
 
@@ -687,12 +686,12 @@ const T12: Float = 3.829_421_127_572_619E-1;
 const T20: Float = 9.660_481_826_150_93E-1;
 
 // Inverse transformation matrix T^{-1} constants
-const TINV00: Float = 4.325_579_890_063_155;
-const TINV01: Float = 3.391_992_518_158_098_4E-1;
-const TINV02: Float = 5.417_705_399_358_749E-1;
-const TINV10: Float = -4.178_718_591_551_905;
-const TINV11: Float = -3.276_828_207_610_623_7E-1;
-const TINV12: Float = 4.766_235_545_005_504_4E-1;
-const TINV20: Float = -5.028_726_349_457_868E-1;
-const TINV21: Float = 2.571_926_949_855_605;
-const TINV22: Float = -5.960_392_048_282_249E-1;
+const TI00: Float = 4.325_579_890_063_155;
+const TI01: Float = 3.391_992_518_158_098_4E-1;
+const TI02: Float = 5.417_705_399_358_749E-1;
+const TI10: Float = -4.178_718_591_551_905;
+const TI11: Float = -3.276_828_207_610_623_7E-1;
+const TI12: Float = 4.766_235_545_005_504_4E-1;
+const TI20: Float = -5.028_726_349_457_868E-1;
+const TI21: Float = 2.571_926_949_855_605;
+const TI22: Float = -5.960_392_048_282_249E-1;

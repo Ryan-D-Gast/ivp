@@ -37,7 +37,10 @@ use super::base::Matrix;
 pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
     let n = a.nrows();
     if n != a.ncols() {
-        return Err(Error::NonSquareMatrix { rows: n, cols: a.ncols() });
+        return Err(Error::NonSquareMatrix {
+            rows: n,
+            cols: a.ncols(),
+        });
     }
 
     if ip.len() != n {
@@ -175,7 +178,10 @@ pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
 pub fn lu_decomp_complex(ar: &mut Matrix, ai: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
     let n = ar.nrows();
     if n != ar.ncols() || n != ai.nrows() || n != ai.ncols() {
-        return Err(Error::NonSquareMatrix { rows: n, cols: ar.ncols() });
+        return Err(Error::NonSquareMatrix {
+            rows: n,
+            cols: ar.ncols(),
+        });
     }
 
     if ip.len() != n {
