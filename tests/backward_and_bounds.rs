@@ -8,7 +8,7 @@ fn backward_integration_works() {
     let x0 = 2.0 * std::f64::consts::PI;
     let xend = 0.0;
     let y0 = [1.0, 0.0];
-    for method in [Method::RK23, Method::DOPRI5, Method::DOP853] {
+    for method in [Method::RK23, Method::DOPRI5, Method::DOP853, Method::Radau5] {
         let sol = solve_ivp(&SHO, x0, xend, &y0, default_opts_dense(method)).unwrap();
         // Check we got a span and can evaluate at mid
         if let Some((t0, t1)) = sol.sol_span() {
