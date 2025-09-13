@@ -54,7 +54,6 @@ use super::base::Matrix;
 /// 2. Solve Ux = y (back substitution)
 pub fn lin_solve(a: &Matrix, b: &mut [Float], ip: &[usize]) {
     let n = a.nrows();
-    assert_eq!(b.len(), n, "RHS length must match matrix size");
 
     // Handle trivial case
     if n == 1 {
@@ -148,8 +147,6 @@ pub fn lin_solve_complex(
     ip: &[usize],
 ) {
     let n = ar.nrows();
-    assert_eq!(br.len(), n, "RHS length must match matrix size");
-    assert_eq!(bi.len(), n, "RHS length must match matrix size");
 
     // Handle trivial case with complex division
     if n == 1 {

@@ -133,13 +133,7 @@ where
     let mut f1 = vec![0.0; n];
     let mut f2 = vec![0.0; n];
     let mut f3 = vec![0.0; n];
-    let mut k1 = vec![0.0; n];
-    let mut k2 = vec![0.0; n];
-    let mut k3 = vec![0.0; n];
     let mut scal = vec![0.0; n];
-    let mut f1v = vec![0.0; n];
-    let mut f2v = vec![0.0; n];
-    let mut contv = vec![0.0; n];
     let mut jac = Matrix::zeros(n, n);
     let mut mass = Matrix::identity(n);
     let mut e1 = Matrix::zeros(n, n);
@@ -229,8 +223,13 @@ where
                 singular_count += 1;
                 if singular_count > 5 {
                     status = Status::SingularMatrix;
-                    break;
+                    break 'main;
                 }
+                h *= 0.5;
+                hhfac = 0.5;
+                reject = true;
+                last = false;
+                continue 'main;
             }
 
             // LU decomp of complex matrix E2
@@ -238,8 +237,13 @@ where
                 singular_count += 1;
                 if singular_count > 5 {
                     status = Status::SingularMatrix;
-                    break;
+                    break 'main;
                 }
+                h *= 0.5;
+                hhfac = 0.5;
+                reject = true;
+                last = false;
+                continue 'main;
             }
             // Count both decompositions
             ndec += 2;
@@ -258,12 +262,6 @@ where
         if 0.1 * h.abs() <= x.abs() * uround {
             status = Status::StepSizeTooSmall;
             break;
-        }
-
-        // Adjust last step to end exactly at xend
-        if (x + 1.01 * h - xend) * posneg > 0.0 {
-            h = xend - x;
-            last = true;
         }
 
         // Account for index 2 and 3 algebraic variables
@@ -315,7 +313,16 @@ where
         let mut newt_iter = 0;
         'newton: loop {
             if newt_iter >= max_newton {
-                break;
+                singular_count += 1;
+                if singular_count > 5 {
+                    status = Status::SingularMatrix;
+                    break 'main;
+                }
+                h *= 0.5;
+                hhfac = 0.5;
+                reject = true;
+                last = false;
+                continue 'main;
             }
             newt_iter += 1;
 
@@ -323,22 +330,22 @@ where
             for i in 0..n {
                 cont[i] = y[i] + z1[i];
             }
-            f.ode(x + C1 * h, &cont, &mut k1);
+            f.ode(x + C1 * h, &cont, &mut z1);
             for i in 0..n {
                 cont[i] = y[i] + z2[i];
             }
-            f.ode(x + C2 * h, &cont, &mut k2);
+            f.ode(x + C2 * h, &cont, &mut z2);
             for i in 0..n {
                 cont[i] = y[i] + z3[i];
             }
-            f.ode(xph, &cont, &mut k3);
+            f.ode(xph, &cont, &mut z3);
             nfev += 3;
 
             // Solve the linear systems
             for i in 0..n {
-                z1[i] = TI00 * k1[i] + TI01 * k2[i] + TI02 * k3[i];
-                z2[i] = TI10 * k1[i] + TI11 * k2[i] + TI12 * k3[i];
-                z3[i] = TI20 * k1[i] + TI21 * k2[i] + TI22 * k3[i];
+                z1[i] = TI00 * z1[i] + TI01 * z2[i] + TI02 * z3[i];
+                z2[i] = TI10 * z1[i] + TI11 * z2[i] + TI12 * z3[i];
+                z3[i] = TI20 * z1[i] + TI21 * z2[i] + TI22 * z3[i];
             }
 
             // Might be a duplicate.
@@ -406,16 +413,16 @@ where
                     }
                 } else {
                     // Unexpected step rejection - continue with reduced step
-                    let quot = facc2.max(facc1.min(1.5));
-                    let hnew = (h / quot).clamp(-hmax, hmax);
-                    if h.abs() <= hmin || hnew.abs() >= h.abs() {
-                        status = Status::StepSizeTooSmall;
-                        break 'newton;
+                    singular_count += 1;
+                    if singular_count > 5 {
+                        status = Status::SingularMatrix;
+                        break 'main;
                     }
-                    h = hnew;
-                    nrejct += 1;
+                    h *= 0.5;
+                    hhfac = 0.5;
+                    reject = true;
                     last = false;
-                    break 'newton;
+                    continue 'main;
                 }
             }
             dynold = dyno.max(uround);
@@ -441,30 +448,29 @@ where
             }
         }
 
-        // Error estimate (E1-based): hee=dd/h; f1v=Σ hee·Z; contv=f(xn,yn)+M·f1v; solve E1·cont=cont
+        // Error estimate (E1-based): hee=dd/h; f1=Σ hee·Z; contv=f(xn,yn)+M·f1; solve E1·cont=cont
         let hee1 = DD1 / h;
         let hee2 = DD2 / h;
         let hee3 = DD3 / h;
         for i in 0..n {
-            f1v[i] = hee1 * z1[i] + hee2 * z2[i] + hee3 * z3[i];
-            f2v[i] = 0.0;
-            contv[i] = 0.0;
+            f1[i] = hee1 * z1[i] + hee2 * z2[i] + hee3 * z3[i];
+            f2[i] = 0.0;
         }
         for i in 0..n {
             let mut sum = 0.0;
             for j in 0..n {
-                sum += mass[(i, j)] * f1v[j];
+                sum += mass[(i, j)] * f1[j];
             }
-            f2v[i] = sum;
-            contv[i] = sum + f0[i];
+            f2[i] = sum;
+            cont[i] = sum + f0[i];
         }
-        lin_solve(&e1, &mut contv, &ip1);
+        lin_solve(&e1, &mut cont, &ip1);
         nsol += 1;
 
         // Error estimate
         err = 0.0;
         for i in 0..n {
-            let r = contv[i] / scal[i];
+            let r = cont[i] / scal[i];
             err += r * r;
         }
         err = (err / n as Float).sqrt().max(1e-10);
@@ -472,22 +478,22 @@ where
         // Optional refinement on first/rejected step
         if err >= 1.0 && (first || reject) {
             for i in 0..n {
-                contv[i] = y[i] + contv[i];
+                cont[i] = y[i] + cont[i];
             }
-            f.ode(x, &contv, &mut f1v);
+            f.ode(x, &cont, &mut f1);
             nfev += 1;
 
-            // contv = f1v + f2; solve again
+            // contv = f1 + f2; solve again
             for i in 0..n {
-                contv[i] = f1v[i] + f2v[i];
+                cont[i] = f1[i] + f2[i];
             }
-            lin_solve(&e1, &mut contv, &ip1);
+            lin_solve(&e1, &mut cont, &ip1);
             nsol += 1;
 
             // Recompute error
             err = 0.0;
             for i in 0..n {
-                let r = contv[i] / scal[i];
+                let r = cont[i] / scal[i];
                 err += r * r;
             }
             err = (err / n as Float).sqrt().max(1e-10);
@@ -592,9 +598,6 @@ where
                     call_decomp = false;
                     call_jac = false;
                     continue 'main;
-                } else {
-                    call_decomp = true;
-                    call_jac = true;
                 }
                 h = hnew;
             }
