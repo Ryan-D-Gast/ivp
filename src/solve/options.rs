@@ -60,9 +60,19 @@ pub struct Options {
     #[builder(default = false)]
     pub dense_output: bool,
     /// Preferred storage for Jacobian
+    /// Default is Full (dense writable). 
+    /// Solvers that don't use a Jacobian won't attempt
+    /// to allocate memory for it so this comes at no cost.
+    /// Note a banded Jacobian is not supported in the default
+    /// finite difference implementation in ODE::jac and thus requires
+    /// a user-supplied analytical implementation.
     #[builder(default = MatrixStorage::Full)]
     pub jac_storage: MatrixStorage,
-    /// Preferred storage for Mass matrix
+    /// Preferred storage for Mass matrix.
+    /// By default, as it is assumed the mass matrix wil not be used,
+    /// it is set to Identity storage which is implicit and has no memory cost.
+    /// If a mass matrix is to be used this will have to be set to the appropriate
+    /// storage type either Full or Banded.
     #[builder(default = MatrixStorage::Identity)]
     pub mass_storage: MatrixStorage,
 }

@@ -1,6 +1,6 @@
 //! User-supplied ODE system.
 
-use crate::{Float, matrix::Matrix, solve::event::EventConfig};
+use crate::{Float, matrix::{Matrix, MatrixStorage}, solve::event::EventConfig};
 
 /// User-supplied ODE system.
 ///
@@ -48,6 +48,8 @@ pub trait ODE {
     /// By default, this method uses a finite difference approximation.
     /// Users can override this with an analytical implementation for better efficiency.
     fn jac(&self, x: Float, y: &[Float], j: &mut Matrix) {
+        debug_assert!(!matches!(j.storage, MatrixStorage::Banded { .. }), "Banded Jacobian not supported in default implementation");
+
         // Default implementation using forward finite differences
         let dim = y.len();
         let mut y_perturbed = y.to_vec();
