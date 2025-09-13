@@ -217,3 +217,41 @@ pub fn lin_solve_complex(
     br[0] = temp_r;
     bi[0] = temp_i;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sol_simple() {
+        // Test a simple case: solve a 1x1 system
+        let mut a = Matrix::zeros(1, 1);
+        a[(0, 0)] = 2.0;
+        let mut b = vec![4.0];
+        let ip = vec![0];
+
+        lin_solve(&a, &mut b, &ip);
+
+        // Solution( ,0)should be 4.0 / 2.0 = 2.0
+        assert!((b[0] - 2.0_f64).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_solc_simple() {
+        // Test with a simple complex system
+        let mut ar = Matrix::zeros(1, 1);
+        let mut ai = Matrix::zeros(1, 1);
+        ar[(0, 0)] = 1.0;
+        ai[(0, 0)] = 1.0; // Matrix element is (1 + i)
+        let mut br = vec![2.0; 1]; // RHS is (2 + 0i)
+        let mut bi = vec![0.0; 1]; // RHS is (2 + 0i)
+        let ip = vec![0];
+
+        lin_solve_complex(&ar, &ai, &mut br, &mut bi, &ip);
+
+        // Solution (s,0)hould be (2 + 0i) / (1 + i) = (1 - i)
+        assert!((br[0] - 1.0).abs() < 1e-10);
+        assert!((bi[0] - (-1.0)).abs() < 1e-10);
+    }
+}
+
