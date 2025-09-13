@@ -175,7 +175,7 @@ where
     let quot1: Float = 1.0;
     let quot2: Float = 1.2;
     let thet: Float = 0.001;
-    let cfac: Float = 13.5;
+    let cfac: Float = safety_factor * (1.0 + 2.0 * (max_newton as Float));
 
     // Temp index
     let index2 = false;
@@ -242,7 +242,7 @@ where
                 continue 'main;
             }
             // Count both decompositions
-            ndec += 2;
+            ndec += 1;
         }
 
         // --- Integration step ---
@@ -339,9 +339,12 @@ where
 
             // --- Solve the linear systems ---
             for i in 0..n {
-                z1[i] = TI00 * z1[i] + TI01 * z2[i] + TI02 * z3[i];
-                z2[i] = TI10 * z1[i] + TI11 * z2[i] + TI12 * z3[i];
-                z3[i] = TI20 * z1[i] + TI21 * z2[i] + TI22 * z3[i];
+                let a1 = z1[i];
+                let a2 = z2[i];
+                let a3 = z3[i];
+                z1[i] = TI00 * a1 + TI01 * a2 + TI02 * a3;
+                z2[i] = TI10 * a1 + TI11 * a2 + TI12 * a3;
+                z3[i] = TI20 * a1 + TI21 * a2 + TI22 * a3;
             }
 
             // Might be a duplicate.
