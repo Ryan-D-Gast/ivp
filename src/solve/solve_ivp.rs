@@ -199,7 +199,7 @@ where
             })
         }
         Err(errors) => {
-            return Err(errors);
+            Err(errors)
         }
     }
 }

@@ -411,7 +411,7 @@ impl<'a> DenseOutput<'a> {
 
 impl<'a> Interpolate for DenseOutput<'a> {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        contdp5(xi, yi, &self.cont, self.xold, self.h);
+        contdp5(xi, yi, self.cont, self.xold, self.h);
     }
 
     fn get_cont(&self) -> (Vec<Float>, Float, Float) {

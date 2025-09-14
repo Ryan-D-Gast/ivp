@@ -110,7 +110,7 @@ pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
             // Apply elimination using the original A(m,j)
             if tj != 0.0 {
                 for i in kp1..n {
-                    a[(i, j)] = a[(i, j)] + a[(i, k)] * tj;
+                    a[(i, j)] += a[(i, k)] * tj;
                 }
             }
         }

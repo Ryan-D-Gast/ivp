@@ -57,7 +57,7 @@ pub fn lin_solve(a: &Matrix, b: &mut [Float], ip: &[usize]) {
 
     // Handle trivial case
     if n == 1 {
-        b[0] = b[0] / a[(0, 0)];
+        b[0] /= a[(0, 0)];
         return;
     }
 
@@ -69,13 +69,12 @@ pub fn lin_solve(a: &Matrix, b: &mut [Float], ip: &[usize]) {
         let m = ip[k]; // Pivot row index
 
         // Apply row permutation (swap b[m] and b[k])
-        let t = b[m];
-        b[m] = b[k];
-        b[k] = t;
+        let k = k;
+        b.swap(m, k);
 
         // Forward substitution step: b[i] += L[i,k] * b[k]
         for i in kp1..n {
-            b[i] = b[i] + a[(i, k)] * t;
+            b[i] += a[(i, k)] * b[k];
         }
     }
 
@@ -84,17 +83,16 @@ pub fn lin_solve(a: &Matrix, b: &mut [Float], ip: &[usize]) {
         let k = n - kb;
 
         // Divide by diagonal element
-        b[k] = b[k] / a[(k, k)];
-        let t = -b[k];
+        b[k] /= a[(k, k)];
 
         // Back substitution step: b[i] += U[i,k] * (-b[k])
         for i in 0..k {
-            b[i] = b[i] + a[(i, k)] * t;
+            b[i] += a[(i, k)] * -b[k];
         }
     }
 
     // Final division for the first element
-    b[0] = b[0] / a[(0, 0)];
+    b[0] /= a[(0, 0)];
 }
 
 /// Solves a complex linear system (AR + i*AI)*X = (BR + i*BI) using LU decomposition.
@@ -181,8 +179,8 @@ pub fn lin_solve_complex(
             // Complex multiplication: (ar[i,k] + i*ai[i,k]) * (tr + i*ti)
             let prod_r = ar[(i, k)] * tr - ai[(i, k)] * ti;
             let prod_i = ai[(i, k)] * tr + ar[(i, k)] * ti;
-            br[i] = br[i] + prod_r;
-            bi[i] = bi[i] + prod_i;
+            br[i] += prod_r;
+            bi[i] += prod_i;
         }
     }
 
@@ -205,8 +203,8 @@ pub fn lin_solve_complex(
         for i in 0..k {
             let prod_r = ar[(i, k)] * tr - ai[(i, k)] * ti;
             let prod_i = ai[(i, k)] * tr + ar[(i, k)] * ti;
-            br[i] = br[i] + prod_r;
-            bi[i] = bi[i] + prod_i;
+            br[i] += prod_r;
+            bi[i] += prod_i;
         }
     }
 

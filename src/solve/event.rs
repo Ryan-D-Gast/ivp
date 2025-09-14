@@ -8,6 +8,12 @@ pub struct EventConfig {
     pub terminal_count: Option<usize>,
 }
 
+impl Default for EventConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventConfig {
     /// Create a new EventConfig with default settings.
     pub fn new() -> Self {

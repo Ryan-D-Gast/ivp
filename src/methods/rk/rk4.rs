@@ -109,7 +109,7 @@ where
 
         x += h;
         for i in 0..n {
-            y[i] = y[i] + h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i] + B4 * k4[i]);
+            y[i] += h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i] + B4 * k4[i]);
         }
         f.ode(x, &y, &mut k1);
 

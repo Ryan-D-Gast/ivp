@@ -97,10 +97,7 @@ where
     };
 
     // Predictive step-size control
-    let predictive = match settings.predictive {
-        Some(v) => v,
-        None => true,
-    };
+    let predictive = settings.predictive.unwrap_or(true);
 
     // Differential Algebraic equation index settings.
     // Accept counts and infer nind1 when omitted.
@@ -346,7 +343,7 @@ where
             let c2q = C2 * c3q;
 
             for i in 0..n {
-                let ak1 = cont[1 * n + i];
+                let ak1 = cont[n + i];
                 let ak2 = cont[2 * n + i];
                 let ak3 = cont[3 * n + i];
 
@@ -419,7 +416,7 @@ where
                     sum2 -= mij * f2[j];
                     sum3 -= mij * f3[j];
                 }
-                z1[i] = z1[i] + sum1 * fac1;
+                z1[i] += sum1 * fac1;
                 z2[i] = z2[i] + sum2 * alphn - sum3 * betan;
                 z3[i] = z3[i] + sum3 * alphn + sum2 * betan;
             }
@@ -533,7 +530,7 @@ where
         // Optional refinement on first/rejected step
         if err >= 1.0 && (first || reject) {
             for i in 0..n {
-                cont[i] = y[i] + cont[i];
+                cont[i] += y[i];
             }
             f.ode(x, &cont, &mut f1);
             nfev += 1;
@@ -587,8 +584,8 @@ where
                 let ak = (z1[i] - z2[i]) / C1MC2;
                 let acont3 = (ak - (z1[i] / C1)) / C2;
                 cont[0 * n + i] = y[i];
-                cont[1 * n + i] = (z2[i] - z3[i]) / C2M1;
-                cont[2 * n + i] = (ak - cont[1 * n + i]) / C1M1;
+                cont[n + i] = (z2[i] - z3[i]) / C2M1;
+                cont[2 * n + i] = (ak - cont[n + i]) / C1M1;
                 cont[3 * n + i] = cont[2 * n + i] - acont3;
             }
 
@@ -661,11 +658,7 @@ where
             }
             hhfac = h;
             call_decomp = true;
-            if theta < thet {
-                call_jac = false;
-            } else {
-                call_jac = true;
-            }
+            call_jac = theta >= thet;
         } else {
             // --- Step rejected ---
             reject = true;
@@ -703,8 +696,8 @@ pub fn contr5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float
     let n = cont.len() / 4;
     // s = (xi - (xold + h)) / h
     let s = (xi - (xold + h)) / h;
-    let c0 = &cont[0 * n..1 * n];
-    let c1 = &cont[1 * n..2 * n];
+    let c0 = &cont[0 * n..n];
+    let c1 = &cont[n..2 * n];
     let c2 = &cont[2 * n..3 * n];
     let c3 = &cont[3 * n..4 * n];
     for i in 0..n {

@@ -57,14 +57,8 @@ where
     };
 
     // Step size scaling factors
-    let scale_min = match settings.scale_min {
-        Some(f) => f,
-        None => 0.2,
-    };
-    let scale_max = match settings.scale_max {
-        Some(f) => f,
-        None => 5.0,
-    };
+    let scale_min = settings.scale_min.unwrap_or(0.2);
+    let scale_max = settings.scale_max.unwrap_or(5.0);
     if scale_min <= 0.0 || scale_max <= scale_min {
         errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
     }
