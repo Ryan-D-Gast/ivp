@@ -36,22 +36,26 @@ pub struct Settings {
     pub newton_maxiter: Option<usize>,
     /// Newton iteration tolerance.
     pub newton_tol: Option<Float>,
-
-    /// Treat system as semi-explicit DAE with index-2 variables present.
-    /// If `true`, variables in the ranges defined by `nind*` will be scaled
-    /// according to Radau IIA index-handling rules.
-    pub index2: Option<bool>,
-    /// Treat system as semi-explicit DAE with index-3 variables present.
-    /// If `true`, variables in the ranges defined by `nind*` will be scaled
-    /// according to Radau IIA index-handling rules.
-    pub index3: Option<bool>,
-    /// Number of differential (index-1) variables at the start of the state vector.
+    /// Step-size strategy: predictive (Gustafsson) vs classical.
+    /// - `true`  → 1: Modified predictive controller (Gustafsson) [default]
+    /// - `false` → 2: Classical step-size control
+    pub predictive: Option<bool>,
+    /// Differential-Algebraic partitioning: counts of variables by index (1→2→3).
+    ///
+    /// - Variables must be ordered in the state as: all index-1 (differential),
+    ///   then index-2 (algebraic), then index-3 (algebraic).
+    /// - You can specify any subset of `nind1`, `nind2`, `nind3`:
+    ///   - If none are provided, the system is treated as a pure ODE (all index-1).
+    ///   - If `nind2`/`nind3` are provided but `nind1` is not, `nind1` is inferred as
+    ///     `n - nind2 - nind3` (validated to be >= 0 at runtime).
+    ///   - If all three are provided, they must sum to `n`.
+    /// - Error estimation follows Radau5: index-2 contributions are multiplied by `h`,
+    ///   and index-3 contributions by `h^2`.
     pub nind1: Option<usize>,
     /// Number of algebraic index-2 variables following the first block.
     pub nind2: Option<usize>,
     /// Number of algebraic index-3 variables following the first two blocks.
     pub nind3: Option<usize>,
-
     /// Preferred storage for the user-supplied Jacobian `jac(x,y,J)`.
     /// Default: `MatrixStorage::Full` (dense writable)
     #[builder(default = MatrixStorage::Full)]

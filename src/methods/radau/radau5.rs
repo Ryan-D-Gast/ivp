@@ -96,23 +96,35 @@ where
         }
     };
 
-    // Differential Algebraic equation index settings
-    let index2 = settings.index2.unwrap_or(false);
-    let index3 = settings.index3.unwrap_or(false);
-    let nind1 = settings.nind1.unwrap_or(0);
+    // Predictive step-size control
+    let predictive = match settings.predictive {
+        Some(v) => v,
+        None => true,
+    };
+
+    // Differential Algebraic equation index settings.
+    // Accept counts and infer nind1 when omitted.
+    let mut nind1 = settings.nind1.unwrap_or(0);
     let nind2 = settings.nind2.unwrap_or(0);
     let nind3 = settings.nind3.unwrap_or(0);
 
-    // Validate partition if any index flag is set
-    if index2 || index3 || nind1 + nind2 + nind3 > 0 {
+    let provided = (settings.nind1.is_some() as u8)
+        + (settings.nind2.is_some() as u8)
+        + (settings.nind3.is_some() as u8);
+    if provided == 0 {
+        // Pure ODE by default: all variables are index-1
+        nind1 = n;
+    } else if settings.nind1.is_none() {
+        // Infer nind1 so that counts sum to n
+        if nind2 + nind3 > n {
+            errors.push(Error::InvalidDAEPartition { n, nind1, nind2, nind3 });
+        } else {
+            nind1 = n - nind2 - nind3;
+        }
+    } else {
+        // Validate explicit sums
         if nind1 + nind2 + nind3 != n {
             errors.push(Error::InvalidDAEPartition { n, nind1, nind2, nind3 });
-        }
-        if (index2 && nind2 == 0) || (index3 && nind3 == 0) {
-            errors.push(Error::InvalidDAEPartition { n, nind1, nind2, nind3 });
-        }
-        if !index2 && nind2 > 0 || !index3 && nind3 > 0 {
-            errors.push(Error::InconsistentIndexFlags { index2, index3 });
         }
     }
 
@@ -156,6 +168,8 @@ where
         s.solout(x, x, &y, &interp);
     }
 
+    // --- Declarations ---
+
     // Workspace
     let mut z1 = vec![0.0; n];
     let mut z2 = vec![0.0; n];
@@ -170,40 +184,51 @@ where
     let mut ip1 = vec![0; n];
     let mut ip2 = vec![0; n];
 
+    // --- Bookkeeping & control ---
+    // Counters
     let mut nstep: usize = 0;
+    let mut naccpt: usize = 0;
+    let mut nrejct: usize = 0;
     let mut njev: usize = 0;
     let mut nsol: usize = 0;
     let mut ndec: usize = 0;
-    let mut naccpt: usize = 0;
-    let mut nrejct: usize = 0;
+
+    // Status
     let mut status = Status::Success;
     let mut singular_count = 0;
-    let mut faccon: Float = 1.0;
-    let mut dynold: Float = 0.0;
-    let mut thqold: Float = 0.0;
+
+    // Step-size control
     let mut hold = h;
-    let mut theta: Float;
-    let mut err: Float;
     let mut hnew: Float;
+    let mut hhfac: Float = h;
     let mut last = false;
     let mut reject = false;
+    let mut h_acc: Float = 0.0;
+    let mut err_acc: Float = 0.0;
+    let mut fac: Float;
+    let mut quot: Float;
+    let mut qt;
+    let quot1: Float = 1.0;
+    let quot2: Float = 1.2;
+    let cfac: Float = safety_factor * (1.0 + 2.0 * (max_newton as Float));
+
+    // Newton iteration control
+    let mut faccon: Float = 1.0;
+    let mut theta: Float;
+    let thet: Float = 0.001;
+    let mut dynold: Float = 0.0;
+    let mut thqold: Float = 0.0;
+    let mut dyno: Float;
+
+    // Error and time bookkeeping
+    let mut err: Float;
+    let mut xold;
+    let mut xph;
+
+    // Flags
     let mut first = true;
     let mut call_jac = true;
     let mut call_decomp = true;
-    let mut fac: Float;
-    let mut xold;
-    let mut qt;
-    let mut quot: Float;
-    let mut h_acc: Float = 0.0;
-    let mut hhfac: Float = h;
-    let mut err_acc: Float = 0.0;
-    let mut xph;
-    let mut dyno: Float;
-    let predictive = true;
-    let quot1: Float = 1.0;
-    let quot2: Float = 1.2;
-    let thet: Float = 0.001;
-    let cfac: Float = safety_factor * (1.0 + 2.0 * (max_newton as Float));
 
     // Initial mass matrix
     f.mass(&mut mass);
@@ -281,15 +306,15 @@ where
             break;
         }
 
-        // Account for index 2 and 3 algebraic variables
-        if index2 {
+        // Account for index-2 and index-3 algebraic variables
+        if nind2 > 0 {
             for i in nind1..(nind1 + nind2) {
                 scal[i] /= hhfac;
             }
         }
-        if index3 {
+        if nind3 > 0 {
             for i in (nind1 + nind2)..(nind1 + nind2 + nind3) {
-                scal[i] /= hhfac * hhfac;
+                scal[i] /= hhfac.powi(2);
             }
         }
         xph = x + h;

@@ -34,10 +34,6 @@ pub enum Error {
         rows: usize,
         cols: usize,
     },
-    InconsistentIndexFlags {
-        index2: bool,
-        index3: bool,
-    },
     InvalidDAEPartition {
         n: usize,
         nind1: usize,
@@ -94,13 +90,6 @@ impl std::fmt::Display for Error {
                     f,
                     "matrix must be square (got {} rows and {} columns)",
                     rows, cols
-                )
-            }
-            Error::InconsistentIndexFlags { index2, index3 } => {
-                write!(
-                    f,
-                    "inconsistent index flags: index2={}, index3={} (at least one must be true to use nind2/nind3)",
-                    index2, index3
                 )
             }
             Error::InvalidDAEPartition { n, nind1, nind2, nind3 } => {

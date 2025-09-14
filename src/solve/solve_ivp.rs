@@ -117,6 +117,9 @@ where
         .maybe_h0(options.first_step)
         .maybe_hmax(options.max_step)
         .maybe_hmin(options.min_step)
+        .maybe_nind1(options.nind1)
+        .maybe_nind2(options.nind2)
+        .maybe_nind3(options.nind3)
         .jac_storage(options.jac_storage)
         .mass_storage(options.mass_storage)
         .build();
