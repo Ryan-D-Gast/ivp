@@ -1,6 +1,6 @@
 [package]
 name = "ivp"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Ryan D. Gast <ryan.d.gast@gmail.com>"]
 description = "A Rust library for solving initial value problems (IVPs) for ordinary differential equations (ODEs)."
 edition = "2024"
