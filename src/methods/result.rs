@@ -13,6 +13,12 @@ pub struct IntegrationResult {
     pub h: Float,
     /// The number of function evaluations
     pub nfev: usize,
+    /// The number of Jacobian evaluations
+    pub njev: usize,
+    /// The number of linear system (Ax = b)
+    pub nsol: usize,
+    /// The number of LU decompositions
+    pub ndec: usize,
     /// The number of steps taken
     pub nstep: usize,
     /// The number of accepted steps
@@ -29,6 +35,9 @@ impl IntegrationResult {
         y: Vec<Float>,
         h: Float,
         nfev: usize,
+        njev: usize,
+        nsol: usize,
+        ndec: usize,
         nstep: usize,
         naccpt: usize,
         nrejct: usize,
@@ -39,6 +48,9 @@ impl IntegrationResult {
             y,
             h,
             nfev,
+            njev,
+            nsol,
+            ndec,
             nstep,
             naccpt,
             nrejct,

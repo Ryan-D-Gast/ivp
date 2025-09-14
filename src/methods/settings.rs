@@ -1,8 +1,10 @@
 //! Settings for numerical integrators
 
+use std::ops::{Index, IndexMut};
 use bon::Builder;
 
-use crate::Float;
+use crate::{Float, matrix::MatrixStorage};
+
 
 #[derive(Builder)]
 /// Settings for the numerical integrators
@@ -26,10 +28,42 @@ pub struct Settings {
     /// Initial step size. None will result in an initial guess
     /// provided by the [`crate::hinit::hinit`] function.
     pub h0: Option<Float>,
-    /// Maximum number of allowed steps. Default is 100,000.
+    /// Maximum number of allowed steps.
     pub nmax: Option<usize>,
-    /// Number of steps before performing a stiffness test. Default is 1000.
+    /// Number of steps before performing a stiffness test.
     pub nstiff: Option<usize>,
+    /// Max number of iterations in Newton solver.
+    pub newton_maxiter: Option<usize>,
+    /// Newton iteration tolerance.
+    pub newton_tol: Option<Float>,
+    /// Step-size strategy: predictive (Gustafsson) vs classical.
+    /// - `true`  → 1: Modified predictive controller (Gustafsson) [default]
+    /// - `false` → 2: Classical step-size control
+    pub predictive: Option<bool>,
+    /// Differential-Algebraic partitioning: counts of variables by index (1→2→3).
+    ///
+    /// - Variables must be ordered in the state as: all index-1 (differential),
+    ///   then index-2 (algebraic), then index-3 (algebraic).
+    /// - You can specify any subset of `nind1`, `nind2`, `nind3`:
+    ///   - If none are provided, the system is treated as a pure ODE (all index-1).
+    ///   - If `nind2`/`nind3` are provided but `nind1` is not, `nind1` is inferred as
+    ///     `n - nind2 - nind3` (validated to be >= 0 at runtime).
+    ///   - If all three are provided, they must sum to `n`.
+    /// - Error estimation follows Radau5: index-2 contributions are multiplied by `h`,
+    ///   and index-3 contributions by `h^2`.
+    pub nind1: Option<usize>,
+    /// Number of algebraic index-2 variables following the first block.
+    pub nind2: Option<usize>,
+    /// Number of algebraic index-3 variables following the first two blocks.
+    pub nind3: Option<usize>,
+    /// Preferred storage for the user-supplied Jacobian `jac(x,y,J)`.
+    /// Default: `MatrixStorage::Full` (dense writable)
+    #[builder(default = MatrixStorage::Full)]
+    pub jac_storage: MatrixStorage,
+    /// Preferred storage for the user-supplied mass matrix `mass(M)`.
+    /// Default: `MatrixStorage::Identity` (implicit identity)
+    #[builder(default = MatrixStorage::Identity)]
+    pub mass_storage: MatrixStorage,
 }
 
 /// Tolerance enum to allow scalar or vector tolerances
@@ -66,13 +100,22 @@ impl From<Vec<Float>> for Tolerance {
     }
 }
 
-impl std::ops::Index<usize> for Tolerance {
+impl Index<usize> for Tolerance {
     type Output = Float;
 
     fn index(&self, index: usize) -> &Self::Output {
         match self {
             Tolerance::Scalar(v) => v,
             Tolerance::Vector(vs) => &vs[index],
+        }
+    }
+}
+
+impl IndexMut<usize> for Tolerance {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        match self {
+            Tolerance::Scalar(v) => v,
+            Tolerance::Vector(vs) => &mut vs[index],
         }
     }
 }

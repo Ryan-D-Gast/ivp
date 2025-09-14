@@ -18,6 +18,8 @@ where
     tol: Float,
     t: Vec<Float>,
     y: Vec<Vec<Float>>,
+    t_events: Vec<Float>,
+    y_events: Vec<Vec<Float>>,
     // Dense output collection
     collect_dense: bool,
     dense_segs: Vec<(Vec<Float>, Float, Float)>, // (cont, xold, h)
@@ -43,6 +45,8 @@ where
             tol: 1e-12,
             t: Vec::new(),
             y: Vec::new(),
+            t_events: Vec::new(),
+            y_events: Vec::new(),
             collect_dense,
             dense_segs: Vec::new(),
             event_config: EventConfig::new(),
@@ -52,8 +56,8 @@ where
         }
     }
 
-    pub fn into_payload(self) -> (Vec<Float>, Vec<Vec<Float>>, Vec<(Vec<Float>, Float, Float)>) {
-        (self.t, self.y, self.dense_segs)
+    pub fn into_payload(self) -> (Vec<Float>, Vec<Vec<Float>>, Vec<Float>, Vec<Vec<Float>>, Vec<(Vec<Float>, Float, Float)>) {
+        (self.t, self.y, self.t_events, self.y_events, self.dense_segs)
     }
 }
 
@@ -92,11 +96,11 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
 
                 // Snap to an endpoint if it's already within tolerance
                 if g_left.abs() <= self.tol {
-                    self.t.push(a);
-                    self.y.push(self.yold.clone());
+                    self.t_events.push(a);
+                    self.y_events.push(self.yold.clone());
                 } else if g_right.abs() <= self.tol {
-                    self.t.push(b);
-                    self.y.push(y.to_vec());
+                    self.t_events.push(b);
+                    self.y_events.push(y.to_vec());
                 } else {
                     for _ in 0..100 {
                         if (b - a).abs() <= self.tol {
@@ -131,8 +135,8 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
                     // Record event time and state at b
                     let mut y_at_b = vec![0.0; y.len()];
                     interpolator.interpolate(b, &mut y_at_b);
-                    self.t.push(b);
-                    self.y.push(y_at_b);
+                    self.t_events.push(b);
+                    self.y_events.push(y_at_b);
                 }
 
                 // Count the event and check for termination
@@ -155,8 +159,10 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
         // Update yold for next step
         self.yold = y.to_vec();
 
-        // Optionally collect dense coefficients for this accepted step
-        if self.collect_dense {
+        // Optionally collect dense coefficients for this accepted step.
+        // Skip the very first callback where x == xold (no actual step),
+        // as some methods haven't initialized dense coefficients yet.
+        if self.collect_dense && x != xold {
             let (cont, cxold, h) = interpolator.get_cont();
             // Skip degenerate segments
             if h != 0.0 {
@@ -164,25 +170,23 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
             }
         }
         // If t_eval is provided, interpolate and store values within (xold, x]
-        if let Some(te) = self.t_eval.as_ref() {
-            // Handle the initial call (xold == x) -> only include exact match
+        if let Some(t_eval) = self.t_eval.as_ref() {
+            // Handle the initial call (xold == x) -> push provided y directly
             let mut i = self.next_idx;
             if (xold - x).abs() <= self.tol {
-                while i < te.len() && (te[i] - x).abs() <= self.tol {
-                    let mut yi = vec![0.0; y.len()];
-                    interpolator.interpolate(te[i], &mut yi);
-                    self.t.push(te[i]);
-                    self.y.push(yi);
+                while i < t_eval.len() && (t_eval[i] - x).abs() <= self.tol {
+                    self.t.push(t_eval[i]);
+                    self.y.push(y.to_vec());
                     i += 1;
                 }
             } else {
                 // Regular accepted step
-                // Include all te[i] in (xold, x] up to tolerance
-                while i < te.len() && te[i] <= x + self.tol {
-                    if te[i] >= xold - self.tol {
+                // Include all t_eval[i] in (xold, x] up to tolerance
+                while i < t_eval.len() && t_eval[i] <= x + self.tol {
+                    if t_eval[i] >= xold - self.tol {
                         let mut yi = vec![0.0; y.len()];
-                        interpolator.interpolate(te[i], &mut yi);
-                        self.t.push(te[i]);
+                        interpolator.interpolate(t_eval[i], &mut yi);
+                        self.t.push(t_eval[i]);
                         self.y.push(yi);
                     }
                     i += 1;

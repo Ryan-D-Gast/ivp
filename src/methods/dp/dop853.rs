@@ -33,7 +33,7 @@ use crate::{
 };
 
 /// Explicit Runge-Kutta method of order 8(5,3) due to
-/// dormand & prince (with stepsize control and dense output).
+/// Dormand & Prince (with stepsize control and dense output).
 pub fn dop853<F, S>(
     f: &F,
     mut x: Float,
@@ -565,6 +565,9 @@ where
         h,
         status,
         nfev,
+        njev: 0,
+        nsol: 0,
+        ndec: 0,
         nstep,
         naccpt,
         nrejct,

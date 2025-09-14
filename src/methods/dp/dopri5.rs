@@ -33,7 +33,7 @@ use crate::{
 };
 
 /// Explicit Runge-Kutta method of order 5(4) due to
-/// dormand & prince (with stepsize control and dense output).
+/// Dormand & Prince (with stepsize control and dense output).
 pub fn dopri5<F, S>(
     f: &F,
     mut x: Float,
@@ -373,6 +373,9 @@ where
         h,
         status,
         nfev,
+        njev: 0,
+        nsol: 0,
+        ndec: 0,
         nstep,
         naccpt,
         nrejct,

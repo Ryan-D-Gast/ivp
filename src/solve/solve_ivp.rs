@@ -5,6 +5,7 @@ use crate::{
     error::Error,
     methods::{
         dp::{dop853, dopri5},
+        radau::radau5,
         rk::{rk4, rk23},
         settings::Settings,
     },
@@ -116,6 +117,11 @@ where
         .maybe_h0(options.first_step)
         .maybe_hmax(options.max_step)
         .maybe_hmin(options.min_step)
+        .maybe_nind1(options.nind1)
+        .maybe_nind2(options.nind2)
+        .maybe_nind3(options.nind3)
+        .jac_storage(options.jac_storage)
+        .mass_storage(options.mass_storage)
         .build();
 
     // Prepare the default SolOut (wrapping user callback if provided)
@@ -157,11 +163,21 @@ where
             Some(&mut default_solout),
             settings,
         ),
+        Method::Radau5 => radau5(
+            f,
+            x0,
+            xend,
+            y0,
+            options.rtol,
+            options.atol,
+            Some(&mut default_solout),
+            settings,
+        ),
     };
 
     match result {
         Ok(sol) => {
-            let (t, y, dense_raw) = default_solout.into_payload();
+            let (t, y, t_events, y_events, dense_raw) = default_solout.into_payload();
             let continuous_sol = if options.dense_output {
                 Some(ContinuousOutput::from_segments(options.method, dense_raw))
             } else {
@@ -170,7 +186,11 @@ where
             Ok(Solution {
                 t,
                 y,
+                t_events,
+                y_events,
                 nfev: sol.nfev,
+                njev: sol.njev,
+                nlu: sol.ndec,
                 nstep: sol.nstep,
                 naccpt: sol.naccpt,
                 nrejct: sol.nrejct,

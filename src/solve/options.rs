@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, methods::settings::Tolerance};
+use crate::{Float, methods::settings::Tolerance, matrix::MatrixStorage};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
@@ -15,6 +15,8 @@ pub enum Method {
     DOP853,
     /// Classic fixed-step RK4
     RK4,
+    /// Radau 5th order implicit Runge-Kutta method
+    Radau5,
 }
 
 impl From<&str> for Method {
@@ -24,36 +26,62 @@ impl From<&str> for Method {
             "DOPRI5" | "RK45" => Method::DOPRI5,
             "DOP853" => Method::DOP853,
             "RK4" => Method::RK4,
+            "RADAU5" | "RADAU" => Method::Radau5,
             _ => Method::DOPRI5, // Default
         }
     }
 }
 
 #[derive(Builder)]
-/// Options for solve_ivp similar to SciPy
+/// Options for `solve_ivp`.
 pub struct Options {
-    /// Method to use. Default: DOPRI5.
+    /// Integration method. Choose an explicit RK (RK23/DOPRI5/DOP853/RK4) for non‑stiff
+    /// problems or an implicit RK (Radau5) for stiff/DAE systems. Default: DOPRI5 (aka RK45).
     #[builder(default = Method::DOPRI5, into)]
     pub method: Method,
-    /// Relative tolerance for error estimation.
+    /// Relative tolerance for local error control. Accepts scalar or per‑component array/vector
+    /// via `Tolerance`. The effective scaling for component i is `atol[i] + rtol[i]*|y[i]|`.
     #[builder(default = 1e-3, into)]
     pub rtol: Tolerance,
-    /// Absolute tolerance for error estimation.
+    /// Absolute tolerance for local error control. Accepts scalar or per‑component array/vector.
+    /// Used together with `rtol` to build the error scale `atol + rtol*|y|`.
     #[builder(default = 1e-6, into)]
     pub atol: Tolerance,
-    /// Maximum number of allowed steps.
+    /// Maximum number of solver steps (safety cap to avoid very long runs on hard problems).
     pub nmax: Option<usize>,
-    // Optional time points at which to store the computed solution.
+    /// Times at which to return the solution. Integration remains adaptive internally.
+    /// When set, per‑step internal samples are not stored; use `dense_output=true` for
+    /// efficient post‑run interpolation at arbitrary times.
     pub t_eval: Option<Vec<Float>>,
-    /// Convenience alias for the initial step suggestion (maps to `settings.h0`).
+    /// Initial step size hint. The solver adjusts this if it is too large/small.
     pub first_step: Option<Float>,
-    /// Convenience alias for maximum step size (maps to `settings.hmax`).
+    /// Hard cap on step size. Useful to force sampling resolution or limit jumps.
     pub max_step: Option<Float>,
-    /// Minimum step size constraint (maps to `settings.hmin`).
+    /// Hard lower bound on step size. If the solver needs a smaller step, it stops with
+    /// a "step size too small" status.
     pub min_step: Option<Float>,
-    /// If true, collect dense output coefficients for per-step interpolation.
-    /// When enabled, the solver returns a `dense_output` object that can
-    /// evaluate the solution at arbitrary times inside the integration range.
+    /// Store per‑step interpolants for cheap post‑run evaluation via `Solution::sol`/`sol_many`.
+    /// Increases memory usage; recommended if you need values at times other than internal steps.
     #[builder(default = false)]
     pub dense_output: bool,
+    /// Preferred storage for the Jacobian `J = ∂f/∂y`. Default: `Full` (dense, writable).
+    /// Solvers that don’t use a Jacobian ignore this. For banded storage you must provide
+    /// an analytical Jacobian consistent with the chosen layout.
+    #[builder(default = MatrixStorage::Full)]
+    pub jac_storage: MatrixStorage,
+    /// Preferred storage for the mass matrix `M` in `M y' = f(t,y)`. Default: `Identity`
+    /// (implicit I, no allocation). Set to `Full`/`Banded` to provide a non‑trivial mass matrix.
+    #[builder(default = MatrixStorage::Identity)]
+    pub mass_storage: MatrixStorage,
+    /// DAE partition: number of index‑1 (differential) variables at the start of the state.
+    /// If `nind2`/`nind3` are set and `nind1` is omitted, it is inferred as `n − nind2 − nind3`.
+    /// If none are set, all variables are treated as index‑1 (pure ODE).
+    pub nind1: Option<usize>,
+    /// DAE partition: number of index‑2 algebraic variables following the index‑1 block.
+    /// In Radau5 error estimation these components are scaled by the current step size `h`.
+    pub nind2: Option<usize>,
+    /// DAE partition: number of index‑3 algebraic variables following the index‑2 block.
+    /// In Radau5 error estimation these components are scaled by `h^2`.
+    pub nind3: Option<usize>,
 }
+

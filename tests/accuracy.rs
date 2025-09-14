@@ -4,7 +4,7 @@ mod common;
 use common::{SHO, default_opts};
 
 fn methods() -> Vec<Method> {
-    vec![Method::RK4, Method::RK23, Method::DOPRI5, Method::DOP853]
+    vec![Method::RK4, Method::RK23, Method::DOPRI5, Method::DOP853, Method::Radau5]
 }
 
 #[test]

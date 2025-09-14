@@ -61,7 +61,7 @@ fn main() {
     let t0 = 0.0;
     let y0 = [0.5, 0.1, 0.0, 0.0, 1.2, 0.0]; // Initial state vector
     let tf = 10.0; // Integrate over 10 time units
-    let t_eval = Vec::new(); // This will allow only event steps to be recorded
+    let t_eval = (0..10).map(|i| i as f64 * 1.0).collect();
     let options = Options::builder()
         .method(Method::DOP853)
         .rtol(1e-6)
@@ -77,7 +77,13 @@ fn main() {
             println!("Number of accepted steps: {}", sol.naccpt);
             println!("Number of rejected steps: {}", sol.nrejct);
 
+            println!("t and y at t_eval:");
             for (ti, yi) in sol.iter() {
+                println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
+            }
+
+            println!("t and y at events:");
+            for (ti, yi) in sol.events() {
                 println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
             }
         }
