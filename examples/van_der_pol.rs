@@ -42,9 +42,6 @@ fn main() {
                 println!("Final State: x = {:.5}, y = {:?}", t_last, y_last);
             }
             println!("Number of function evaluations: {}", sol.nfev);
-            println!("Number of Jacobian evaluations: {}", sol.njev);
-            println!("Number of linear solves: {}", sol.nsol);
-            println!("Number of LU decompositions: {}", sol.ndec);
             println!("Number of steps taken: {}", sol.nstep);
             println!("Number of accepted steps: {}", sol.naccpt);
             println!("Number of rejected steps: {}", sol.nrejct);
