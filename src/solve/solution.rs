@@ -7,6 +7,8 @@ use crate::{Float, error::Error, solve::cont::ContinuousOutput, status::Status};
 pub struct Solution {
     pub t: Vec<Float>,
     pub y: Vec<Vec<Float>>,
+    pub t_events: Vec<Float>,
+    pub y_events: Vec<Vec<Float>>,
     pub nfev: usize,
     pub njev: usize,
     pub nsol: usize,
@@ -62,6 +64,14 @@ impl Solution {
         SolutionIter {
             t_iter: self.t.iter(),
             y_iter: self.y.iter(),
+        }
+    }
+
+    /// Iterate over stored event pairs (t_event, y_event).
+    pub fn events(&self) -> SolutionIter<'_> {
+        SolutionIter {
+            t_iter: self.t_events.iter(),
+            y_iter: self.y_events.iter(),
         }
     }
 }

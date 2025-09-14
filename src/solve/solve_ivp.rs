@@ -177,7 +177,7 @@ where
 
     match result {
         Ok(sol) => {
-            let (t, y, dense_raw) = default_solout.into_payload();
+            let (t, y, t_events, y_events, dense_raw) = default_solout.into_payload();
             let continuous_sol = if options.dense_output {
                 Some(ContinuousOutput::from_segments(options.method, dense_raw))
             } else {
@@ -186,6 +186,8 @@ where
             Ok(Solution {
                 t,
                 y,
+                t_events,
+                y_events,
                 nfev: sol.nfev,
                 njev: sol.njev,
                 nsol: sol.nsol,

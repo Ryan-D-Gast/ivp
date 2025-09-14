@@ -178,7 +178,7 @@ fn event_detection_all_and_directional() {
 	// All crossings, stop after 2 -> expect near pi/2 and 3pi/2, terminates at latter
 	let f_all = ShoZeroEventAll;
 	let sol_all = solve_ivp(&f_all, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
-	let zeros = find_near_zero_times(&sol_all.t, &sol_all.y, 1e-8);
+	let zeros = find_near_zero_times(&sol_all.t_events, &sol_all.y_events, 1e-8);
 	// Expect at least two event samples recorded
 	assert!(zeros.len() >= 2, "expected at least two zero-crossings recorded");
 	let pi_over_2 = std::f64::consts::FRAC_PI_2;
@@ -191,7 +191,7 @@ fn event_detection_all_and_directional() {
 	// Positive-going only -> expect ~3pi/2
 	let f_pos = ShoZeroEventPositive;
 	let sol_pos = solve_ivp(&f_pos, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
-	let zeros_pos = find_near_zero_times(&sol_pos.t, &sol_pos.y, 1e-8);
+	let zeros_pos = find_near_zero_times(&sol_pos.t_events, &sol_pos.y_events, 1e-8);
 	assert!(!zeros_pos.is_empty());
 	let z = zeros_pos[0];
 	assert!((z - three_pi_over_2).abs() < 5e-3, "positive crossing near 3pi/2, got {}", z);
@@ -199,7 +199,7 @@ fn event_detection_all_and_directional() {
 	// Negative-going only -> expect ~pi/2
 	let f_neg = ShoZeroEventNegative;
 	let sol_neg = solve_ivp(&f_neg, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
-	let zeros_neg = find_near_zero_times(&sol_neg.t, &sol_neg.y, 1e-8);
+	let zeros_neg = find_near_zero_times(&sol_neg.t_events, &sol_neg.y_events, 1e-8);
 	assert!(!zeros_neg.is_empty());
 	let z = zeros_neg[0];
 	assert!((z - pi_over_2).abs() < 5e-3, "negative crossing near pi/2, got {}", z);

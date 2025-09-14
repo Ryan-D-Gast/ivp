@@ -15,9 +15,9 @@ pub struct IntegrationResult {
     pub nfev: usize,
     /// The number of Jacobian evaluations
     pub njev: usize,
-    /// The number of linear system solutions
+    /// The number of linear system (Ax = b)
     pub nsol: usize,
-    /// The number of decompositions
+    /// The number of LU decompositions
     pub ndec: usize,
     /// The number of steps taken
     pub nstep: usize,
