@@ -161,8 +161,8 @@ fn main() {
     match solve_ivp(&model, x0, xend, &y0, options) {
         Ok(sol) => {
             println!("Finished status: {:?}", sol.status);
-            println!("nfev={}, njev={}, ndec={}, nsol={}, nstep={}, naccpt={}, nrejct={}",
-                     sol.nfev, sol.njev, sol.ndec, sol.nsol, sol.nstep, sol.naccpt, sol.nrejct);
+            println!("nfev={}, njev={}, nlu={}, nstep={}, naccpt={}, nrejct={}",
+                     sol.nfev, sol.njev, sol.nlu, sol.nstep, sol.naccpt, sol.nrejct);
             println!("{:<10}  {:>20}  {:>20}", "t", "y[0]", "y[1]");
             for (t, y) in sol.iter() {
                 println!("{t:10.5}  {y0:>20.10e}  {y1:>20.10e}", y0=y[0], y1=y[1]);
