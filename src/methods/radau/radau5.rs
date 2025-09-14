@@ -194,7 +194,7 @@ where
     let mut ndec: usize = 0;
 
     // Status
-    let mut status = Status::Success;
+    let status;
     let mut singular_count = 0;
 
     // Step-size control
@@ -451,7 +451,6 @@ where
                         let exponent = -1.0 / (4.0 + remaining_iters);
                         hhfac = 0.8 * qnewt.powf(exponent);
                         h *= hhfac;
-                        status = Status::PoorConvergence;
                         nrejct += 1;
                         last = false;
                         break 'newton;
@@ -615,6 +614,7 @@ where
 
             if last {
                 h = hnew;
+                status = Status::Success;
                 break 'main;
             }
 
