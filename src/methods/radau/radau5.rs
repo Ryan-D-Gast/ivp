@@ -184,7 +184,6 @@ where
     let mut ip1 = vec![0; n];
     let mut ip2 = vec![0; n];
 
-    // --- Bookkeeping & control ---
     // Counters
     let mut nstep: usize = 0;
     let mut naccpt: usize = 0;
@@ -230,6 +229,8 @@ where
     let mut call_jac = true;
     let mut call_decomp = true;
 
+    // --- Initializations ---
+
     // Initial mass matrix
     f.mass(&mut mass);
 
@@ -238,7 +239,7 @@ where
         scal[i] = atol[i] + rtol[i] * y[i].abs();
     }
 
-    // --- Main loop ---
+    // --- Main integration loop ---
     'main: loop {
         if call_jac {
             // Jacobian and mass at (x, y)
