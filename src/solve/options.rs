@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, methods::settings::Tolerance, matrix::MatrixStorage};
+use crate::{Float, matrix::MatrixStorage, methods::settings::Tolerance};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
@@ -84,4 +84,3 @@ pub struct Options {
     /// In Radau5 error estimation these components are scaled by `h^2`.
     pub nind3: Option<usize>,
 }
-

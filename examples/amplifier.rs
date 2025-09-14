@@ -8,9 +8,9 @@ use std::f64::consts::PI;
 
 struct Amplifier {
     // Circuit parameters
-    ue: f64,   // input amplitude
-    ub: f64,   // supply voltage
-    uf: f64,   // thermal voltage
+    ue: f64, // input amplitude
+    ub: f64, // supply voltage
+    uf: f64, // thermal voltage
     alpha: f64,
     beta: f64,
     // Resistors
@@ -109,22 +109,22 @@ impl ODE for Amplifier {
 
     fn mass(&self, m: &mut Matrix) {
         // Diagonal
-        m[(0,0)] = -self.c5;
-        m[(1,1)] = -self.c5;
-        m[(2,2)] = -self.c4;
-        m[(3,3)] = -self.c3;
-        m[(4,4)] = -self.c3;
-        m[(5,5)] = -self.c2;
-        m[(6,6)] = -self.c1;
-        m[(7,7)] = -self.c1;
+        m[(0, 0)] = -self.c5;
+        m[(1, 1)] = -self.c5;
+        m[(2, 2)] = -self.c4;
+        m[(3, 3)] = -self.c3;
+        m[(4, 4)] = -self.c3;
+        m[(5, 5)] = -self.c2;
+        m[(6, 6)] = -self.c1;
+        m[(7, 7)] = -self.c1;
         // Super-diagonal
-        m[(0,1)] = self.c5;
-        m[(3,4)] = self.c3;
-        m[(6,7)] = self.c1;
+        m[(0, 1)] = self.c5;
+        m[(3, 4)] = self.c3;
+        m[(6, 7)] = self.c1;
         // Sub-diagonal
-        m[(1,0)] = self.c5;
-        m[(4,3)] = self.c3;
-        m[(7,6)] = self.c1;
+        m[(1, 0)] = self.c5;
+        m[(4, 3)] = self.c3;
+        m[(7, 6)] = self.c1;
     }
 }
 
@@ -161,11 +161,13 @@ fn main() {
     match solve_ivp(&model, x0, xend, &y0, options) {
         Ok(sol) => {
             println!("Finished status: {:?}", sol.status);
-            println!("nfev={}, njev={}, nlu={}, nstep={}, naccpt={}, nrejct={}",
-                     sol.nfev, sol.njev, sol.nlu, sol.nstep, sol.naccpt, sol.nrejct);
+            println!(
+                "nfev={}, njev={}, nlu={}, nstep={}, naccpt={}, nrejct={}",
+                sol.nfev, sol.njev, sol.nlu, sol.nstep, sol.naccpt, sol.nrejct
+            );
             println!("{:<10}  {:>20}  {:>20}", "t", "y[0]", "y[1]");
             for (t, y) in sol.iter() {
-                println!("{t:10.5}  {y0:>20.10e}  {y1:>20.10e}", y0=y[0], y1=y[1]);
+                println!("{t:10.5}  {y0:>20.10e}  {y1:>20.10e}", y0 = y[0], y1 = y[1]);
             }
         }
         Err(e) => eprintln!("solve_ivp failed: {:?}", e),

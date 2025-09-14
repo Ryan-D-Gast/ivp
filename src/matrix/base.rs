@@ -64,7 +64,12 @@ impl Matrix {
             MatrixStorage::Full => vec![0.0; n * m],
             MatrixStorage::Banded { ml, mu } => vec![0.0; (ml + mu + 1) * n],
         };
-        Matrix { n, m, data, storage }
+        Matrix {
+            n,
+            m,
+            data,
+            storage,
+        }
     }
 
     /// Full matrix from a row-major vector of length n*m.
@@ -115,7 +120,12 @@ impl Matrix {
     pub fn diagonal(diag: Vec<Float>) -> Self {
         let n = diag.len();
         // With ml=mu=0, storage is (1,n), so `diag` maps directly to row 0.
-        Matrix { n, m: n, data: diag, storage: MatrixStorage::Banded { ml: 0, mu: 0 } }
+        Matrix {
+            n,
+            m: n,
+            data: diag,
+            storage: MatrixStorage::Banded { ml: 0, mu: 0 },
+        }
     }
 
     /// Zero lower-triangular matrix (ml = n-1, mu = 0).
@@ -142,8 +152,12 @@ impl Matrix {
                     for j in 0..self.m {
                         let val = self[(i, j)];
                         if i == j {
-                            if val != 1.0 { return false; }
-                        } else if val != 0.0 { return false; }
+                            if val != 1.0 {
+                                return false;
+                            }
+                        } else if val != 0.0 {
+                            return false;
+                        }
                     }
                 }
                 true

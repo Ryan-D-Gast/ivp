@@ -92,7 +92,12 @@ impl std::fmt::Display for Error {
                     rows, cols
                 )
             }
-            Error::InvalidDAEPartition { n, nind1, nind2, nind3 } => {
+            Error::InvalidDAEPartition {
+                n,
+                nind1,
+                nind2,
+                nind3,
+            } => {
                 write!(
                     f,
                     "invalid DAE partition: n={}, nind1={}, nind2={}, nind3={} (must sum to n and be ordered)",

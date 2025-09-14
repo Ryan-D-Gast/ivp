@@ -23,10 +23,7 @@ impl Matrix {
                     n,
                     m: n,
                     data,
-                    storage: MatrixStorage::Banded {
-                        ml: *ml,
-                        mu: *mu,
-                    },
+                    storage: MatrixStorage::Banded { ml: *ml, mu: *mu },
                 }
             }
         }
@@ -40,10 +37,7 @@ impl Matrix {
                 // Become diagonal with rhs on the main diagonal
                 let n = self.n;
                 self.data = vec![rhs; n];
-                self.storage = MatrixStorage::Banded {
-                    ml: 0,
-                    mu: 0,
-                };
+                self.storage = MatrixStorage::Banded { ml: 0, mu: 0 };
             }
             MatrixStorage::Full => {
                 for v in &mut self.data {

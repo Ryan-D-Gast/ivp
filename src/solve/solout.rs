@@ -56,8 +56,22 @@ where
         }
     }
 
-    pub fn into_payload(self) -> (Vec<Float>, Vec<Vec<Float>>, Vec<Float>, Vec<Vec<Float>>, Vec<(Vec<Float>, Float, Float)>) {
-        (self.t, self.y, self.t_events, self.y_events, self.dense_segs)
+    pub fn into_payload(
+        self,
+    ) -> (
+        Vec<Float>,
+        Vec<Vec<Float>>,
+        Vec<Float>,
+        Vec<Vec<Float>>,
+        Vec<(Vec<Float>, Float, Float)>,
+    ) {
+        (
+            self.t,
+            self.y,
+            self.t_events,
+            self.y_events,
+            self.dense_segs,
+        )
     }
 }
 

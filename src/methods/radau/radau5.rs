@@ -117,14 +117,24 @@ where
     } else if settings.nind1.is_none() {
         // Infer nind1 so that counts sum to n
         if nind2 + nind3 > n {
-            errors.push(Error::InvalidDAEPartition { n, nind1, nind2, nind3 });
+            errors.push(Error::InvalidDAEPartition {
+                n,
+                nind1,
+                nind2,
+                nind3,
+            });
         } else {
             nind1 = n - nind2 - nind3;
         }
     } else {
         // Validate explicit sums
         if nind1 + nind2 + nind3 != n {
-            errors.push(Error::InvalidDAEPartition { n, nind1, nind2, nind3 });
+            errors.push(Error::InvalidDAEPartition {
+                n,
+                nind1,
+                nind2,
+                nind3,
+            });
         }
     }
 
@@ -340,9 +350,9 @@ where
                 let ak2 = cont[2 * n + i];
                 let ak3 = cont[3 * n + i];
 
-                z1[i] = c1q*(ak1+(c1q-C2M1)*(ak2+(c1q-C1M1)*ak3));
-                z2[i] = c2q*(ak1+(c2q-C2M1)*(ak2+(c2q-C1M1)*ak3));
-                z3[i] = c3q*(ak1+(c3q-C2M1)*(ak2+(c3q-C1M1)*ak3));
+                z1[i] = c1q * (ak1 + (c1q - C2M1) * (ak2 + (c1q - C1M1) * ak3));
+                z2[i] = c2q * (ak1 + (c2q - C2M1) * (ak2 + (c2q - C1M1) * ak3));
+                z3[i] = c3q * (ak1 + (c3q - C2M1) * (ak2 + (c3q - C1M1) * ak3));
 
                 f1[i] = z1[i] * TI00 + z2[i] * TI01 + z3[i] * TI02;
                 f2[i] = z1[i] * TI10 + z2[i] * TI11 + z3[i] * TI12;
@@ -636,7 +646,7 @@ where
             }
 
             // Sophisticated step size control
-            if (x + hnew/quot1 - xend) * posneg >= 0.0 {
+            if (x + hnew / quot1 - xend) * posneg >= 0.0 {
                 h = xend - x;
                 last = true;
             } else {
@@ -732,7 +742,7 @@ const U1: Float = 3.637_834_252_744_496;
 const ALPH: Float = 2.681_082_873_627_752_3;
 const BETA: Float = 3.050_430_199_247_410_5;
 
-// Transformation matrix 
+// Transformation matrix
 const T00: Float = 9.123_239_487_089_295E-2;
 const T01: Float = -1.412_552_950_209_542E-1;
 const T02: Float = -3.002_919_410_514_742_4E-2;

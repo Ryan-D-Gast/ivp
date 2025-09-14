@@ -1,10 +1,9 @@
 //! Settings for numerical integrators
 
-use std::ops::{Index, IndexMut};
 use bon::Builder;
+use std::ops::{Index, IndexMut};
 
 use crate::{Float, matrix::MatrixStorage};
-
 
 #[derive(Builder)]
 /// Settings for the numerical integrators

@@ -254,4 +254,3 @@ mod tests {
         assert!((bi[0] - (-1.0)).abs() < 1e-10);
     }
 }
-
