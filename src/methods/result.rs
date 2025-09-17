@@ -67,4 +67,9 @@ impl IntegrationResult {
             steps,
         }
     }
+
+    /// Returns `true` if the integration was successful.
+    pub fn is_success(&self) -> bool {
+        matches!(self.status, Status::Success)
+    }
 }
