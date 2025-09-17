@@ -131,48 +131,25 @@ where
     let result = match options.method {
         Method::RK4 => {
             let h = settings.h0.unwrap_or_else(|| (xend - x0) / 100.0);
-            rk4(f, x0, xend, y0, h, Some(&mut default_solout), settings)
+            let mut y = y0.to_vec();
+            rk4(f, x0, xend, &mut y, h, Some(&mut default_solout), settings)
         }
-        Method::RK23 => rk23(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
-        Method::DOPRI5 => dopri5(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
-        Method::DOP853 => dop853(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
-        Method::Radau5 => radau5(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
+        Method::RK23 => {
+            let mut y = y0.to_vec();
+            rk23(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+        }
+        Method::DOPRI5 => {
+            let mut y = y0.to_vec();
+            dopri5(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+        }
+        Method::DOP853 => {
+            let mut y = y0.to_vec();
+            dop853(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+        }
+        Method::Radau5 => {
+            let mut y = y0.to_vec();
+            radau5(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+        }
     };
 
     match result {
@@ -188,12 +165,12 @@ where
                 y,
                 t_events,
                 y_events,
-                nfev: sol.nfev,
-                njev: sol.njev,
-                nlu: sol.ndec,
-                nstep: sol.nstep,
-                naccpt: sol.naccpt,
-                nrejct: sol.nrejct,
+                nfev: sol.evals.ode,
+                njev: sol.evals.jac,
+                nlu: sol.evals.lu,
+                nstep: sol.steps.total,
+                naccpt: sol.steps.accepted,
+                nrejct: sol.steps.rejected,
                 status: sol.status,
                 continuous_sol,
             })

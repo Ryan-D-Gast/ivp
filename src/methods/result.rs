@@ -2,59 +2,69 @@
 
 use crate::{Float, status::Status};
 
+#[derive(Clone, Debug)]
+/// The calculation statistics of a numerical integrator
+pub struct Evals {
+    /// The number of ODE function evaluations
+    pub ode: usize,
+    /// The number of Jacobian evaluations
+    pub jac: usize,
+    /// The number of LU decompositions
+    pub lu: usize,
+}
+
+impl Evals {
+    pub fn new() -> Self {
+        Self { ode: 0, jac: 0, lu: 0 }
+    }
+}
+
+/// The step statistics of a numerical integrator
+#[derive(Clone, Debug)]
+pub struct Steps {
+    /// Total number of steps taken
+    pub total: usize,
+    /// The number of accepted steps
+    pub accepted: usize,
+    /// The number of rejected steps
+    pub rejected: usize,
+}
+
+impl Steps {
+    pub fn new() -> Self {
+        Self { total: 0, accepted: 0, rejected: 0 }
+    }
+}
+
 /// The output of a numerical integrator
 #[derive(Clone, Debug)]
 pub struct IntegrationResult {
     /// The final value of the independent variable
     pub x: Float,
-    /// The final value(s) of the dependent variable(s)
-    pub y: Vec<Float>,
     /// The step size of the next integration step
     pub h: Float,
-    /// The number of function evaluations
-    pub nfev: usize,
-    /// The number of Jacobian evaluations
-    pub njev: usize,
-    /// The number of linear system (Ax = b)
-    pub nsol: usize,
-    /// The number of LU decompositions
-    pub ndec: usize,
-    /// The number of steps taken
-    pub nstep: usize,
-    /// The number of accepted steps
-    pub naccpt: usize,
-    /// The number of rejected steps
-    pub nrejct: usize,
-    /// The status of the integration process
+    /// Status of the integration
     pub status: Status,
+    /// The evaluation statistics
+    pub evals: Evals,
+    /// The step statistics
+    pub steps: Steps,
 }
 
 impl IntegrationResult {
     pub fn new(
         x: Float,
-        y: Vec<Float>,
         h: Float,
-        nfev: usize,
-        njev: usize,
-        nsol: usize,
-        ndec: usize,
-        nstep: usize,
-        naccpt: usize,
-        nrejct: usize,
         status: Status,
+        evals: Evals,
+        steps: Steps,
     ) -> Self {
         Self {
             x,
-            y,
             h,
-            nfev,
-            njev,
-            nsol,
-            ndec,
-            nstep,
-            naccpt,
-            nrejct,
             status,
+            evals,
+            steps,
         }
     }
 }

@@ -24,7 +24,7 @@ use crate::{
     interpolate::Interpolate,
     methods::{
         hinit::hinit,
-        result::IntegrationResult,
+        result::{IntegrationResult, Evals, Steps},
         settings::{Settings, Tolerance},
     },
     ode::ODE,
@@ -38,7 +38,7 @@ pub fn dopri5<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
-    y: &[Float],
+    y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
     mut solout: Option<&mut S>,
@@ -128,7 +128,6 @@ where
 
     // --- Declarations ---
     let n = y.len();
-    let mut y = y.to_vec();
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
@@ -147,10 +146,8 @@ where
     let mut fac;
     let mut hnew;
     let mut xph;
-    let mut nfev: usize = 0;
-    let mut nstep: usize = 0;
-    let mut naccpt: usize = 0;
-    let mut nrejct: usize = 0;
+    let mut evals = Evals::new();
+    let mut steps = Steps::new();
     let mut xold;
     let status;
     let expo1 = 0.2 - beta * 0.75;
@@ -158,11 +155,11 @@ where
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
-    nfev += 1;
+    evals.ode += 1;
     let mut h = match settings.h0 {
         Some(h0) => h0,
         None => {
-            nfev += 1;
+            evals.ode += 1;
             hinit(
                 f, x, &y, posneg, &k1, &mut k2, &mut y1, 5, hmax, &atol, &rtol,
             )
@@ -176,7 +173,7 @@ where
     // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
-        if nstep > nmax {
+        if steps.total > nmax {
             status = Status::NeedLargerNmax;
             break;
         }
@@ -193,7 +190,7 @@ where
             last = true;
         }
 
-        nstep += 1;
+        steps.total += 1;
 
         // Stage 2
         for i in 0..n {
@@ -233,7 +230,7 @@ where
                 y[i] + h * (A71 * k1[i] + A73 * k3[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
         }
         f.ode(xph, &y1, &mut k2);
-        nfev += 6;
+        evals.ode += 6;
 
         // Prepare last segment of dense output before recalculating k4
         if solout.is_some() {
@@ -268,10 +265,10 @@ where
         if err <= 1.0 {
             // Step accepted
             facold = err.max(1.0e-4);
-            naccpt += 1;
+            steps.accepted += 1;
 
             // Stiffness detection
-            if (naccpt % nstiff == 0) || (iasti > 0) {
+            if (steps.accepted % nstiff == 0) || (iasti > 0) {
                 let mut stnum = 0.0_f64;
                 let mut stden = 0.0_f64;
                 for i in 0..n {
@@ -332,7 +329,7 @@ where
 
                         // Recompute k2 at new (x, y)
                         f.ode(x, &y, &mut k2);
-                        nfev += 1;
+                        evals.ode += 1;
                     }
                     ControlFlag::Continue => {}
                 }
@@ -359,27 +356,15 @@ where
             // Step rejected
             hnew = h / facc1.min(fac11 / safety_factor);
             reject = true;
-            if naccpt > 1 {
-                nrejct += 1;
+            if steps.accepted > 1 {
+                steps.rejected += 1;
             }
             last = false;
         }
         h = hnew;
     }
 
-    Ok(IntegrationResult {
-        x,
-        y: y.to_vec(),
-        h,
-        status,
-        nfev,
-        njev: 0,
-        nsol: 0,
-        ndec: 0,
-        nstep,
-        naccpt,
-        nrejct,
-    })
+    Ok(IntegrationResult::new(x, h, status, evals, steps))
 }
 
 /// Continuous output function for DOPRI5

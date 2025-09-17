@@ -24,7 +24,7 @@ use crate::{
     interpolate::Interpolate,
     methods::{
         hinit::hinit,
-        result::IntegrationResult,
+        result::{IntegrationResult, Evals, Steps},
         settings::{Settings, Tolerance},
     },
     ode::ODE,
@@ -38,7 +38,7 @@ pub fn dop853<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
-    y: &[Float],
+    y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
     mut solout: Option<&mut S>,
@@ -128,7 +128,6 @@ where
 
     // --- Declarations ---
     let n = y.len();
-    let mut y = y.to_vec();
     let mut y1 = vec![0.0; n];
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
@@ -156,10 +155,8 @@ where
     let mut xph;
     let mut last = false;
     let mut reject = false;
-    let mut nfev: usize = 0;
-    let mut nstep: usize = 0;
-    let mut naccpt: usize = 0;
-    let mut nrejct: usize = 0;
+    let mut evals = Evals::new();
+    let mut steps = Steps::new();
     let mut xold;
     let expo1 = 1.0 / 8.0 - beta * 0.2;
     let status;
@@ -167,11 +164,11 @@ where
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
-    nfev += 1;
+    evals.ode += 1;
     let mut h = match settings.h0 {
         Some(h0) => h0,
         None => {
-            nfev += 1;
+            evals.ode += 1;
             hinit(
                 f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, hmax, &atol, &rtol,
             )
@@ -185,7 +182,7 @@ where
     // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
-        if nstep > nmax {
+        if steps.total > nmax {
             status = Status::NeedLargerNmax;
             break;
         }
@@ -202,7 +199,7 @@ where
             last = true;
         }
 
-        nstep += 1;
+        steps.total += 1;
 
         // --- The twelve stages ---
         // Stage 2
@@ -301,7 +298,7 @@ where
                     + A1211 * k2[i]);
         }
         f.ode(xph, &y1, &mut k3);
-        nfev += 11;
+        evals.ode += 11;
 
         for i in 0..n {
             k4[i] = B1 * k1[i]
@@ -353,12 +350,12 @@ where
         if err <= 1.0 {
             // Step accepted
             facold = err.max(1.0e-4);
-            naccpt += 1;
+            steps.accepted += 1;
             f.ode(xph, &k5, &mut k4);
-            nfev += 1;
+            evals.ode += 1;
 
             // Stiffness detection
-            if (naccpt % nstiff == 0) || (iasti > 0) {
+            if (steps.accepted % nstiff == 0) || (iasti > 0) {
                 let mut stnum: Float = 0.0;
                 let mut stden: Float = 0.0;
                 for i in 0..n {
@@ -470,7 +467,7 @@ where
                             + A1615 * k2[i]);
                 }
                 f.ode(x + C16 * h, &y1, &mut k3);
-                nfev += 3;
+                evals.ode += 3;
 
                 // Add contributions of last three stages
                 for i in 0..n {
@@ -524,7 +521,7 @@ where
 
                         // Recompute k4 at new (x, y)
                         f.ode(x, &y, &mut k4);
-                        nfev += 1;
+                        evals.ode += 1;
                     }
                     ControlFlag::Continue => {}
                 }
@@ -551,27 +548,15 @@ where
             // Step rejected
             hnew = h / facc1.min(fac11 / safety_factor);
             reject = true;
-            if naccpt > 1 {
-                nrejct += 1;
+            if steps.accepted > 1 {
+                steps.rejected += 1;
             }
             last = false;
         }
         h = hnew;
     }
 
-    Ok(IntegrationResult {
-        x,
-        y,
-        h,
-        status,
-        nfev,
-        njev: 0,
-        nsol: 0,
-        ndec: 0,
-        nstep,
-        naccpt,
-        nrejct,
-    })
+    Ok(IntegrationResult::new(x, h, status, evals, steps))
 }
 
 /// Continuous output function for DOP853

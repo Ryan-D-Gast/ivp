@@ -10,7 +10,7 @@ use crate::{
     interpolate::Interpolate,
     matrix::{Matrix, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{
-        result::IntegrationResult,
+        result::{IntegrationResult, Evals, Steps},
         settings::{Settings, Tolerance},
     },
     ode::ODE,
@@ -23,7 +23,7 @@ pub fn radau5<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
-    y0: &[Float],
+    y: &mut [Float],
     mut rtol: Tolerance,
     mut atol: Tolerance,
     mut solout: Option<&mut S>,
@@ -80,7 +80,7 @@ where
 
     // Adjust tolerances
     let expm = 2.0 / 3.0;
-    let n = y0.len();
+    let n = y.len();
     for i in 0..n {
         let quot = atol[i] / rtol[i];
         rtol[i] = 0.1 * rtol[i].powf(expm);
@@ -135,44 +135,20 @@ where
         }
     }
 
-    if !errors.is_empty() {
-        return Err(errors);
-    }
-
-    // --- Initialization ---
-    let mut y = y0.to_vec();
-
-    // Jacobian and mass matrices with user-preferred storage
-    let mut jac = Matrix::from_storage(n, n, settings.jac_storage);
-    let mut mass = Matrix::from_storage(n, n, settings.mass_storage);
-
-    let posneg = (xend - x).signum();
-    let mut f0 = vec![0.0; n];
-    f.ode(x, &y, &mut f0);
-    let mut nfev: usize = 1;
-
     // Initial step size: use provided h0 or default to 1e-6 (signed)
+    let posneg = (xend - x).signum();
     let mut h = if let Some(h0) = settings.h0 {
         h0
     } else {
         1.0e-6 * posneg
     };
     if h == 0.0 || h.signum() != posneg && posneg != 0.0 {
-        return Err(vec![Error::InvalidStepSize(h)]);
+        errors.push(Error::InvalidStepSize(h));
     }
     h = h.clamp(-hmax, hmax);
 
-    // Dense output: [y_{n+1}, c1, c2, c3]
-    let mut cont = vec![0.0; n * 4];
-
-    // Initial callback (xold=x)
-    if let Some(s) = solout.as_mut() {
-        let interp = DenseRadau {
-            cont: &cont,
-            xold: x,
-            h,
-        };
-        s.solout(x, x, &y, &interp);
+    if !errors.is_empty() {
+        return Err(errors);
     }
 
     // --- Declarations ---
@@ -191,13 +167,13 @@ where
     let mut ip1 = vec![0; n];
     let mut ip2 = vec![0; n];
 
+    // Jacobian and mass matrices with user-preferred storage
+    let mut jac = Matrix::from_storage(n, n, settings.jac_storage);
+    let mut mass = Matrix::from_storage(n, n, settings.mass_storage);
+
     // Counters
-    let mut nstep: usize = 0;
-    let mut naccpt: usize = 0;
-    let mut nrejct: usize = 0;
-    let mut njev: usize = 0;
-    let mut nsol: usize = 0;
-    let mut ndec: usize = 0;
+    let mut evals = Evals::new();
+    let mut steps = Steps::new();
 
     // Status
     let status;
@@ -238,6 +214,23 @@ where
 
     // --- Initializations ---
 
+    let mut f0 = vec![0.0; n];
+    f.ode(x, &y, &mut f0);
+    evals.ode += 1;
+
+    // Dense output: [y_{n+1}, c1, c2, c3]
+    let mut cont = vec![0.0; n * 4];
+
+    // Initial callback (xold=x)
+    if let Some(s) = solout.as_mut() {
+        let interp = DenseRadau {
+            cont: &cont,
+            xold: x,
+            h,
+        };
+        s.solout(x, x, &y, &interp);
+    }
+
     // Initial mass matrix
     f.mass(&mut mass);
 
@@ -251,7 +244,7 @@ where
         if call_jac {
             // Jacobian and mass at (x, y)
             f.jac(x, &y, &mut jac);
-            njev += 1;
+            evals.jac += 1;
         }
 
         if call_decomp {
@@ -269,6 +262,7 @@ where
             }
 
             // LU decomp of real matrix E1
+            evals.lu += 1;
             if lu_decomp(&mut e1, &mut ip1).is_err() {
                 singular_count += 1;
                 if singular_count > 5 {
@@ -283,6 +277,7 @@ where
             }
 
             // LU decomp of complex matrix E2
+            evals.lu += 1;
             if lu_decomp_complex(&mut e2r, &mut e2i, &mut ip2).is_err() {
                 singular_count += 1;
                 if singular_count > 5 {
@@ -295,15 +290,13 @@ where
                 last = false;
                 continue 'main;
             }
-            // Count both decompositions
-            ndec += 1;
         }
 
         // --- Integration step ---
-        nstep += 1;
+        steps.total += 1;
 
         // Max step guard
-        if nstep > nmax {
+        if steps.total > nmax {
             status = Status::NeedLargerNmax;
             break;
         }
@@ -389,7 +382,7 @@ where
                 cont[i] = y[i] + z3[i];
             }
             f.ode(xph, &cont, &mut z3);
-            nfev += 3;
+            evals.ode += 3;
 
             // --- Solve the linear systems ---
             for i in 0..n {
@@ -427,7 +420,6 @@ where
             // Solve E2 * [Z2; Z3] = [RHS2; RHS3] (complex system)
             lin_solve_complex(&e2r, &e2i, &mut z2, &mut z3, &ip2);
 
-            nsol += 2;
             newt_iter += 1;
 
             // Compute dynamic norm
@@ -459,7 +451,7 @@ where
                         let exponent = -1.0 / (4.0 + remaining_iters);
                         hhfac = 0.8 * qnewt.powf(exponent);
                         h *= hhfac;
-                        nrejct += 1;
+                        steps.rejected += 1;
                         last = false;
                         break 'newton;
                     }
@@ -517,7 +509,7 @@ where
             cont[i] = sum + f0[i];
         }
         lin_solve(&e1, &mut cont, &ip1);
-        nsol += 1;
+        evals.lu += 1;
 
         // Error estimate
         err = 0.0;
@@ -533,14 +525,13 @@ where
                 cont[i] += y[i];
             }
             f.ode(x, &cont, &mut f1);
-            nfev += 1;
+            evals.ode += 1;
 
             // contv = f1 + f2; solve again
             for i in 0..n {
                 cont[i] = f1[i] + f2[i];
             }
             lin_solve(&e1, &mut cont, &ip1);
-            nsol += 1;
 
             // Recompute error
             err = 0.0;
@@ -558,12 +549,12 @@ where
 
         if err <= 1.0 {
             // --- Step accepted ---
-            naccpt += 1;
+            steps.accepted += 1;
             first = false;
 
             // Predictive Gustafsson controller (use previous accepted step if available)
             if predictive {
-                if naccpt > 1 {
+                if steps.accepted > 1 {
                     let mut facgus = (h_acc / h) * (err * err / err_acc).powf(0.25) / safety_factor;
                     facgus = facr.max(facl.min(facgus));
                     quot = quot.max(facgus);
@@ -615,7 +606,7 @@ where
                         x = nx;
                         y.copy_from_slice(&ny);
                         f.ode(x, &y, &mut f0);
-                        nfev += 1;
+                        evals.ode += 1;
                     }
                 }
             }
@@ -628,7 +619,7 @@ where
 
             // New derivative at x+h
             f.ode(x, &y, &mut f0);
-            nfev += 1;
+            evals.ode += 1;
 
             // Step accepted so we can reset singular counter
             singular_count = 0;
@@ -670,26 +661,14 @@ where
                 h *= 0.1;
                 hhfac = 0.1;
             } else {
-                nrejct += 1;
+                steps.rejected += 1;
                 hhfac = hnew / h;
                 h = hnew;
             }
         }
     }
 
-    Ok(IntegrationResult {
-        x,
-        y,
-        h,
-        status,
-        nfev,
-        njev,
-        nsol,
-        ndec,
-        nstep,
-        naccpt,
-        nrejct,
-    })
+    Ok(IntegrationResult::new(x, h, status, evals, steps))
 }
 
 pub fn contr5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {

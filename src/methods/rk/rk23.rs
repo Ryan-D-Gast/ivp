@@ -6,7 +6,7 @@ use crate::{
     interpolate::Interpolate,
     methods::{
         hinit::hinit,
-        result::IntegrationResult,
+        result::{IntegrationResult, Evals, Steps},
         settings::{Settings, Tolerance},
     },
     ode::ODE,
@@ -21,7 +21,7 @@ pub fn rk23<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
-    y: &[Float],
+    y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
     mut solout: Option<&mut S>,
@@ -75,7 +75,6 @@ where
 
     // --- Declarations ---
     let n = y.len();
-    let mut y = y.to_vec();
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
@@ -83,21 +82,19 @@ where
     let mut yt = vec![0.0; n];
     let mut ye = vec![0.0; n];
     let mut cont = vec![0.0; 4 * n];
-    let mut nfev = 0;
-    let mut nstep = 0;
-    let mut naccpt = 0;
-    let mut nrejct = 0;
+    let mut evals = Evals::new();
+    let mut steps = Steps::new();
     let mut status = Status::Success;
     let mut xold = x;
     let direction = (xend - x).signum();
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
-    nfev += 1;
+    evals.ode += 1;
     let mut h = match settings.h0 {
         Some(h0) => h0,
         None => {
-            nfev += 1;
+            evals.ode += 1;
             hinit(
                 f, x, &y, direction, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
             )
@@ -112,7 +109,7 @@ where
     // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
-        if nstep >= nmax {
+        if steps.total >= nmax {
             status = Status::NeedLargerNmax;
             break;
         }
@@ -127,14 +124,12 @@ where
             yt[i] = y[i] + h * A21 * k1[i];
         }
         f.ode(x + C2 * h, &yt, &mut k2);
-        nfev += 1;
 
         // Stage 3
         for i in 0..n {
             yt[i] = y[i] + h * A32 * k2[i];
         }
         f.ode(x + C3 * h, &yt, &mut k3);
-        nfev += 1;
 
         // Compute solution and error estimate
         for i in 0..n {
@@ -143,7 +138,8 @@ where
 
         // Stage 4/1: derivative at new point, also used as k1 if accepted.
         f.ode(x + h, &yt, &mut k4);
-        nfev += 1;
+
+        evals.ode += 3;
 
         // Error estimate using embedded 2nd order solution
         for i in 0..n {
@@ -160,8 +156,8 @@ where
 
         if err <= 1.0 {
             // Step accepted
-            nstep += 1;
-            naccpt += 1;
+            steps.total += 1;
+            steps.accepted += 1;
 
             // Update state
             ye.copy_from_slice(&y);
@@ -189,11 +185,13 @@ where
                     ControlFlag::ModifiedSolution(xm, ym) => {
                         // Update with modified solution
                         x = xm;
-                        y = ym;
+                        for i in 0..n {
+                            y[i] = ym[i];
+                        }
 
                         // Recompute k1 at new (x, y).
                         f.ode(x, &y, &mut k1);
-                        nfev += 1;
+                        evals.ode += 1;
                     }
                     ControlFlag::Continue => {
                         // Reuse k4 as k1 for the next step to save an evaluation.
@@ -216,26 +214,14 @@ where
             }
         } else {
             // Step rejected
-            nrejct += 1;
+            steps.rejected += 1;
             h *= (safety_factor * err.powf(error_exponent))
                 .min(1.0)
                 .max(scale_min);
         }
     }
 
-    Ok(IntegrationResult {
-        x,
-        y,
-        h,
-        nfev,
-        njev: 0,
-        nsol: 0,
-        ndec: 0,
-        nstep,
-        naccpt,
-        nrejct,
-        status,
-    })
+    Ok(IntegrationResult::new(x, h, status, evals, steps))
 }
 
 /// Dense output evaluation for RK23

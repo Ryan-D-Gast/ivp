@@ -4,7 +4,10 @@ use crate::{
     Float,
     error::Error,
     interpolate::Interpolate,
-    methods::{result::IntegrationResult, settings::Settings},
+    methods::{
+        result::{IntegrationResult, Evals, Steps},
+        settings::Settings
+    },
     ode::ODE,
     solout::{ControlFlag, SolOut},
     status::Status,
@@ -16,7 +19,7 @@ pub fn rk4<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
-    y: &[Float],
+    y: &mut [Float],
     h: Float,
     mut solout: Option<&mut S>,
     settings: Settings,
@@ -51,15 +54,14 @@ where
 
     // --- Declarations ---
     let n = y.len();
-    let mut y = y.to_vec();
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
     let mut k4 = vec![0.0; n];
     let mut yt = vec![0.0; n];
     let mut cont = vec![0.0; 4 * n];
-    let mut nfev = 0;
-    let mut nstep = 0;
+    let mut evals = Evals::new();
+    let mut steps = Steps::new();
     let mut status = Status::Success;
     let mut xold = x;
 
@@ -77,7 +79,7 @@ where
     // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
-        if nstep >= nmax {
+        if steps.total >= nmax {
             status = Status::NeedLargerNmax;
             break;
         }
@@ -113,8 +115,8 @@ where
         }
         f.ode(x, &y, &mut k1);
 
-        nfev += 4;
-        nstep += 1;
+        evals.ode += 4;
+        steps.total += 1;
 
         // Prepare dense output
         if solout.is_some() {
@@ -136,11 +138,13 @@ where
                 ControlFlag::ModifiedSolution(xm, ym) => {
                     // Update with modified solution
                     x = xm;
-                    y = ym;
+                    for i in 0..n {
+                        y[i] = ym[i];
+                    }
 
                     // Recompute k1 at new (x, y).
                     f.ode(x, &y, &mut k1);
-                    nfev += 1;
+                    evals.ode += 1;
                 }
                 ControlFlag::Continue => {}
             }
@@ -152,19 +156,7 @@ where
         }
     }
 
-    Ok(IntegrationResult {
-        x,
-        y: y.to_vec(),
-        h,
-        nfev,
-        njev: 0,
-        nsol: 0,
-        ndec: 0,
-        nstep,
-        naccpt: nstep,
-        nrejct: 0,
-        status,
-    })
+    Ok(IntegrationResult::new(x, h, status, evals, steps))
 }
 
 /// Continuous output function for RK4 using cubic Hermite interpolation.
