@@ -1,4 +1,4 @@
-//! Radau5 — 3-stage, order-5 Radau IIA implicit Runge–Kutta solver.
+//! RADAU — 3-stage, order-5 Radau IIA implicit Runge–Kutta solver.
 //!
 //! Solves stiff ODEs/DAEs `M·y' = f(t,y)` with adaptive step-size,
 //! simplified Newton iterations (numerical Jacobian by default), and dense output.

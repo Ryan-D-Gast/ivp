@@ -48,7 +48,7 @@ pub struct Settings {
     ///   - If `nind2`/`nind3` are provided but `nind1` is not, `nind1` is inferred as
     ///     `n - nind2 - nind3` (validated to be >= 0 at runtime).
     ///   - If all three are provided, they must sum to `n`.
-    /// - Error estimation follows Radau5: index-2 contributions are multiplied by `h`,
+    /// - Error estimation follows RADAU: index-2 contributions are multiplied by `h`,
     ///   and index-3 contributions by `h^2`.
     pub nind1: Option<usize>,
     /// Number of algebraic index-2 variables following the first block.

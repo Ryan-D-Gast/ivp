@@ -9,7 +9,7 @@ fn methods() -> Vec<Method> {
         Method::RK23,
         Method::DOPRI5,
         Method::DOP853,
-        Method::Radau5,
+        Method::RADAU,
     ]
 }
 

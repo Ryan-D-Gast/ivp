@@ -146,7 +146,7 @@ where
             let mut y = y0.to_vec();
             dop853(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
         }
-        Method::Radau5 => {
+        Method::RADAU => {
             let mut y = y0.to_vec();
             radau5(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
         }
