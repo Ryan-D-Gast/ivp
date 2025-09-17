@@ -41,7 +41,7 @@ pub fn dopri5<F, S>(
     y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
-    mut solout: Option<&mut S>,
+    solout: &mut S,
     settings: Settings,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
@@ -122,6 +122,9 @@ where
         None => (xend - x).abs(),
     };
 
+    // Set SolOut calling behavior
+    let solout_flag = settings.solout_flag;
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -165,9 +168,9 @@ where
             )
         }
     };
-    if let Some(s) = solout.as_mut() {
+    if solout_flag.call() {
         let interp = DenseOutput::new(&cont, x, h);
-        s.solout(x, x, &y, &interp);
+        solout.solout(x, x, &y, &interp);
     }
 
     // --- Main integration loop ---
@@ -233,7 +236,7 @@ where
         evals.ode += 6;
 
         // Prepare last segment of dense output before recalculating k4
-        if solout.is_some() {
+        if solout_flag.dense() {
             for i in 0..n {
                 cont[4 * n + i] = h
                     * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
@@ -298,7 +301,7 @@ where
             }
 
             // Prepare dense output
-            if solout.is_some() {
+            if solout_flag.dense() {
                 for i in 0..n {
                     let ydiff = y1[i] - y[i];
                     let bspl = h * k1[i] - ydiff;
@@ -316,8 +319,8 @@ where
             x = xph;
 
             // Optional callback function
-            if let Some(ref mut s) = solout {
-                match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+            if solout_flag.call() {
+                match solout.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
                     ControlFlag::Interrupt => {
                         status = Status::Interrupted;
                         break;

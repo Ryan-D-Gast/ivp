@@ -3,7 +3,7 @@
 use bon::Builder;
 use std::ops::{Index, IndexMut};
 
-use crate::{Float, matrix::MatrixStorage};
+use crate::{matrix::MatrixStorage, Float};
 
 #[derive(Builder)]
 /// Settings for the numerical integrators
@@ -63,6 +63,37 @@ pub struct Settings {
     /// Default: `MatrixStorage::Identity` (implicit identity)
     #[builder(default = MatrixStorage::Identity)]
     pub mass_storage: MatrixStorage,
+    /// Choose when to call the user-supplied SolOut function
+    #[builder(default = SolOutFlag::Dense)]
+    pub solout_flag: SolOutFlag,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SolOutFlag {
+    /// Never call user SolOut (default if no user SolOut provided)
+    Never,
+    /// Call SolOut without dense output
+    NoDense,
+    /// Call SolOut with dense output
+    Dense,
+}
+
+impl SolOutFlag {
+    pub fn call(&self) -> bool {
+        match self {
+            SolOutFlag::Never => false,
+            SolOutFlag::NoDense => true,
+            SolOutFlag::Dense => true,
+        }
+    }
+
+    pub fn dense(&self) -> bool {
+        match self {
+            SolOutFlag::Never => false,
+            SolOutFlag::NoDense => false,
+            SolOutFlag::Dense => true,
+        }
+    }
 }
 
 /// Tolerance enum to allow scalar or vector tolerances

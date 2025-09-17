@@ -26,7 +26,7 @@ pub fn radau5<F, S>(
     y: &mut [Float],
     mut rtol: Tolerance,
     mut atol: Tolerance,
-    mut solout: Option<&mut S>,
+    solout: &mut S,
     settings: Settings,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
@@ -147,6 +147,9 @@ where
     }
     h = h.clamp(-hmax, hmax);
 
+    // Set SolOut calling behavior
+    let solout_flag = settings.solout_flag;
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -222,13 +225,13 @@ where
     let mut cont = vec![0.0; n * 4];
 
     // Initial callback (xold=x)
-    if let Some(s) = solout.as_mut() {
+    if solout_flag.call() {
         let interp = DenseRadau {
             cont: &cont,
             xold: x,
             h,
         };
-        s.solout(x, x, &y, &interp);
+        solout.solout(x, x, &y, &interp);
     }
 
     // Initial mass matrix
@@ -586,8 +589,8 @@ where
             }
 
             // Callback
-            if let Some(ref mut s) = solout {
-                match s.solout(
+            if solout_flag.call() {
+                match solout.solout(
                     xold,
                     x,
                     &y,

@@ -132,23 +132,23 @@ where
         Method::RK4 => {
             let h = settings.h0.unwrap_or_else(|| (xend - x0) / 100.0);
             let mut y = y0.to_vec();
-            rk4(f, x0, xend, &mut y, h, Some(&mut default_solout), settings)
+            rk4(f, x0, xend, &mut y, h, &mut default_solout, settings)
         }
         Method::RK23 => {
             let mut y = y0.to_vec();
-            rk23(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+            rk23(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
         }
         Method::DOPRI5 => {
             let mut y = y0.to_vec();
-            dopri5(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+            dopri5(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
         }
         Method::DOP853 => {
             let mut y = y0.to_vec();
-            dop853(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+            dop853(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
         }
         Method::RADAU => {
             let mut y = y0.to_vec();
-            radau5(f, x0, xend, &mut y, options.rtol, options.atol, Some(&mut default_solout), settings)
+            radau5(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
         }
     };
 

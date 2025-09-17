@@ -24,7 +24,7 @@ pub fn rk23<F, S>(
     y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
-    mut solout: Option<&mut S>,
+    solout: &mut S,
     settings: Settings,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
@@ -69,6 +69,9 @@ where
     // Maximum step size
     let hmax = settings.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
 
+    // Set SolOut calling behavior
+    let solout_flag = settings.solout_flag;
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -100,10 +103,10 @@ where
             )
         }
     };
-    if let Some(s) = solout.as_mut() {
+    if solout_flag.call() {
         cont[0..n].copy_from_slice(&y);
         let interp = DenseOutput::new(&cont, xold, h);
-        s.solout(xold, x, &y, &interp);
+        solout.solout(xold, x, &y, &interp);
     }
 
     // --- Main integration loop ---
@@ -166,7 +169,7 @@ where
             x += h;
 
             // Prepare dense output
-            if solout.is_some() {
+            if solout_flag.dense() {
                 cont[0..n].copy_from_slice(&ye);
                 for i in 0..n {
                     cont[n + i] = k1[i];
@@ -176,8 +179,8 @@ where
             }
 
             // Optional callback function
-            if let Some(s) = solout.as_mut() {
-                match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+            if solout_flag.call() {
+                match solout.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
                     ControlFlag::Interrupt => {
                         status = Status::Interrupted;
                         break;

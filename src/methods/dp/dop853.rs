@@ -41,7 +41,7 @@ pub fn dop853<F, S>(
     y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
-    mut solout: Option<&mut S>,
+    solout: &mut S,
     settings: Settings,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
@@ -122,6 +122,9 @@ where
         None => (xend - x).abs(),
     };
 
+    // Set SolOut calling behavior
+    let solout_flag = settings.solout_flag;
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -174,9 +177,9 @@ where
             )
         }
     };
-    if let Some(s) = solout.as_mut() {
+    if solout_flag.call() {
         let interp = DenseOutput::new(&cont, x, h);
-        s.solout(x, x, &y, &interp);
+        solout.solout(x, x, &y, &interp);
     }
 
     // --- Main integration loop ---
@@ -383,7 +386,7 @@ where
             }
 
             // Prepare dense output
-            if solout.is_some() {
+            if solout_flag.dense() {
                 for i in 0..n {
                     cont[i] = y[i];
                     let ydiff = k5[i] - y[i];
@@ -508,8 +511,8 @@ where
             x = xph;
 
             // Optional callback function
-            if let Some(ref mut s) = solout {
-                match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+            if solout_flag.call() {
+                match solout.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
                     ControlFlag::Interrupt => {
                         status = Status::Interrupted;
                         break;

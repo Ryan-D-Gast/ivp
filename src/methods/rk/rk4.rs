@@ -21,7 +21,7 @@ pub fn rk4<F, S>(
     xend: Float,
     y: &mut [Float],
     h: Float,
-    mut solout: Option<&mut S>,
+    solout: &mut S,
     settings: Settings,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
@@ -48,6 +48,9 @@ where
         None => 100_000,
     };
 
+    // Set SolOut calling behavior
+    let solout_flag = settings.solout_flag;
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -67,13 +70,13 @@ where
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
-    if let Some(s) = solout.as_mut() {
+    if solout_flag.call() {
         cont[0..n].copy_from_slice(&y);
         for i in 0..n {
             cont[n + i] = k1[i];
         }
         let interp = DenseOutput::new(&cont, xold, h);
-        s.solout(xold, x, &y, &interp);
+        solout.solout(xold, x, &y, &interp);
     }
 
     // --- Main integration loop ---
@@ -119,7 +122,7 @@ where
         steps.total += 1;
 
         // Prepare dense output
-        if solout.is_some() {
+        if solout_flag.dense() {
             cont[0..n].copy_from_slice(&yt);
             for i in 0..n {
                 cont[n + i] = k4[i];
@@ -129,8 +132,8 @@ where
         }
 
         // Optional callback function
-        if let Some(s) = solout.as_mut() {
-            match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+        if solout_flag.call() {
+            match solout.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
                 ControlFlag::Interrupt => {
                     status = Status::Interrupted;
                     break;
