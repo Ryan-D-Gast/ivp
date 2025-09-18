@@ -10,7 +10,7 @@ use crate::{
     interpolate::Interpolate,
     matrix::{Matrix, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{
-        result::{IntegrationResult, Evals, Steps},
+        result::{Evals, IntegrationResult, Steps},
         settings::{Settings, Tolerance},
     },
     ode::ODE,
@@ -300,7 +300,7 @@ where
 
         // Max step guard
         if steps.total > nmax {
-            status = Status::NeedLargerNmax;
+            status = Status::NeedLargerNMax;
             break;
         }
 
@@ -602,7 +602,7 @@ where
                 ) {
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
-                        status = Status::Interrupted;
+                        status = Status::UserInterrupt;
                         break 'main;
                     }
                     ControlFlag::ModifiedSolution(nx, ny) => {

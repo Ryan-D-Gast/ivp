@@ -2,8 +2,7 @@
 
 mod hinit;
 
+pub mod common;
 pub mod dp;
 pub mod radau;
-pub mod result;
 pub mod rk;
-pub mod settings;

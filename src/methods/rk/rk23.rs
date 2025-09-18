@@ -6,7 +6,7 @@ use crate::{
     interpolate::Interpolate,
     methods::{
         hinit::hinit,
-        result::{IntegrationResult, Evals, Steps},
+        result::{Evals, IntegrationResult, Steps},
         settings::{Settings, Tolerance},
     },
     ode::ODE,
@@ -113,7 +113,7 @@ where
     loop {
         // Check for maximum number of steps
         if steps.total >= nmax {
-            status = Status::NeedLargerNmax;
+            status = Status::NeedLargerNMax;
             break;
         }
 
@@ -182,7 +182,7 @@ where
             if solout_flag.call() {
                 match solout.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
                     ControlFlag::Interrupt => {
-                        status = Status::Interrupted;
+                        status = Status::UserInterrupt;
                         break;
                     }
                     ControlFlag::ModifiedSolution(xm, ym) => {

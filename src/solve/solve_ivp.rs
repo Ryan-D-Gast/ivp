@@ -7,7 +7,6 @@ use crate::{
         dp::{dop853, dopri5},
         radau::radau5,
         rk::{rk4, rk23},
-        settings::Settings,
     },
     ode::ODE,
 };
@@ -136,19 +135,73 @@ where
         }
         Method::RK23 => {
             let mut y = y0.to_vec();
-            rk23(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
+            rk23(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                &mut default_solout,
+                settings,
+            )
         }
         Method::DOPRI5 => {
             let mut y = y0.to_vec();
-            dopri5(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
+            dopri5(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                Some(&mut default_solout),
+                true,
+                None,
+                None,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.first_step,
+                options.nmax,
+                None,
+            )
         }
         Method::DOP853 => {
             let mut y = y0.to_vec();
-            dop853(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
+            dop853(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                Some(&mut default_solout),
+                true,
+                None,
+                None,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.first_step,
+                options.nmax,
+                None,
+            )
         }
         Method::RADAU => {
             let mut y = y0.to_vec();
-            radau5(f, x0, xend, &mut y, options.rtol, options.atol, &mut default_solout, settings)
+            radau5(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                &mut default_solout,
+                settings,
+            )
         }
     };
 
@@ -175,8 +228,6 @@ where
                 continuous_sol,
             })
         }
-        Err(errors) => {
-            Err(errors)
-        }
+        Err(errors) => Err(errors),
     }
 }
