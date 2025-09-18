@@ -110,28 +110,24 @@ pub fn solve_ivp<F>(
 where
     F: ODE,
 {
-    // Build Settings (rtol/atol are passed to methods)
-    let settings = Settings::builder()
-        .maybe_nmax(options.nmax)
-        .maybe_h0(options.first_step)
-        .maybe_hmax(options.max_step)
-        .maybe_hmin(options.min_step)
-        .maybe_nind1(options.nind1)
-        .maybe_nind2(options.nind2)
-        .maybe_nind3(options.nind3)
-        .jac_storage(options.jac_storage)
-        .mass_storage(options.mass_storage)
-        .build();
-
     // Prepare the default SolOut (wrapping user callback if provided)
     let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output);
 
     // Dispatch by method
     let result = match options.method {
         Method::RK4 => {
-            let h = settings.h0.unwrap_or_else(|| (xend - x0) / 100.0);
+            let h = options.first_step.unwrap_or_else(|| (xend - x0) / 100.0);
             let mut y = y0.to_vec();
-            rk4(f, x0, xend, &mut y, h, &mut default_solout, settings)
+            rk4(
+                f,
+                x0,
+                xend,
+                &mut y,
+                h,
+                Some(&mut default_solout),
+                true,
+                options.nmax,
+            )
         }
         Method::RK23 => {
             let mut y = y0.to_vec();
@@ -142,8 +138,14 @@ where
                 &mut y,
                 options.rtol,
                 options.atol,
-                &mut default_solout,
-                settings,
+                Some(&mut default_solout),
+                true,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.first_step,
+                options.nmax,
             )
         }
         Method::DOPRI5 => {
@@ -199,8 +201,24 @@ where
                 &mut y,
                 options.rtol,
                 options.atol,
-                &mut default_solout,
-                settings,
+                Some(&mut default_solout),
+                true,
+                options.nmax,
+                None,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.min_step,
+                None,
+                None,
+                None,
+                options.nind1,
+                options.nind2,
+                options.nind3,
+                Some(options.jac_storage),
+                Some(options.mass_storage),
+                options.first_step,
             )
         }
     };

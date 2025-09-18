@@ -1,22 +1,43 @@
-//! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
+//! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator
 
 use crate::{
     Float,
     error::Error,
     interpolate::Interpolate,
-    methods::{
-        hinit::hinit,
-        result::{Evals, IntegrationResult, Steps},
-        settings::{Settings, Tolerance},
-    },
+    methods::common::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ode::ODE,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
 
-/// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
-/// This implementation uses an embedded method to estimate errors
-/// and adjust the step size accordingly with dense output.
+/// Bogacki–Shampine 3(2) pair (RK23) — adaptive solver with optional dense output.
+///
+/// This function integrates the autonomous system `y' = f(x, y)` from `x` to
+/// `xend`, advancing the provided state buffer `y` in-place. It performs
+/// classical error control using the embedded 2nd‑order estimate and can, if
+/// requested, provide dense-output coefficients for interpolation inside each
+/// step and call a user-provided `SolOut` hook.
+///
+/// # Arguments
+///
+/// - `f`: Right‑hand side implementing `ODE`.
+/// - `x`: Initial independent variable value.
+/// - `xend`: Final independent variable value.
+/// - `y`: Mutable slice containing the initial state; on success contains the
+///   state at the final time.
+/// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
+/// - `solout`: Optional mutable reference to a `SolOut` callback used for
+///   intermediate output. If `dense_output` is `true` the callback may receive
+///   a dense interpolant.
+/// - `dense_output`: If `true`, dense‑output coefficients are computed every
+///   accepted step to enable fast interpolation via the provided interpolant.
+/// - `safety_factor` (default `0.9`), `scale_min` (default `0.2`),
+///   `scale_max` (default `5.0`), `hmax` (default `|xend - x|`), `h0` (initial
+///   step, heuristic if `None`), and `max_steps` (default `100_000`).
+///
+/// # Returns
+/// A `Result` with `IntegrationResult` on success or a vector of `Error`
+/// values describing input validation issues.
 pub fn rk23<F, S>(
     f: &F,
     mut x: Float,
@@ -24,8 +45,14 @@ pub fn rk23<F, S>(
     y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
-    solout: &mut S,
-    settings: Settings,
+    mut solout: Option<&mut S>,
+    dense_output: bool,
+    safety_factor: Option<Float>,
+    scale_min: Option<Float>,
+    scale_max: Option<Float>,
+    hmax: Option<Float>,
+    h0: Option<Float>,
+    max_steps: Option<usize>,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
     F: ODE,
@@ -35,7 +62,7 @@ where
     let mut errors: Vec<Error> = Vec::new();
 
     // Maximum Number of Steps
-    let nmax = match settings.nmax {
+    let nmax = match max_steps {
         Some(n) => {
             if n <= 0 {
                 errors.push(Error::NMaxMustBePositive(n));
@@ -46,7 +73,7 @@ where
     };
 
     // Safety Factor
-    let safety_factor = match settings.safety_factor {
+    let safety_factor = match safety_factor {
         Some(f) => {
             if f >= 1.0 || f <= 1e-4 {
                 errors.push(Error::SafetyFactorOutOfRange(f));
@@ -57,8 +84,8 @@ where
     };
 
     // Step size scaling factors
-    let scale_min = settings.scale_min.unwrap_or(0.2);
-    let scale_max = settings.scale_max.unwrap_or(5.0);
+    let scale_min = scale_min.unwrap_or(0.2);
+    let scale_max = scale_max.unwrap_or(5.0);
     if scale_min <= 0.0 || scale_max <= scale_min {
         errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
     }
@@ -67,10 +94,7 @@ where
     let error_exponent = -1.0 / 3.0;
 
     // Maximum step size
-    let hmax = settings.hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
-
-    // Set SolOut calling behavior
-    let solout_flag = settings.solout_flag;
+    let hmax = hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
 
     if !errors.is_empty() {
         return Err(errors);
@@ -89,12 +113,13 @@ where
     let mut steps = Steps::new();
     let mut status = Status::Success;
     let mut xold = x;
+    let mut xout: Option<Float> = None;
     let direction = (xend - x).signum();
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
     evals.ode += 1;
-    let mut h = match settings.h0 {
+    let mut h = match h0 {
         Some(h0) => h0,
         None => {
             evals.ode += 1;
@@ -103,10 +128,37 @@ where
             )
         }
     };
-    if solout_flag.call() {
-        cont[0..n].copy_from_slice(&y);
-        let interp = DenseOutput::new(&cont, xold, h);
-        solout.solout(xold, x, &y, &interp);
+    // Prepare a persistent interpolator object (pointer-based)
+    let interpolator = &DenseOutput::new(
+        cont.as_ptr(),
+        cont.len(),
+        &xold as *const Float,
+        &h as *const Float,
+    );
+
+    // Initial SolOut call (no interpolator yet; xold == x)
+    if let Some(sol) = solout.as_mut() {
+        match sol.solout::<DenseOutput>(xold, x, &y, None) {
+            ControlFlag::Interrupt => {
+                return Ok(IntegrationResult {
+                    x,
+                    h,
+                    status: Status::UserInterrupt,
+                    evals,
+                    steps,
+                });
+            }
+            ControlFlag::ModifiedSolution(xm, ym) => {
+                x = xm;
+                y.copy_from_slice(&ym);
+                f.ode(x, &y, &mut k1);
+                evals.ode += 1;
+            }
+            ControlFlag::XOut(xo) => {
+                xout = Some(xo);
+            }
+            ControlFlag::Continue => {}
+        }
     }
 
     // --- Main integration loop ---
@@ -169,7 +221,7 @@ where
             x += h;
 
             // Prepare dense output
-            if solout_flag.dense() {
+            if dense_output && solout.is_some() {
                 cont[0..n].copy_from_slice(&ye);
                 for i in 0..n {
                     cont[n + i] = k1[i];
@@ -179,8 +231,14 @@ where
             }
 
             // Optional callback function
-            if solout_flag.call() {
-                match solout.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+            if let Some(sol) = solout.as_mut() {
+                let event = xout.map_or(false, |xo| xo <= x);
+                let interpolation = if dense_output || event {
+                    Some(interpolator)
+                } else {
+                    None
+                };
+                match sol.solout(xold, x, &y, interpolation) {
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
                         break;
@@ -195,6 +253,11 @@ where
                         // Recompute k1 at new (x, y).
                         f.ode(x, &y, &mut k1);
                         evals.ode += 1;
+                    }
+                    ControlFlag::XOut(xo) => {
+                        xout = Some(xo);
+                        // Reuse k4 as k1 for the next step to save an evaluation.
+                        k1.copy_from_slice(&k4);
                     }
                     ControlFlag::Continue => {
                         // Reuse k4 as k1 for the next step to save an evaluation.
@@ -238,25 +301,47 @@ pub fn contrk23(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Flo
     }
 }
 
-struct DenseOutput<'a> {
-    cont: &'a [Float],
-    xold: Float,
-    h: Float,
+// Dense output interpolator for RK23 (pointer-based like DOPRI style)
+struct DenseOutput {
+    cont_ptr: *const Float,
+    cont_len: usize,
+    xold_ptr: *const Float,
+    h_ptr: *const Float,
 }
 
-impl<'a> DenseOutput<'a> {
-    pub fn new(cont: &'a [Float], xold: Float, h: Float) -> Self {
-        Self { xold, cont, h }
+impl DenseOutput {
+    fn new(
+        cont_ptr: *const Float,
+        cont_len: usize,
+        xold_ptr: *const Float,
+        h_ptr: *const Float,
+    ) -> Self {
+        Self {
+            cont_ptr,
+            cont_len,
+            xold_ptr,
+            h_ptr,
+        }
     }
 }
 
-impl<'a> Interpolate for DenseOutput<'a> {
+impl Interpolate for DenseOutput {
     fn interpolate(&self, ti: Float, yi: &mut [Float]) {
-        contrk23(ti, yi, self.cont, self.xold, self.h);
+        unsafe {
+            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
+            let xold = *self.xold_ptr;
+            let h = *self.h_ptr;
+            contrk23(ti, yi, cont, xold, h);
+        }
     }
 
     fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        (self.cont.to_vec(), self.xold, self.h)
+        unsafe {
+            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
+            let xold = *self.xold_ptr;
+            let h = *self.h_ptr;
+            (cont.to_vec(), xold, h)
+        }
     }
 }
 

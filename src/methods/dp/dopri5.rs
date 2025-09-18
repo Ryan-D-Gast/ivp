@@ -36,18 +36,29 @@ use crate::{
 /// classical error control (embedded estimates) and, optionally, computes
 /// dense-output coefficients for continuous interpolation inside each step.
 ///
-/// # Parameters
+/// # Arguments
+///
+/// ## Defining the Problem
 /// - `f`: Right‑hand side implementing `ODE`.
 /// - `x`: Initial independent variable value.
 /// - `xend`: Final independent variable value.
 /// - `y`: Mutable slice containing the initial state; on success contains the
 ///   state at the final time.
 /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
+///
+/// ## Output Control
 /// - `solout`: Optional mutable reference to a `SolOut` callback used for
 ///   intermediate output and event handling. If `dense_output` is `true` the
 ///   callback may receive a dense interpolant.
 /// - `dense_output`: If `true`, dense‑output coefficients are computed every
 ///   accepted step to enable fast interpolation via the provided interpolant.
+///
+/// ## Optional Settings
+///
+/// Below are optional parameters to customize the integrator's settings.
+/// If `None` is provided the default value is used. The default values
+/// should be suitable for most problems.
+///
 /// - `uround` (default `2.3e-16`)
 /// - `safety_factor` (default `0.9`)
 /// - `scale_min` (default sets `facc1 = 5`)

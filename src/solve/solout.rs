@@ -81,7 +81,7 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
         xold: Float,
         x: Float,
         y: &[Float],
-        interpolator: &I,
+        interpolator: Option<&I>,
     ) -> ControlFlag {
         // Event handling: if we have a cached previous event value use it, otherwise
         // evaluate at the initial point and skip detection on this first call.
@@ -121,7 +121,7 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
                             break;
                         }
                         let mid = 0.5 * (a + b);
-                        interpolator.interpolate(mid, &mut y_mid_buf);
+                        interpolator.unwrap().interpolate(mid, &mut y_mid_buf);
                         let g_mid = self.ode.event(mid, &y_mid_buf, &mut self.event_config);
 
                         // Preserve crossing direction when selecting the subinterval
@@ -148,7 +148,7 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
 
                     // Record event time and state at b
                     let mut y_at_b = vec![0.0; y.len()];
-                    interpolator.interpolate(b, &mut y_at_b);
+                    interpolator.unwrap().interpolate(b, &mut y_at_b);
                     self.t_events.push(b);
                     self.y_events.push(y_at_b);
                 }
@@ -176,8 +176,8 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
         // Optionally collect dense coefficients for this accepted step.
         // Skip the very first callback where x == xold (no actual step),
         // as some methods haven't initialized dense coefficients yet.
-        if self.collect_dense && x != xold {
-            let (cont, cxold, h) = interpolator.get_cont();
+        if self.collect_dense && x != xold && interpolator.is_some() {
+            let (cont, cxold, h) = interpolator.unwrap().get_cont();
             // Skip degenerate segments
             if h != 0.0 {
                 self.dense_segs.push((cont, cxold, h));
@@ -199,7 +199,7 @@ impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
                 while i < t_eval.len() && t_eval[i] <= x + self.tol {
                     if t_eval[i] >= xold - self.tol {
                         let mut yi = vec![0.0; y.len()];
-                        interpolator.interpolate(t_eval[i], &mut yi);
+                        interpolator.unwrap().interpolate(t_eval[i], &mut yi);
                         self.t.push(t_eval[i]);
                         self.y.push(yi);
                     }

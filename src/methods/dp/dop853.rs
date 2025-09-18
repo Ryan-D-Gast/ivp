@@ -36,19 +36,30 @@ use crate::{
 /// classical error control (embedded estimates) and, optionally, computes
 /// dense-output coefficients for continuous interpolation inside each step.
 ///
-/// # Parameters
+/// # Arguments
+///
+/// ## Defining the Problem
 /// - `f`: Right‑hand side implementing `ODE`.
 /// - `x`: Initial independent variable value.
 /// - `xend`: Final independent variable value.
 /// - `y`: Mutable slice containing the initial state; on success contains the
 ///   state at the final time.
 /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
+///
+/// ## Output Control
 /// - `solout`: Optional mutable reference to a `SolOut` callback used for
 ///   intermediate output and event handling. If `dense_output` is `true` the
 ///   callback may receive a dense interpolant; otherwise interpolation is
 ///   computed only when needed to satisfy a previously requested `xout`.
 /// - `dense_output`: If `true`, dense‑output coefficients are computed every
 ///   accepted step to enable fast interpolation via the provided interpolant.
+///
+/// ## Optional Settings
+///
+/// Below are optional parameters to customize the integrator's settings.
+/// If `None` is provided the default value is used. The default values
+/// should be suitable for most problems.
+///
 /// - `uround`: Machine rounding unit (default `2.3e-16`).
 /// - `safety_factor`: Safety factor for stepsize control (default `0.9`).
 /// - `scale_min`, `scale_max`: Lower/upper bounds for the stepsize scale.
@@ -60,8 +71,12 @@ use crate::{
 ///   (default `1000`).
 ///
 /// # Returns
-/// A `Result` with `IntegrationResult` on success or a vector of `Error`
-/// values describing input validation issues.
+/// `Result<IntegrationResult, Vec<Error>>` with [`IntegrationResult`] containing
+/// the final `x`, the predicted next step size `h`, the [`Status`] of the solver,
+/// the [`Evals`] and [`Steps`] statistics of the solver.
+///
+/// On error, a vector of [`Error`] values describing input validation issues.
+///
 pub fn dop853<F, S>(
     f: &F,
     mut x: Float,

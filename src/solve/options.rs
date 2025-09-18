@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, matrix::MatrixStorage, methods::settings::Tolerance};
+use crate::{Float, matrix::MatrixStorage, methods::common::Tolerance};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
