@@ -220,7 +220,7 @@ where
     f.ode(x, &y, &mut k1);
     evals.ode += 1;
     let mut h = match h0 {
-        Some(h0) => h0,
+        Some(h0) => h0.abs() * posneg,
         None => {
             evals.ode += 1;
             hinit(
@@ -233,7 +233,7 @@ where
     let interpolator = &DenseOutput::new(
         cont.as_ptr(),
         cont.len(),
-        &x as *const Float,
+        &xold as *const Float,
         &h as *const Float,
     );
 

@@ -114,17 +114,17 @@ where
     let mut status = Status::Success;
     let mut xold = x;
     let mut xout: Option<Float> = None;
-    let direction = (xend - x).signum();
+    let posneg = (xend - x).signum();
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
     evals.ode += 1;
     let mut h = match h0 {
-        Some(h0) => h0,
+        Some(h0) => h0.abs() * posneg,
         None => {
             evals.ode += 1;
             hinit(
-                f, x, &y, direction, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
+                f, x, &y, posneg, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
             )
         }
     };
@@ -170,7 +170,7 @@ where
         }
 
         // Check for last step adjustment
-        if (x + h - xend) * direction > 0.0 {
+        if (x + h - xend) * posneg > 0.0 {
             h = xend - x;
         }
 

@@ -206,7 +206,7 @@ where
     f.ode(x, &y, &mut k1);
     evals.ode += 1;
     let mut h = match h0 {
-        Some(h0) => h0,
+        Some(h0) => h0.abs() * posneg,
         None => {
             evals.ode += 1;
             hinit(
@@ -219,7 +219,7 @@ where
     let interpolator = &DenseOutput::new(
         cont.as_ptr(),
         cont.len(),
-        &x as *const Float,
+        &xold as *const Float,
         &h as *const Float,
     );
 
@@ -464,7 +464,7 @@ pub fn contdp5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Floa
     }
 }
 
-/// Dense output interpolator for DOPRI5 (pointer-based to mirror DOP853 style)
+/// Dense output interpolator for DOPRI5
 struct DenseOutput {
     cont_ptr: *const Float,
     cont_len: usize,

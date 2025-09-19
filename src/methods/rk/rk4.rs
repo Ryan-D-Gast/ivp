@@ -51,8 +51,8 @@ where
     let mut errors = Vec::new();
 
     // Initial Step Size
-    let direction = (xend - x).signum();
-    if h == 0.0 || h.signum() != direction {
+    let posneg = (xend - x).signum();
+    if h == 0.0 || h.signum() != posneg {
         errors.push(Error::InvalidStepSize(h));
     }
 

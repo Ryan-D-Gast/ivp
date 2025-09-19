@@ -185,7 +185,7 @@ where
     } else {
         1.0e-6 * posneg
     };
-    if h == 0.0 || h.signum() != posneg && posneg != 0.0 {
+    if h == 0.0 || (h.signum() != posneg && posneg != 0.0) {
         errors.push(Error::InvalidStepSize(h));
     }
     h = h.clamp(-hmax, hmax);
@@ -209,6 +209,7 @@ where
     let mut e2i = Matrix::zeros(n, n);
     let mut ip1 = vec![0; n];
     let mut ip2 = vec![0; n];
+    let mut cont = vec![0.0; n * 4];
 
     // Jacobian and mass matrices with user-preferred storage
     let mut jac = Matrix::from_storage(n, n, jac_storage.unwrap_or(MatrixStorage::Full));
@@ -261,9 +262,7 @@ where
     f.ode(x, &y, &mut f0);
     evals.ode += 1;
 
-    // Dense output: [y_{n+1}, c1, c2, c3]
-    let mut cont = vec![0.0; n * 4];
-    // Persistent pointer-based interpolator (updated via pointers)
+    // Persistent pointer-based interpolator
     let interpolator = &DenseRadau::new(
         cont.as_ptr(),
         cont.len(),
@@ -753,7 +752,7 @@ pub fn contr5(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float
     }
 }
 
-/// Dense output interpolator (pointer-based) for Radau5
+/// Dense output interpolator
 struct DenseRadau {
     cont_ptr: *const Float,
     cont_len: usize,
