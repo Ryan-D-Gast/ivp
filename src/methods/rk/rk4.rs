@@ -19,15 +19,20 @@ use crate::{
 ///
 /// # Arguments
 ///
+/// ## Defining the Problem
 /// - `f`: Right‑hand side implementing `ODE`.
 /// - `x`: Initial independent variable value.
 /// - `xend`: Final independent variable value.
 /// - `y`: Mutable slice for the initial state; on success contains the state at `xend`.
 /// - `h`: Fixed step size (its sign must match `xend - x`).
+/// 
+/// ## Output Control
 /// - `solout`: Optional mutable reference to a `SolOut` callback invoked once
 ///   before the loop and after each accepted step.
 /// - `dense_output`: If `true`, dense‑output coefficients are computed for each
 ///   accepted step and an interpolant is passed to the callback.
+/// 
+/// ## Optional Settings
 /// - `max_steps`: Optional upper bound on the number of steps (default `100_000`).
 ///
 /// # Returns

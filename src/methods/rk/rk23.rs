@@ -20,17 +20,27 @@ use crate::{
 ///
 /// # Arguments
 ///
+/// ## Defining the Problem
 /// - `f`: Right‑hand side implementing `ODE`.
 /// - `x`: Initial independent variable value.
 /// - `xend`: Final independent variable value.
 /// - `y`: Mutable slice containing the initial state; on success contains the
 ///   state at the final time.
 /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
+/// 
+/// ## Output Control
 /// - `solout`: Optional mutable reference to a `SolOut` callback used for
 ///   intermediate output. If `dense_output` is `true` the callback may receive
 ///   a dense interpolant.
 /// - `dense_output`: If `true`, dense‑output coefficients are computed every
 ///   accepted step to enable fast interpolation via the provided interpolant.
+/// 
+/// ## Optional Settings
+/// 
+/// Below are optional parameters to customize the integrator's settings.
+/// If `None` is provided the default value is used. The default values
+/// should be suitable for most problems.
+/// 
 /// - `safety_factor` (default `0.9`), `scale_min` (default `0.2`),
 ///   `scale_max` (default `5.0`), `hmax` (default `|xend - x|`), `h0` (initial
 ///   step, heuristic if `None`), and `max_steps` (default `100_000`).

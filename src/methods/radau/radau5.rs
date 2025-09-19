@@ -23,14 +23,22 @@ use crate::{
 ///
 /// # Arguments
 ///
+/// ## Defining the Problem
 /// - `f`: Right‑hand side implementing `ODE` (optionally providing `jac`, `mass`).
 /// - `x`: Initial abscissa; `xend`: final abscissa.
 /// - `y`: Initial state; on success contains the state at `xend`.
 /// - `rtol`, `atol`: Relative/absolute tolerances (scalar or vector).
+///
+/// ## Output Control
 /// - `solout`: Optional mutable `SolOut` callback invoked initially and after each accepted step.
 /// - `dense_output`: If `true`, pass an interpolant to `solout` for efficient dense queries.
+/// 
+/// ## Optional Settings
 ///
-/// # Optional settings (None → default):
+/// Below are optional parameters to customize the integrator's settings.
+/// If `None` is provided the default value is used. The default values
+/// should be suitable for most problems.
+/// 
 /// - `nmax` (default 100_000)
 /// - `uround` in (1e-35, 1.0), default 2.3e-16
 /// - `safety_factor` in (1e-4, 1.0), default 0.9
