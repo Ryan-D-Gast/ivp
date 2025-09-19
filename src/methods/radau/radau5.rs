@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     interpolate::Interpolate,
     matrix::{Matrix, MatrixStorage, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
-    methods::common::{Evals, IntegrationResult, Steps, Tolerance},
+    methods::{Evals, IntegrationResult, Steps, Tolerance},
     ode::ODE,
     solout::{ControlFlag, SolOut},
     status::Status,

@@ -4,7 +4,7 @@ use crate::{
     Float,
     error::Error,
     interpolate::Interpolate,
-    methods::common::{Evals, IntegrationResult, Steps},
+    methods::{Evals, IntegrationResult, Steps},
     ode::ODE,
     solout::{ControlFlag, SolOut},
     status::Status,

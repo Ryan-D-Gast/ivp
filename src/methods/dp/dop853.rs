@@ -22,7 +22,7 @@ use crate::{
     Float,
     error::Error,
     interpolate::Interpolate,
-    methods::common::{Evals, IntegrationResult, Steps, Tolerance, hinit},
+    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ode::ODE,
     solout::{ControlFlag, SolOut},
     status::Status,

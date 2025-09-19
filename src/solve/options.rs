@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, matrix::MatrixStorage, methods::common::Tolerance};
+use crate::{Float, matrix::MatrixStorage, methods::Tolerance};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
@@ -40,25 +40,22 @@ pub struct Options {
     #[builder(default = Method::DOPRI5, into)]
     pub method: Method,
     /// Relative tolerance for local error control. Accepts scalar or per‑component array/vector
-    /// via `Tolerance`. The effective scaling for component i is `atol[i] + rtol[i]*|y[i]|`.
+    /// via [`Tolerance`]. The effective scaling for component i is `atol[i] + rtol[i]*|y[i]|`.
     #[builder(default = 1e-3, into)]
     pub rtol: Tolerance,
     /// Absolute tolerance for local error control. Accepts scalar or per‑component array/vector.
     /// Used together with `rtol` to build the error scale `atol + rtol*|y|`.
     #[builder(default = 1e-6, into)]
     pub atol: Tolerance,
-    /// Maximum number of solver steps (safety cap to avoid very long runs on hard problems).
-    pub nmax: Option<usize>,
-    /// Times at which to return the solution. Integration remains adaptive internally.
-    /// When set, per‑step internal samples are not stored; use `dense_output=true` for
-    /// efficient post‑run interpolation at arbitrary times.
+    /// Maximum number of solver steps.
+    pub max_steps: Option<usize>,
+    /// Times at which to return the solution. If `None` the points are selected by the solver.
     pub t_eval: Option<Vec<Float>>,
-    /// Initial step size hint. The solver adjusts this if it is too large/small.
+    /// Initial step size (its sign must match `xend - x0`).
     pub first_step: Option<Float>,
-    /// Hard cap on step size. Useful to force sampling resolution or limit jumps.
+    /// Upper bound on step size.
     pub max_step: Option<Float>,
-    /// Hard lower bound on step size. If the solver needs a smaller step, it stops with
-    /// a "step size too small" status.
+    /// Lower bound on step size.
     pub min_step: Option<Float>,
     /// Store per‑step interpolants for cheap post‑run evaluation via `Solution::sol`/`sol_many`.
     /// Increases memory usage; recommended if you need values at times other than internal steps.

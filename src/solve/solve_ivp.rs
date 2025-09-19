@@ -126,7 +126,7 @@ where
                 h,
                 Some(&mut default_solout),
                 true,
-                options.nmax,
+                options.max_steps,
             )
         }
         Method::RK23 => {
@@ -145,7 +145,7 @@ where
                 None,
                 options.max_step,
                 options.first_step,
-                options.nmax,
+                options.max_steps,
             )
         }
         Method::DOPRI5 => {
@@ -166,7 +166,7 @@ where
                 None,
                 options.max_step,
                 options.first_step,
-                options.nmax,
+                options.max_steps,
                 None,
             )
         }
@@ -188,7 +188,7 @@ where
                 None,
                 options.max_step,
                 options.first_step,
-                options.nmax,
+                options.max_steps,
                 None,
             )
         }
@@ -203,7 +203,7 @@ where
                 options.atol,
                 Some(&mut default_solout),
                 true,
-                options.nmax,
+                options.max_steps,
                 None,
                 None,
                 None,
