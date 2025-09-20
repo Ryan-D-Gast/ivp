@@ -56,7 +56,7 @@ pub trait SolOut {
         xold: Float,
         x: Float,
         y: &[Float],
-        interpolator: &I,
+        interpolator: Option<&I>,
     ) -> ControlFlag;
 }
 
@@ -71,5 +71,6 @@ pub trait SolOut {
 pub enum ControlFlag {
     Continue,
     Interrupt,
+    XOut(Float),
     ModifiedSolution(Float, Vec<Float>),
 }

@@ -1,25 +1,52 @@
-//! Classic explicit Runge-Kutta 4 (RK4) fixed-step integrator.
+//! Classic explicit Runge–Kutta 4 (RK4) fixed-step integrator
 
 use crate::{
     Float,
     error::Error,
     interpolate::Interpolate,
-    methods::{result::IntegrationResult, settings::Settings},
+    methods::{Evals, IntegrationResult, Steps},
     ode::ODE,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
 
-/// Classical explicit Runge-Kutta 4 (RK4) fixed-step integrator.
-/// Provides a dense output via cubic Hermite interpolation.
+/// Classical explicit Runge–Kutta 4 (RK4) — fixed-step solver with optional dense output.
+///
+/// This function integrates the autonomous system `y' = f(x, y)` from `x` to
+/// `xend` using a constant step size `h`, advancing the state buffer `y`
+/// in-place. It can optionally provide dense-output coefficients for continuous
+/// interpolation inside each step and call a user-provided `SolOut` hook.
+///
+/// # Arguments
+///
+/// ## Defining the Problem
+/// - `f`: Right‑hand side implementing `ODE`.
+/// - `x`: Initial independent variable value.
+/// - `xend`: Final independent variable value.
+/// - `y`: Mutable slice for the initial state; on success contains the state at `xend`.
+/// - `h`: Fixed step size (its sign must match `xend - x`).
+/// 
+/// ## Output Control
+/// - `solout`: Optional mutable reference to a `SolOut` callback invoked once
+///   before the loop and after each accepted step.
+/// - `dense_output`: If `true`, dense‑output coefficients are computed for each
+///   accepted step and an interpolant is passed to the callback.
+/// 
+/// ## Optional Settings
+/// - `max_steps`: Optional upper bound on the number of steps (default `100_000`).
+///
+/// # Returns
+/// A `Result` with `IntegrationResult` on success or a vector of `Error`
+/// values describing input validation issues.
 pub fn rk4<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
-    y: &[Float],
+    y: &mut [Float],
     h: Float,
     mut solout: Option<&mut S>,
-    settings: Settings,
+    dense_output: bool,
+    max_steps: Option<usize>,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
     F: ODE,
@@ -29,13 +56,13 @@ where
     let mut errors = Vec::new();
 
     // Initial Step Size
-    let direction = (xend - x).signum();
-    if h == 0.0 || h.signum() != direction {
+    let posneg = (xend - x).signum();
+    if h == 0.0 || h.signum() != posneg {
         errors.push(Error::InvalidStepSize(h));
     }
 
     // Maximum Number of Steps
-    let nmax = match settings.nmax {
+    let nmax = match max_steps {
         Some(n) => {
             if n <= 0 {
                 errors.push(Error::NMaxMustBePositive(n));
@@ -51,34 +78,60 @@ where
 
     // --- Declarations ---
     let n = y.len();
-    let mut y = y.to_vec();
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
     let mut k3 = vec![0.0; n];
     let mut k4 = vec![0.0; n];
     let mut yt = vec![0.0; n];
     let mut cont = vec![0.0; 4 * n];
-    let mut nfev = 0;
-    let mut nstep = 0;
+    let mut evals = Evals::new();
+    let mut steps = Steps::new();
     let mut status = Status::Success;
     let mut xold = x;
+    let mut xout: Option<Float> = None;
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
-    if let Some(s) = solout.as_mut() {
-        cont[0..n].copy_from_slice(&y);
-        for i in 0..n {
-            cont[n + i] = k1[i];
+    // Prepare a persistent interpolator object (pointer-based) used when needed
+    let interpolator = &DenseOutput::new(
+        cont.as_ptr(),
+        cont.len(),
+        &xold as *const Float,
+        &h as *const Float,
+    );
+
+    // Initial SolOut call (no interpolator yet; xold == x)
+    if let Some(sol) = solout.as_mut() {
+        match sol.solout::<DenseOutput>(xold, x, &y, None) {
+            ControlFlag::Interrupt => {
+                return Ok(IntegrationResult {
+                    x,
+                    h,
+                    status: Status::UserInterrupt,
+                    evals,
+                    steps,
+                });
+            }
+            ControlFlag::ModifiedSolution(xm, ym) => {
+                x = xm;
+                for i in 0..n {
+                    y[i] = ym[i];
+                }
+                f.ode(x, &y, &mut k1);
+                evals.ode += 1;
+            }
+            ControlFlag::XOut(xo) => {
+                xout = Some(xo);
+            }
+            ControlFlag::Continue => {}
         }
-        let interp = DenseOutput::new(&cont, xold, h);
-        s.solout(xold, x, &y, &interp);
     }
 
     // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
-        if nstep >= nmax {
-            status = Status::NeedLargerNmax;
+        if steps.total >= nmax {
+            status = Status::NeedLargerNMax;
             break;
         }
 
@@ -113,11 +166,12 @@ where
         }
         f.ode(x, &y, &mut k1);
 
-        nfev += 4;
-        nstep += 1;
+        evals.ode += 4;
+        steps.total += 1;
 
-        // Prepare dense output
-        if solout.is_some() {
+        // Decide if we must build dense output (for user xout events as well)
+        let event = xout.map_or(false, |xo| xo <= x);
+        if (dense_output || event) && solout.is_some() {
             cont[0..n].copy_from_slice(&yt);
             for i in 0..n {
                 cont[n + i] = k4[i];
@@ -127,20 +181,29 @@ where
         }
 
         // Optional callback function
-        if let Some(s) = solout.as_mut() {
-            match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+        if let Some(sol) = solout.as_mut() {
+            let interpolation = if dense_output || xout.map_or(false, |xo| xo <= x) {
+                Some(interpolator)
+            } else {
+                None
+            };
+            match sol.solout(xold, x, &y, interpolation) {
                 ControlFlag::Interrupt => {
-                    status = Status::Interrupted;
+                    status = Status::UserInterrupt;
                     break;
                 }
                 ControlFlag::ModifiedSolution(xm, ym) => {
                     // Update with modified solution
                     x = xm;
-                    y = ym;
-
+                    for i in 0..n {
+                        y[i] = ym[i];
+                    }
                     // Recompute k1 at new (x, y).
                     f.ode(x, &y, &mut k1);
-                    nfev += 1;
+                    evals.ode += 1;
+                }
+                ControlFlag::XOut(xo) => {
+                    xout = Some(xo);
                 }
                 ControlFlag::Continue => {}
             }
@@ -152,19 +215,7 @@ where
         }
     }
 
-    Ok(IntegrationResult {
-        x,
-        y: y.to_vec(),
-        h,
-        nfev,
-        njev: 0,
-        nsol: 0,
-        ndec: 0,
-        nstep,
-        naccpt: nstep,
-        nrejct: 0,
-        status,
-    })
+    Ok(IntegrationResult::new(x, h, status, evals, steps))
 }
 
 /// Continuous output function for RK4 using cubic Hermite interpolation.
@@ -185,25 +236,47 @@ pub fn contrk4(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Floa
     }
 }
 
-struct DenseOutput<'a> {
-    cont: &'a [Float],
-    xold: Float,
-    h: Float,
+/// Dense output interpolator for RK4 (pointer-based like DOPRI/DOP853 style)
+struct DenseOutput {
+    cont_ptr: *const Float,
+    cont_len: usize,
+    xold_ptr: *const Float,
+    h_ptr: *const Float,
 }
 
-impl<'a> DenseOutput<'a> {
-    pub fn new(cont: &'a [Float], xold: Float, h: Float) -> Self {
-        Self { xold, h, cont }
+impl DenseOutput {
+    fn new(
+        cont_ptr: *const Float,
+        cont_len: usize,
+        xold_ptr: *const Float,
+        h_ptr: *const Float,
+    ) -> Self {
+        Self {
+            cont_ptr,
+            cont_len,
+            xold_ptr,
+            h_ptr,
+        }
     }
 }
 
-impl<'a> Interpolate for DenseOutput<'a> {
+impl Interpolate for DenseOutput {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        contrk4(xi, yi, self.cont, self.xold, self.h);
+        unsafe {
+            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
+            let xold = *self.xold_ptr;
+            let h = *self.h_ptr;
+            contrk4(xi, yi, cont, xold, h);
+        }
     }
 
     fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        (self.cont.to_vec(), self.xold, self.h)
+        unsafe {
+            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
+            let xold = *self.xold_ptr;
+            let h = *self.h_ptr;
+            (cont.to_vec(), xold, h)
+        }
     }
 }
 

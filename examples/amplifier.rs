@@ -150,7 +150,7 @@ fn main() {
     let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * 0.0025).collect();
 
     let options = Options::builder()
-        .method(Method::Radau5)
+        .method(Method::RADAU)
         .mass_storage(MatrixStorage::Banded { ml: 1, mu: 1 })
         .jac_storage(MatrixStorage::Banded { ml: 3, mu: 3 })
         .rtol(1.0e-5)

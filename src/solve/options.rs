@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, matrix::MatrixStorage, methods::settings::Tolerance};
+use crate::{Float, matrix::MatrixStorage, methods::Tolerance};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
@@ -16,7 +16,7 @@ pub enum Method {
     /// Classic fixed-step RK4
     RK4,
     /// Radau 5th order implicit Runge-Kutta method
-    Radau5,
+    RADAU,
 }
 
 impl From<&str> for Method {
@@ -26,7 +26,7 @@ impl From<&str> for Method {
             "DOPRI5" | "RK45" => Method::DOPRI5,
             "DOP853" => Method::DOP853,
             "RK4" => Method::RK4,
-            "RADAU5" | "RADAU" => Method::Radau5,
+            "RADAU5" | "RADAU" => Method::RADAU,
             _ => Method::DOPRI5, // Default
         }
     }
@@ -36,29 +36,26 @@ impl From<&str> for Method {
 /// Options for `solve_ivp`.
 pub struct Options {
     /// Integration method. Choose an explicit RK (RK23/DOPRI5/DOP853/RK4) for non‑stiff
-    /// problems or an implicit RK (Radau5) for stiff/DAE systems. Default: DOPRI5 (aka RK45).
+    /// problems or an implicit RK (RADAU) for stiff/DAE systems. Default: DOPRI5 (aka RK45).
     #[builder(default = Method::DOPRI5, into)]
     pub method: Method,
     /// Relative tolerance for local error control. Accepts scalar or per‑component array/vector
-    /// via `Tolerance`. The effective scaling for component i is `atol[i] + rtol[i]*|y[i]|`.
+    /// via [`Tolerance`]. The effective scaling for component i is `atol[i] + rtol[i]*|y[i]|`.
     #[builder(default = 1e-3, into)]
     pub rtol: Tolerance,
     /// Absolute tolerance for local error control. Accepts scalar or per‑component array/vector.
     /// Used together with `rtol` to build the error scale `atol + rtol*|y|`.
     #[builder(default = 1e-6, into)]
     pub atol: Tolerance,
-    /// Maximum number of solver steps (safety cap to avoid very long runs on hard problems).
-    pub nmax: Option<usize>,
-    /// Times at which to return the solution. Integration remains adaptive internally.
-    /// When set, per‑step internal samples are not stored; use `dense_output=true` for
-    /// efficient post‑run interpolation at arbitrary times.
+    /// Maximum number of solver steps.
+    pub max_steps: Option<usize>,
+    /// Times at which to return the solution. If `None` the points are selected by the solver.
     pub t_eval: Option<Vec<Float>>,
-    /// Initial step size hint. The solver adjusts this if it is too large/small.
+    /// Initial step size (its sign must match `xend - x0`).
     pub first_step: Option<Float>,
-    /// Hard cap on step size. Useful to force sampling resolution or limit jumps.
+    /// Upper bound on step size.
     pub max_step: Option<Float>,
-    /// Hard lower bound on step size. If the solver needs a smaller step, it stops with
-    /// a "step size too small" status.
+    /// Lower bound on step size.
     pub min_step: Option<Float>,
     /// Store per‑step interpolants for cheap post‑run evaluation via `Solution::sol`/`sol_many`.
     /// Increases memory usage; recommended if you need values at times other than internal steps.
@@ -78,9 +75,9 @@ pub struct Options {
     /// If none are set, all variables are treated as index‑1 (pure ODE).
     pub nind1: Option<usize>,
     /// DAE partition: number of index‑2 algebraic variables following the index‑1 block.
-    /// In Radau5 error estimation these components are scaled by the current step size `h`.
+    /// In RADAU error estimation these components are scaled by the current step size `h`.
     pub nind2: Option<usize>,
     /// DAE partition: number of index‑3 algebraic variables following the index‑2 block.
-    /// In Radau5 error estimation these components are scaled by `h^2`.
+    /// In RADAU error estimation these components are scaled by `h^2`.
     pub nind3: Option<usize>,
 }

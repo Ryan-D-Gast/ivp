@@ -4,7 +4,7 @@ mod common;
 use common::{SHO, default_opts, default_opts_dense};
 
 fn all_methods() -> Vec<Method> {
-    vec![Method::RK23, Method::DOPRI5, Method::DOP853, Method::Radau5]
+    vec![Method::RK23, Method::DOPRI5, Method::DOP853, Method::RADAU]
 }
 
 #[derive(Clone, Copy)]
@@ -102,7 +102,7 @@ fn dense_output_matches_discrete_samples() {
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [1.0, 0.0];
-    for method in [Method::RK23, Method::DOPRI5, Method::DOP853, Method::Radau5] {
+    for method in [Method::RK23, Method::DOPRI5, Method::DOP853, Method::RADAU] {
         let opts = Options::builder()
             .method(method.clone())
             .rtol(1e-8)

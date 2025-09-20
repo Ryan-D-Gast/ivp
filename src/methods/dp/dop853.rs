@@ -22,27 +22,79 @@ use crate::{
     Float,
     error::Error,
     interpolate::Interpolate,
-    methods::{
-        hinit::hinit,
-        result::IntegrationResult,
-        settings::{Settings, Tolerance},
-    },
+    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ode::ODE,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
 
-/// Explicit Runge-Kutta method of order 8(5,3) due to
-/// Dormand & Prince (with stepsize control and dense output).
+/// Dormand–Prince DOP853 — explicit Runge–Kutta 8(5,3) solver with adaptive
+/// step-size control and optional dense output.
+///
+/// This function integrates the autonomous system `y' = f(x, y)` from `x` to
+/// `xend`, advancing the provided state buffer `y` in-place. It performs
+/// classical error control (embedded estimates) and, optionally, computes
+/// dense-output coefficients for continuous interpolation inside each step.
+///
+/// # Arguments
+///
+/// ## Defining the Problem
+/// - `f`: Right‑hand side implementing `ODE`.
+/// - `x`: Initial independent variable value.
+/// - `xend`: Final independent variable value.
+/// - `y`: Mutable slice containing the initial state; on success contains the
+///   state at the final time.
+/// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
+///
+/// ## Output Control
+/// - `solout`: Optional mutable reference to a `SolOut` callback used for
+///   intermediate output and event handling. If `dense_output` is `true` the
+///   callback may receive a dense interpolant; otherwise interpolation is
+///   computed only when needed to satisfy a previously requested `xout`.
+/// - `dense_output`: If `true`, dense‑output coefficients are computed every
+///   accepted step to enable fast interpolation via the provided interpolant.
+///
+/// ## Optional Settings
+///
+/// Below are optional parameters to customize the integrator's settings.
+/// If `None` is provided the default value is used. The default values
+/// should be suitable for most problems.
+///
+/// - `uround`: Machine rounding unit (default `2.3e-16`).
+/// - `safety_factor`: Safety factor for stepsize control (default `0.9`).
+/// - `scale_min`, `scale_max`: Lower/upper bounds for the stepsize scale.
+/// - `beta`: Stabilization parameter for step control (default `0.0`).
+/// - `h_max`: Maximum allowed step size (default `|xend - x|`).
+/// - `h0`: Optional initial step-size guess; when `None` a heuristic is used.
+/// - `max_steps`: Maximum number of steps (default `100_000`).
+/// - `stiff_test`: Number of accepted steps between stiffness tests
+///   (default `1000`).
+///
+/// # Returns
+/// `Result<IntegrationResult, Vec<Error>>` with [`IntegrationResult`] containing
+/// the final `x`, the predicted next step size `h`, the [`Status`] of the solver,
+/// the [`Evals`] and [`Steps`] statistics of the solver.
+///
+/// On error, a vector of [`Error`] values describing input validation issues.
+///
 pub fn dop853<F, S>(
     f: &F,
     mut x: Float,
     xend: Float,
-    y: &[Float],
+    y: &mut [Float],
     rtol: Tolerance,
     atol: Tolerance,
     mut solout: Option<&mut S>,
-    settings: Settings,
+    dense_output: bool,
+    uround: Option<Float>,
+    safety_factor: Option<Float>,
+    scale_min: Option<Float>,
+    scale_max: Option<Float>,
+    beta: Option<Float>,
+    h_max: Option<Float>,
+    h0: Option<Float>,
+    max_steps: Option<usize>,
+    stiff_test: Option<usize>,
 ) -> Result<IntegrationResult, Vec<Error>>
 where
     F: ODE,
@@ -51,30 +103,8 @@ where
     // --- Input Validation ---
     let mut errors: Vec<Error> = Vec::new();
 
-    // Maximum Number of Steps
-    let nmax = match settings.nmax {
-        Some(n) => {
-            if n <= 0 {
-                errors.push(Error::NMaxMustBePositive(n));
-            }
-            n
-        }
-        None => 100_000,
-    };
-
-    // Number of steps before performing a stiffness test
-    let nstiff = match settings.nstiff {
-        Some(n) => {
-            if n <= 0 {
-                errors.push(Error::NStiffMustBePositive(n));
-            }
-            n
-        }
-        None => 1000,
-    };
-
     // Rounding Unit
-    let uround = match settings.uround {
+    let uround = match uround {
         Some(u) => {
             if u <= 1e-35 || u >= 1.0 {
                 errors.push(Error::URoundOutOfRange(u));
@@ -85,7 +115,7 @@ where
     };
 
     // Safety Factor
-    let safety_factor = match settings.safety_factor {
+    let safety_factor = match safety_factor {
         Some(f) => {
             if f >= 1.0 || f <= 1e-4 {
                 errors.push(Error::SafetyFactorOutOfRange(f));
@@ -96,17 +126,17 @@ where
     };
 
     // Parameters for step size selection
-    let facc1 = match settings.scale_min {
+    let facc1 = match scale_min {
         Some(f) => 1.0 / f,
         None => 3.0,
     };
-    let facc2 = match settings.scale_max {
+    let facc2 = match scale_max {
         Some(f) => 1.0 / f,
         None => 1.0 / 6.0,
     };
 
     // Beta for step control stabilization
-    let beta = match settings.beta {
+    let beta = match beta {
         Some(b) => {
             if b > 0.2 {
                 errors.push(Error::BetaTooLarge(b));
@@ -117,9 +147,31 @@ where
     };
 
     // Maximum step size
-    let hmax = match settings.hmax {
+    let h_max = match h_max {
         Some(h) => h.abs(),
         None => (xend - x).abs(),
+    };
+
+    // Maximum Number of Steps
+    let nmax = match max_steps {
+        Some(n) => {
+            if n <= 0 {
+                errors.push(Error::NMaxMustBePositive(n));
+            }
+            n
+        }
+        None => 100_000,
+    };
+
+    // Number of steps before performing a stiffness test
+    let nstiff = match stiff_test {
+        Some(n) => {
+            if n <= 0 {
+                errors.push(Error::NStiffMustBePositive(n));
+            }
+            n
+        }
+        None => 1000,
     };
 
     if !errors.is_empty() {
@@ -128,7 +180,6 @@ where
 
     // --- Declarations ---
     let n = y.len();
-    let mut y = y.to_vec();
     let mut y1 = vec![0.0; n];
     let mut k1 = vec![0.0; n];
     let mut k2 = vec![0.0; n];
@@ -156,37 +207,73 @@ where
     let mut xph;
     let mut last = false;
     let mut reject = false;
-    let mut nfev: usize = 0;
-    let mut nstep: usize = 0;
-    let mut naccpt: usize = 0;
-    let mut nrejct: usize = 0;
-    let mut xold;
+    let mut evals = Evals::new();
+    let mut steps = Steps::new();
+    let mut xold = x;
+    let mut xout = None;
+    let mut event;
     let expo1 = 1.0 / 8.0 - beta * 0.2;
     let status;
     let posneg = (xend - x).signum();
 
     // --- Initializations ---
     f.ode(x, &y, &mut k1);
-    nfev += 1;
-    let mut h = match settings.h0 {
-        Some(h0) => h0,
+    evals.ode += 1;
+    let mut h = match h0 {
+        Some(h0) => h0.abs() * posneg,
         None => {
-            nfev += 1;
+            evals.ode += 1;
             hinit(
-                f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, hmax, &atol, &rtol,
+                f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, h_max, &atol, &rtol,
             )
         }
     };
-    if let Some(s) = solout.as_mut() {
-        let interp = DenseOutput::new(&cont, x, h);
-        s.solout(x, x, &y, &interp);
+
+    // Interpolator for optional dense output to SolOut
+    let interpolator = &DenseOutput::new(
+        cont.as_ptr(),
+        cont.len(),
+        &xold as *const Float,
+        &h as *const Float,
+    );
+
+    // Initial call to SolOut
+    if let Some(solout) = solout.as_mut() {
+        match solout.solout::<DenseOutput>(xold, x, &y, None) {
+            ControlFlag::Interrupt => {
+                status = Status::UserInterrupt;
+                return Ok(IntegrationResult {
+                    x,
+                    h,
+                    status,
+                    evals,
+                    steps,
+                });
+            }
+            ControlFlag::ModifiedSolution(xm, ym) => {
+                // Update with modified solution
+                x = xm;
+                for i in 0..n {
+                    y[i] = ym[i];
+                }
+
+                // Recompute k1 at new (x, y).
+                f.ode(x, &y, &mut k1);
+                evals.ode += 1;
+            }
+            ControlFlag::XOut(xo) => {
+                // Update x to xout
+                xout = Some(xo);
+            }
+            ControlFlag::Continue => {}
+        }
     }
 
     // --- Main integration loop ---
     loop {
         // Check for maximum number of steps
-        if nstep > nmax {
-            status = Status::NeedLargerNmax;
+        if steps.total > nmax {
+            status = Status::NeedLargerNMax;
             break;
         }
 
@@ -202,7 +289,7 @@ where
             last = true;
         }
 
-        nstep += 1;
+        steps.total += 1;
 
         // --- The twelve stages ---
         // Stage 2
@@ -301,7 +388,7 @@ where
                     + A1211 * k2[i]);
         }
         f.ode(xph, &y1, &mut k3);
-        nfev += 11;
+        evals.ode += 11;
 
         for i in 0..n {
             k4[i] = B1 * k1[i]
@@ -353,12 +440,12 @@ where
         if err <= 1.0 {
             // Step accepted
             facold = err.max(1.0e-4);
-            naccpt += 1;
+            steps.accepted += 1;
             f.ode(xph, &k5, &mut k4);
-            nfev += 1;
+            evals.ode += 1;
 
             // Stiffness detection
-            if (naccpt % nstiff == 0) || (iasti > 0) {
+            if (steps.accepted % nstiff == 0) || (iasti > 0) {
                 let mut stnum: Float = 0.0;
                 let mut stden: Float = 0.0;
                 for i in 0..n {
@@ -386,7 +473,8 @@ where
             }
 
             // Prepare dense output
-            if solout.is_some() {
+            event = xout.map_or(false, |xo| xo <= xph);
+            if dense_output || event {
                 for i in 0..n {
                     cont[i] = y[i];
                     let ydiff = k5[i] - y[i];
@@ -470,7 +558,7 @@ where
                             + A1615 * k2[i]);
                 }
                 f.ode(x + C16 * h, &y1, &mut k3);
-                nfev += 3;
+                evals.ode += 3;
 
                 // Add contributions of last three stages
                 for i in 0..n {
@@ -510,11 +598,17 @@ where
             xold = x;
             x = xph;
 
-            // Optional callback function
-            if let Some(ref mut s) = solout {
-                match s.solout(xold, x, &y, &DenseOutput::new(&cont, xold, h)) {
+            // Call to SolOut
+            if let Some(solout) = solout.as_mut() {
+                // See if interpolation is provided
+                let interpolation = if dense_output || event {
+                    Some(interpolator)
+                } else {
+                    None
+                };
+                match solout.solout(xold, x, &y, interpolation) {
                     ControlFlag::Interrupt => {
-                        status = Status::Interrupted;
+                        status = Status::UserInterrupt;
                         break;
                     }
                     ControlFlag::ModifiedSolution(xm, ym) => {
@@ -524,7 +618,11 @@ where
 
                         // Recompute k4 at new (x, y)
                         f.ode(x, &y, &mut k4);
-                        nfev += 1;
+                        evals.ode += 1;
+                    }
+                    ControlFlag::XOut(xo) => {
+                        // Update xout
+                        xout = Some(xo);
                     }
                     ControlFlag::Continue => {}
                 }
@@ -538,8 +636,8 @@ where
             }
 
             // Check for step size limits
-            if hnew.abs() > hmax.abs() {
-                hnew = posneg * hmax.abs();
+            if hnew.abs() > h_max.abs() {
+                hnew = posneg * h_max.abs();
             }
 
             // Prevent oscillations due to previous rejected step
@@ -551,27 +649,15 @@ where
             // Step rejected
             hnew = h / facc1.min(fac11 / safety_factor);
             reject = true;
-            if naccpt > 1 {
-                nrejct += 1;
+            if steps.accepted > 1 {
+                steps.rejected += 1;
             }
             last = false;
         }
         h = hnew;
     }
 
-    Ok(IntegrationResult {
-        x,
-        y,
-        h,
-        status,
-        nfev,
-        njev: 0,
-        nsol: 0,
-        ndec: 0,
-        nstep,
-        naccpt,
-        nrejct,
-    })
+    Ok(IntegrationResult::new(x, h, status, evals, steps))
 }
 
 /// Continuous output function for DOP853
@@ -589,25 +675,46 @@ pub fn contdp8(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Floa
 }
 
 /// Dense output interpolator for DOP853
-struct DenseOutput<'a> {
-    cont: &'a [Float],
-    xold: Float,
-    h: Float,
+struct DenseOutput {
+    cont_ptr: *const Float,
+    cont_len: usize,
+    xold_ptr: *const Float,
+    h_ptr: *const Float,
 }
 
-impl<'a> DenseOutput<'a> {
-    fn new(cont: &'a [Float], xold: Float, h: Float) -> Self {
-        Self { cont, xold, h }
+impl DenseOutput {
+    fn new(
+        cont_ptr: *const Float,
+        cont_len: usize,
+        xold_ptr: *const Float,
+        h_ptr: *const Float,
+    ) -> Self {
+        Self {
+            cont_ptr,
+            cont_len,
+            xold_ptr,
+            h_ptr,
+        }
     }
 }
 
-impl<'a> Interpolate for DenseOutput<'a> {
+impl<'a> Interpolate for DenseOutput {
     fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        contdp8(xi, yi, self.cont, self.xold, self.h);
+        unsafe {
+            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
+            let xold = *self.xold_ptr;
+            let h = *self.h_ptr;
+            contdp8(xi, yi, cont_slice, xold, h);
+        }
     }
 
     fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        (self.cont.to_vec(), self.xold, self.h)
+        unsafe {
+            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
+            let xold = *self.xold_ptr;
+            let h = *self.h_ptr;
+            (cont_slice.to_vec(), xold, h)
+        }
     }
 }
 

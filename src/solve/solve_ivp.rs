@@ -7,7 +7,6 @@ use crate::{
         dp::{dop853, dopri5},
         radau::radau5,
         rk::{rk4, rk23},
-        settings::Settings,
     },
     ode::ODE,
 };
@@ -111,68 +110,117 @@ pub fn solve_ivp<F>(
 where
     F: ODE,
 {
-    // Build Settings (rtol/atol are passed to methods)
-    let settings = Settings::builder()
-        .maybe_nmax(options.nmax)
-        .maybe_h0(options.first_step)
-        .maybe_hmax(options.max_step)
-        .maybe_hmin(options.min_step)
-        .maybe_nind1(options.nind1)
-        .maybe_nind2(options.nind2)
-        .maybe_nind3(options.nind3)
-        .jac_storage(options.jac_storage)
-        .mass_storage(options.mass_storage)
-        .build();
-
     // Prepare the default SolOut (wrapping user callback if provided)
     let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output);
 
     // Dispatch by method
     let result = match options.method {
         Method::RK4 => {
-            let h = settings.h0.unwrap_or_else(|| (xend - x0) / 100.0);
-            rk4(f, x0, xend, y0, h, Some(&mut default_solout), settings)
+            let h = options.first_step.unwrap_or_else(|| (xend - x0) / 100.0);
+            let mut y = y0.to_vec();
+            rk4(
+                f,
+                x0,
+                xend,
+                &mut y,
+                h,
+                Some(&mut default_solout),
+                true,
+                options.max_steps,
+            )
         }
-        Method::RK23 => rk23(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
-        Method::DOPRI5 => dopri5(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
-        Method::DOP853 => dop853(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
-        Method::Radau5 => radau5(
-            f,
-            x0,
-            xend,
-            y0,
-            options.rtol,
-            options.atol,
-            Some(&mut default_solout),
-            settings,
-        ),
+        Method::RK23 => {
+            let mut y = y0.to_vec();
+            rk23(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                Some(&mut default_solout),
+                true,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.first_step,
+                options.max_steps,
+            )
+        }
+        Method::DOPRI5 => {
+            let mut y = y0.to_vec();
+            dopri5(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                Some(&mut default_solout),
+                true,
+                None,
+                None,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.first_step,
+                options.max_steps,
+                None,
+            )
+        }
+        Method::DOP853 => {
+            let mut y = y0.to_vec();
+            dop853(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                Some(&mut default_solout),
+                true,
+                None,
+                None,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.first_step,
+                options.max_steps,
+                None,
+            )
+        }
+        Method::RADAU => {
+            let mut y = y0.to_vec();
+            radau5(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                Some(&mut default_solout),
+                true,
+                options.max_steps,
+                None,
+                None,
+                None,
+                None,
+                options.max_step,
+                options.min_step,
+                None,
+                None,
+                None,
+                options.nind1,
+                options.nind2,
+                options.nind3,
+                Some(options.jac_storage),
+                Some(options.mass_storage),
+                options.first_step,
+            )
+        }
     };
 
     match result {
@@ -188,18 +236,16 @@ where
                 y,
                 t_events,
                 y_events,
-                nfev: sol.nfev,
-                njev: sol.njev,
-                nlu: sol.ndec,
-                nstep: sol.nstep,
-                naccpt: sol.naccpt,
-                nrejct: sol.nrejct,
+                nfev: sol.evals.ode,
+                njev: sol.evals.jac,
+                nlu: sol.evals.lu,
+                nstep: sol.steps.total,
+                naccpt: sol.steps.accepted,
+                nrejct: sol.steps.rejected,
                 status: sol.status,
                 continuous_sol,
             })
         }
-        Err(errors) => {
-            Err(errors)
-        }
+        Err(errors) => Err(errors),
     }
 }
