@@ -169,7 +169,6 @@ where
 
     let mut order = 1usize;
     let mut n_equal_steps = 0usize;
-    let mut is_first_loop = true;
     let status;
 
     let mut psi = vec![0.0; n];
@@ -422,10 +421,6 @@ where
             continue;
         }
 
-        // Step accepted
-        if is_first_loop {
-            eprintln!("BDF15 first loop: h_try={} rejected={}", h_try, steps.rejected);
-        }
         steps.accepted += 1;
         n_equal_steps += 1;
         x = x_new;
@@ -538,8 +533,6 @@ where
         // Update Jacobian for next step
         f.jac(x, y, &mut jac);
         evals.jac += 1;
-
-        is_first_loop = false;
     }
 
     Ok(IntegrationResult::new(
