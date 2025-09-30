@@ -2,7 +2,7 @@
 
 use bon::Builder;
 
-use crate::{Float, matrix::MatrixStorage, methods::Tolerance};
+use crate::{matrix::MatrixStorage, methods::Tolerance, Float};
 
 /// Numerical methods for solve_ivp
 #[derive(Clone, Debug)]
@@ -17,6 +17,8 @@ pub enum Method {
     RK4,
     /// Radau 5th order implicit Runge-Kutta method
     RADAU,
+    /// Variable-order (1-5) Backward Differentiation Formula method for stiff problems
+    BDF,
 }
 
 impl From<&str> for Method {
@@ -27,6 +29,7 @@ impl From<&str> for Method {
             "DOP853" => Method::DOP853,
             "RK4" => Method::RK4,
             "RADAU5" | "RADAU" => Method::RADAU,
+            "BDF" | "BDF15" => Method::BDF,
             _ => Method::DOPRI5, // Default
         }
     }

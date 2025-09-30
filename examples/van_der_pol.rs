@@ -29,7 +29,7 @@ fn main() {
     let y0 = [2.0, 0.0];
     let t_eval = (0..=20).map(|i| i as f64 * 0.1).collect();
     let options = Options::builder()
-        .method(Method::DOP853)
+        .method(Method::BDF)
         .rtol(1e-9)
         .atol(1e-9)
         .t_eval(t_eval)

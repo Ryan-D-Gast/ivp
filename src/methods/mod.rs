@@ -4,10 +4,15 @@
 pub mod dp;
 pub mod radau;
 pub mod rk;
+pub mod bdf;
 
 use crate::{Float, ode::ODE, status::Status};
 
-use std::ops::{Index, IndexMut};
+use std::{
+    iter::{ExactSizeIterator, FusedIterator},
+    ops::{Index, IndexMut},
+    slice::Iter,
+};
 
 /// --- Shared types and utilities ---
 
@@ -93,6 +98,67 @@ impl Steps {
 pub enum Tolerance {
     Scalar(Float),
     Vector(Vec<Float>),
+}
+
+/// Iterator over the components of a [`Tolerance`].
+pub enum ToleranceIter<'a> {
+    Scalar { value: Float, remaining: usize },
+    Vector { iter: Iter<'a, Float> },
+}
+
+impl<'a> Iterator for ToleranceIter<'a> {
+    type Item = Float;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Scalar { value, remaining } => {
+                if *remaining == 0 {
+                    None
+                } else {
+                    *remaining -= 1;
+                    Some(*value)
+                }
+            }
+            Self::Vector { iter } => iter.next().copied(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Self::Scalar { remaining, .. } => (*remaining, Some(*remaining)),
+            Self::Vector { iter } => iter.size_hint(),
+        }
+    }
+}
+
+impl<'a> ExactSizeIterator for ToleranceIter<'a> {}
+
+impl<'a> FusedIterator for ToleranceIter<'a> {}
+
+impl Tolerance {
+    /// Iterate over the tolerance values for a state vector of length `len`.
+    ///
+    /// For scalar tolerances, the same value is repeated `len` times. Vector
+    /// tolerances must match `len` exactly.
+    pub fn iter(&self, len: usize) -> ToleranceIter<'_> {
+        match self {
+            Tolerance::Scalar(value) => ToleranceIter::Scalar {
+                value: *value,
+                remaining: len,
+            },
+            Tolerance::Vector(values) => {
+                assert!(
+                    values.len() == len,
+                    "Tolerance vector length mismatch: expected {}, got {}",
+                    len,
+                    values.len()
+                );
+                ToleranceIter::Vector {
+                    iter: values.iter(),
+                }
+            }
+        }
+    }
 }
 
 impl From<Float> for Tolerance {

@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{SHO, default_opts};
+use common::{default_opts, SHO};
 
 fn methods() -> Vec<Method> {
     vec![
@@ -10,6 +10,7 @@ fn methods() -> Vec<Method> {
         Method::DOPRI5,
         Method::DOP853,
         Method::RADAU,
+        Method::BDF,
     ]
 }
 

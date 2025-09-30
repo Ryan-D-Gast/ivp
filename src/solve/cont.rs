@@ -1,12 +1,13 @@
 //! Continuous output provided by dense output coefficients (cont) from each step.
 
 use crate::{
-    Float,
     methods::{
+        bdf::{contb15, BDF15_COEFFS_PER_STATE},
         dp::{contdp5, contdp8},
         radau::contr5,
-        rk::{contrk4, contrk23},
+        rk::{contrk23, contrk4},
     },
+    Float,
 };
 
 use super::options::Method;
@@ -37,6 +38,7 @@ impl ContinuousOutput {
             Method::DOPRI5 => (contdp5 as ContFn, 5),
             Method::DOP853 => (contdp8 as ContFn, 8),
             Method::RADAU => (contr5 as ContFn, 4),
+            Method::BDF => (contb15 as ContFn, BDF15_COEFFS_PER_STATE),
         };
         let segs = segs
             .into_iter()

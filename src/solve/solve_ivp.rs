@@ -1,14 +1,15 @@
 //! Solve an initial value problem for a system of ODEs.
 
 use crate::{
-    Float,
     error::Error,
     methods::{
+        bdf::bdf15,
         dp::{dop853, dopri5},
         radau::radau5,
-        rk::{rk4, rk23},
+        rk::{rk23, rk4},
     },
     ode::ODE,
+    Float,
 };
 
 use super::{
@@ -218,6 +219,25 @@ where
                 options.nind3,
                 Some(options.jac_storage),
                 Some(options.mass_storage),
+                options.first_step,
+            )
+        }
+        Method::BDF => {
+            let mut y = y0.to_vec();
+            bdf15(
+                f,
+                x0,
+                xend,
+                &mut y,
+                options.rtol,
+                options.atol,
+                Some(&mut default_solout),
+                options.max_steps,
+                options.max_step,
+                options.min_step,
+                None,
+                None,
+                Some(options.jac_storage),
                 options.first_step,
             )
         }

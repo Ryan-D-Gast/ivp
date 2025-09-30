@@ -1,14 +1,20 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{SHO, default_opts_dense};
+use common::{default_opts_dense, SHO};
 
 #[test]
 fn backward_integration_works() {
     let x0 = 2.0 * std::f64::consts::PI;
     let xend = 0.0;
     let y0 = [1.0, 0.0];
-    for method in [Method::RK23, Method::DOPRI5, Method::DOP853, Method::RADAU] {
+    for method in [
+        Method::RK23,
+        Method::DOPRI5,
+        Method::DOP853,
+        Method::RADAU,
+        Method::BDF,
+    ] {
         let sol = solve_ivp(&SHO, x0, xend, &y0, default_opts_dense(method)).unwrap();
         // Check we got a span and can evaluate at mid
         if let Some((t0, t1)) = sol.sol_span() {

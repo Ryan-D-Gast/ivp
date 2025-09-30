@@ -40,8 +40,6 @@ Currently implemented solvers:
 -   **RK4**: The classic 4th order Runge-Kutta method with fixed step-size and cubic Hermite interpolation for dense output.
 -   **RK23**: A 3rd order Runge-Kutta method with 2nd order error estimate for step-size control.
 -   **Radau**: A 5th order implicit Runge-Kutta method of Radau IIA type with step-size control and dense output.
-
-Planned additions in development:
--   **BDF**: A variable-order (1 to 5) Backward Differentiation Formula method with step-size control and dense output.
+-   **BDF**: A variable-order (1 to 5) Backward Differentiation Formula method for stiff ODEs with adaptive step-size control and dense output.
 
 > Note: This library uses dynamically sized arrays (Vec) internally to allow for flexibility in use cases and future deployment as a Python package. For a more performant solution with statically sized arrays (and thus require compile-time declaration of system), consider using [differential-equations](https://github.com/Ryan-D-Gast/differential-equations), which also supports a wider variety of solvers and features. Including SDE, DDE, and DAE equations. This library is primarily intended for users looking for a rust version of SciPy's `solve_ivp` function with a familiar API.
