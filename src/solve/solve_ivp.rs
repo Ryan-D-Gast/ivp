@@ -112,7 +112,7 @@ where
     F: ODE,
 {
     // Prepare the default SolOut (wrapping user callback if provided)
-    let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output);
+    let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output, options.first_step, x0);
 
     // Dispatch by method
     let result = match options.method {

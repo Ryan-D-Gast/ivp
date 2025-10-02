@@ -5,7 +5,7 @@ use bon::Builder;
 use crate::{matrix::MatrixStorage, methods::Tolerance, Float};
 
 /// Numerical methods for solve_ivp
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Method {
     /// Bogacki–Shampine 3(2) adaptive RK
     RK23,

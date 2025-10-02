@@ -303,10 +303,9 @@ where
             }
             lu_matrix[(r, r)] += 1.0;
         }
+        evals.lu += 1;
         match lu_decomp(&mut lu_matrix, &mut pivot) {
-            Ok(()) => {
-                evals.lu += 1;
-            }
+            Ok(()) => {}
             Err(_) => {
                 let factor = 0.5;
                 change_d(&mut d, order, factor, &mut scratch_change);
