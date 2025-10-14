@@ -28,7 +28,7 @@ impl From<&str> for Method {
             "DOPRI5" | "RK45" => Method::DOPRI5,
             "DOP853" => Method::DOP853,
             "RK4" => Method::RK4,
-            "RADAU5" | "RADAU" => Method::RADAU,
+            "RADAU" | "RADAU5" => Method::RADAU,
             "BDF" | "BDF15" => Method::BDF,
             _ => Method::DOPRI5, // Default
         }

@@ -1,12 +1,7 @@
 //! Continuous output provided by dense output coefficients (cont) from each step.
 
 use crate::{
-    methods::{
-        bdf::{contb15, BDF15_COEFFS_PER_STATE},
-        dp::{contdp5, contdp8},
-        radau::contr5,
-        rk::{contrk23, contrk4},
-    },
+    methods::{BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
     Float,
 };
 
@@ -33,12 +28,12 @@ impl ContinuousOutput {
     /// Build a ContinuousOutput from per-step tuples of (cont, xold, h) and the selected method.
     pub(crate) fn from_segments(method: Method, segs: Vec<(Vec<Float>, Float, Float)>) -> Self {
         let (cont_fn, coeffs_per_state) = match method {
-            Method::RK4 => (contrk4 as ContFn, 4),
-            Method::RK23 => (contrk23 as ContFn, 4),
-            Method::DOPRI5 => (contdp5 as ContFn, 5),
-            Method::DOP853 => (contdp8 as ContFn, 8),
-            Method::RADAU => (contr5 as ContFn, 4),
-            Method::BDF => (contb15 as ContFn, BDF15_COEFFS_PER_STATE),
+            Method::RK4 => (RK4::interpolate as ContFn, 4),
+            Method::RK23 => (RK23::interpolate as ContFn, 4),
+            Method::DOPRI5 => (DOPRI5::interpolate as ContFn, 5),
+            Method::DOP853 => (DOP853::interpolate as ContFn, 8),
+            Method::RADAU => (RADAU::interpolate as ContFn, 4),
+            Method::BDF => (BDF::interpolate as ContFn, 7),
         };
         let segs = segs
             .into_iter()

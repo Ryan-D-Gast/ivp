@@ -1,10 +1,19 @@
 // Numerical methods
 
-// --- Solver modules ---
-pub mod dp;
-pub mod radau;
-pub mod rk;
-pub mod bdf;
+// --- ODE Solvers ---
+mod dop853;
+mod dopri5;
+mod radau;
+mod rk4;
+mod rk23;
+mod bdf;
+
+pub use bdf::BDF;
+pub use dop853::DOP853;
+pub use dopri5::DOPRI5;
+pub use radau::RADAU;
+pub use rk4::RK4;
+pub use rk23::RK23;
 
 use crate::{Float, ode::ODE, status::Status};
 

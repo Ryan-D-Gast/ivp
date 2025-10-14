@@ -2,12 +2,7 @@
 
 use crate::{
     error::Error,
-    methods::{
-        bdf::bdf15,
-        dp::{dop853, dopri5},
-        radau::radau5,
-        rk::{rk23, rk4},
-    },
+    methods::{BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
     ode::ODE,
     Float,
 };
@@ -119,7 +114,7 @@ where
         Method::RK4 => {
             let h = options.first_step.unwrap_or_else(|| (xend - x0) / 100.0);
             let mut y = y0.to_vec();
-            rk4(
+            RK4::solve(
                 f,
                 x0,
                 xend,
@@ -132,7 +127,7 @@ where
         }
         Method::RK23 => {
             let mut y = y0.to_vec();
-            rk23(
+            RK23::solve(
                 f,
                 x0,
                 xend,
@@ -151,7 +146,7 @@ where
         }
         Method::DOPRI5 => {
             let mut y = y0.to_vec();
-            dopri5(
+            DOPRI5::solve(
                 f,
                 x0,
                 xend,
@@ -173,7 +168,7 @@ where
         }
         Method::DOP853 => {
             let mut y = y0.to_vec();
-            dop853(
+            DOP853::solve(
                 f,
                 x0,
                 xend,
@@ -195,7 +190,7 @@ where
         }
         Method::RADAU => {
             let mut y = y0.to_vec();
-            radau5(
+            RADAU::solve(
                 f,
                 x0,
                 xend,
@@ -224,7 +219,7 @@ where
         }
         Method::BDF => {
             let mut y = y0.to_vec();
-            bdf15(
+            BDF::solve(
                 f,
                 x0,
                 xend,
