@@ -81,7 +81,6 @@ impl DOP853 {
     /// the [`Evals`] and [`Steps`] statistics of the solver.
     ///
     /// On error, a vector of [`Error`] values describing input validation issues.
-    ///
     pub fn solve<F, S>(
         f: &F,
         mut x: Float,

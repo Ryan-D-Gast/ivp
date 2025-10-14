@@ -27,6 +27,44 @@ const KAPPA: [Float; MAX_ORDER + 1] = [0.0, -0.1850, -1.0 / 9.0, -0.0823, -0.041
 
 impl BDF {
     /// Solve an initial value problem using the variable-order BDF(1-5) method.
+    ///
+    /// This function integrates the autonomous system `y' = f(x, y)` from `x` to
+    /// `xend`, advancing the provided state buffer `y` in-place. It uses a
+    /// variable-order Backward Differentiation Formula method with adaptive
+    /// step-size control and optional dense output.
+    ///
+    /// # Arguments
+    ///
+    /// ## Defining the Problem
+    /// - `f`: Right‑hand side implementing `ODE`.
+    /// - `x`: Initial independent variable value.
+    /// - `xend`: Final independent variable value.
+    /// - `y`: Mutable slice containing the initial state; on success contains the
+    ///   state at the final time.
+    /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
+    ///
+    /// ## Output Control
+    /// - `solout`: Optional mutable reference to a `SolOut` callback used for
+    ///   intermediate output. If provided, the callback may receive a dense
+    ///   interpolant for efficient interpolation within accepted steps.
+    ///
+    /// ## Optional Settings
+    ///
+    /// Below are optional parameters to customize the integrator's settings.
+    /// If `None` is provided the default value is used. The default values
+    /// should be suitable for most problems.
+    ///
+    /// - `nmax` (default 100_000): Maximum number of integration steps.
+    /// - `max_step` (default `|xend - x|`): Maximum step size.
+    /// - `min_step` (default `0.0`): Minimum step size.
+    /// - `newton_maxiter` (default `4`): Maximum Newton iterations per step.
+    /// - `newton_tol` (default derived from tolerances): Newton convergence tolerance.
+    /// - `jac_storage` (default `Full`): Matrix storage type for Jacobian.
+    /// - `h0` (default heuristic): Initial step size guess.
+    ///
+    /// # Returns
+    /// A `Result` with `IntegrationResult` on success or a vector of `Error`
+    /// values describing input validation issues.
     pub fn solve<F, S>(
         f: &F,
         mut x: Float,
