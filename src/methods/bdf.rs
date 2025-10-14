@@ -18,12 +18,12 @@ const MAX_FACTOR: Float = 10.0;
 const SAFETY_DEFAULT: Float = 0.9;
 const BDF_COEFFS_PER_STATE: usize = MAX_ORDER + 2;
 
+// Fixed coefficients
+const KAPPA: [Float; MAX_ORDER + 1] = [0.0, -0.1850, -1.0 / 9.0, -0.0823, -0.0415, 0.0];
+
 /// BDF — variable order (1..5) Backward Differentiation Formula solver.
 #[derive(Clone, Copy, Debug)]
 pub struct BDF;
-
-// Fixed coefficients
-const KAPPA: [Float; MAX_ORDER + 1] = [0.0, -0.1850, -1.0 / 9.0, -0.0823, -0.0415, 0.0];
 
 impl BDF {
     /// Solve an initial value problem using the variable-order BDF(1-5) method.
