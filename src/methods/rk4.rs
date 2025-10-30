@@ -5,7 +5,7 @@ use crate::{
     error::Error,
     interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps},
-    ode::ODE,
+    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
@@ -25,7 +25,7 @@ impl RK4 {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `ODE`.
+    /// - `f`: Right‑hand side implementing `IVP`.
     /// - `x`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y`: Mutable slice for the initial state; on success contains the state at `xend`.
@@ -54,7 +54,7 @@ impl RK4 {
         max_steps: Option<usize>,
     ) -> Result<IntegrationResult, Vec<Error>>
     where
-        F: ODE,
+        F: IVP,
         S: SolOut,
     {
         // --- Input Validation ---

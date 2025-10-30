@@ -12,7 +12,7 @@ use ivp::prelude::*;
 
 struct ExponentialDecay;
 
-impl ODE for ExponentialDecay {
+impl IVP for ExponentialDecay {
     fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
         // Example: dy/dx = -y (exponential decay)
         for i in 0..y.len() {

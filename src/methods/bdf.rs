@@ -5,7 +5,7 @@ use crate::{
     interpolate::Interpolate,
     matrix::{lin_solve, lu_decomp, Matrix, MatrixStorage},
     methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
-    ode::ODE,
+    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
     Float,
@@ -36,7 +36,7 @@ impl BDF {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `ODE`.
+    /// - `f`: Right‑hand side implementing `IVP`.
     /// - `x`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y`: Mutable slice containing the initial state; on success contains the
@@ -82,7 +82,7 @@ impl BDF {
         h0: Option<Float>,
     ) -> Result<IntegrationResult, Vec<Error>>
     where
-        F: ODE,
+        F: IVP,
         S: SolOut,
     {
         let n = y.len();

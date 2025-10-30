@@ -9,7 +9,7 @@ fn all_methods() -> Vec<Method> {
 
 #[derive(Clone, Copy)]
 struct ZeroRhs;
-impl ODE for ZeroRhs {
+impl IVP for ZeroRhs {
     fn ode(&self, _t: f64, _y: &[f64], dydx: &mut [f64]) {
         for v in dydx.iter_mut() {
             *v = 0.0;
@@ -148,7 +148,7 @@ fn dense_output_out_of_range_errors() {
 }
 
 struct ShoZeroEventAll;
-impl ODE for ShoZeroEventAll {
+impl IVP for ShoZeroEventAll {
     fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
@@ -162,7 +162,7 @@ impl ODE for ShoZeroEventAll {
 }
 
 struct ShoZeroEventPositive;
-impl ODE for ShoZeroEventPositive {
+impl IVP for ShoZeroEventPositive {
     fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
@@ -175,7 +175,7 @@ impl ODE for ShoZeroEventPositive {
 }
 
 struct ShoZeroEventNegative;
-impl ODE for ShoZeroEventNegative {
+impl IVP for ShoZeroEventNegative {
     fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
@@ -267,7 +267,7 @@ fn zero_interval_returns_initial_state() {
 }
 
 struct Exp2;
-impl ODE for Exp2 {
+impl IVP for Exp2 {
     fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[0];
         dydx[1] = y[1];

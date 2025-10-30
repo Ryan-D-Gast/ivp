@@ -15,7 +15,7 @@ pub use radau::RADAU;
 pub use rk4::RK4;
 pub use rk23::RK23;
 
-use crate::{Float, ode::ODE, status::Status};
+use crate::{Float, ivp::IVP, status::Status};
 
 use std::{
     iter::{ExactSizeIterator, FusedIterator},
@@ -229,7 +229,7 @@ pub fn hinit<F>(
     rtol: &Tolerance,
 ) -> Float
 where
-    F: ODE,
+    F: IVP,
 {
     let n = y.len();
     let mut dnf: Float = 0.0;

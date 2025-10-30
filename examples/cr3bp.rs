@@ -24,7 +24,7 @@ struct CR3BP {
     mu: f64, // Mass ratio
 }
 
-impl ODE for CR3BP {
+impl IVP for CR3BP {
     fn ode(&self, _t: f64, sv: &[f64], dsdt: &mut [f64]) {
         // Components
         let (x, y, _z, vx, vy, vz) = (sv[0], sv[1], sv[2], sv[3], sv[4], sv[5]);

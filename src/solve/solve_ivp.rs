@@ -3,7 +3,7 @@
 use crate::{
     error::Error,
     methods::{BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
-    ode::ODE,
+    ivp::IVP,
     Float,
 };
 
@@ -21,7 +21,7 @@ use super::{
 /// statistics, and (optionally) a continuous interpolant for dense evaluation.
 ///
 /// Arguments:
-/// - `f`: System right‑hand side implementing `ode::ODE`.
+/// - `f`: System right‑hand side implementing `IVP`.
 /// - `x0`: Initial independent variable (time) value.
 /// - `xend`: Final independent variable value. Can be less than `x0` to integrate backward.
 /// - `y0`: Initial state vector at `x0`.
@@ -58,7 +58,7 @@ use super::{
 /// use ivp::prelude::*;
 ///
 /// struct SHO;
-/// impl ODE for SHO {
+/// impl IVP for SHO {
 ///     fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
 ///         dydx[0] = y[1];
 ///         dydx[1] = -y[0];
@@ -104,7 +104,7 @@ pub fn solve_ivp<F>(
     options: Options,
 ) -> Result<Solution, Vec<Error>>
 where
-    F: ODE,
+    F: IVP,
 {
     // Prepare the default SolOut (wrapping user callback if provided)
     let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output, options.first_step, x0);

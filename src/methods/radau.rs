@@ -10,7 +10,7 @@ use crate::{
     interpolate::Interpolate,
     matrix::{Matrix, MatrixStorage, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{Evals, IntegrationResult, Steps, Tolerance},
-    ode::ODE,
+    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
@@ -29,7 +29,7 @@ impl RADAU {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `ODE` (optionally providing `jac`, `mass`).
+    /// - `f`: Right‑hand side implementing `IVP` (optionally providing `jac`, `mass`).
     /// - `x`: Initial abscissa; `xend`: final abscissa.
     /// - `y`: Initial state; on success contains the state at `xend`.
     /// - `rtol`, `atol`: Relative/absolute tolerances (scalar or vector).
@@ -84,7 +84,7 @@ impl RADAU {
         h0: Option<Float>,
     ) -> Result<IntegrationResult, Vec<Error>>
     where
-        F: ODE,
+        F: IVP,
         S: SolOut,
     {
         // --- Input Validation ---

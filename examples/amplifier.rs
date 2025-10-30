@@ -59,7 +59,7 @@ impl Amplifier {
     }
 }
 
-impl ODE for Amplifier {
+impl IVP for Amplifier {
     fn ode(&self, t: f64, y: &[f64], f: &mut [f64]) {
         let w = 2.0 * PI * 100.0;
         let uet = self.ue * (w * t).sin();

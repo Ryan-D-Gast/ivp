@@ -17,7 +17,7 @@
 //! use std::f64::consts::PI;
 //!
 //! struct SHO;
-//! impl ODE for SHO {
+//! impl IVP for SHO {
 //!     fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
 //!         dydx[0] = y[1];
 //!         dydx[1] = -y[0];
@@ -88,7 +88,7 @@ pub(crate) type Float = f64;
 pub mod error;
 pub mod interpolate;
 pub mod matrix;
-pub mod ode;
+pub mod ivp;
 pub mod solout;
 pub mod solve;
 pub mod status;

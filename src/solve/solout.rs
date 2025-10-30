@@ -6,7 +6,7 @@
 use crate::{
     Float,
     interpolate::Interpolate,
-    ode::ODE,
+    ivp::IVP,
     solout::{ControlFlag, SolOut},
     solve::event::{Direction, EventConfig},
 };
@@ -14,7 +14,7 @@ use crate::{
 /// Internal output handler for `solve_ivp`.
 pub(crate) struct DefaultSolOut<'a, F>
 where
-    F: ODE,
+    F: IVP,
 {
     /// Reference to the ODE system
     ode: &'a F,
@@ -55,7 +55,7 @@ where
 
 impl<'a, F> DefaultSolOut<'a, F>
 where
-    F: ODE,
+    F: IVP,
 {
     /// Constructs a new output handler.
     pub fn new(
@@ -106,7 +106,7 @@ where
     }
 }
 
-impl<'a, F: ODE> SolOut for DefaultSolOut<'a, F> {
+impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
     fn solout<I: Interpolate>(
         &mut self,
         xold: Float,

@@ -23,7 +23,7 @@ use crate::{
     error::Error,
     interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
-    ode::ODE,
+    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
@@ -44,7 +44,7 @@ impl DOP853 {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `ODE`.
+    /// - `f`: Right‑hand side implementing `IVP`.
     /// - `x`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y`: Mutable slice containing the initial state; on success contains the
@@ -101,7 +101,7 @@ impl DOP853 {
         stiff_test: Option<usize>,
     ) -> Result<IntegrationResult, Vec<Error>>
     where
-        F: ODE,
+        F: IVP,
         S: SolOut,
     {
         // --- Input Validation ---

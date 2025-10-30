@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 pub struct SHO;
-impl ODE for SHO {
+impl IVP for SHO {
     fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];

@@ -1,4 +1,4 @@
-//! User-supplied ODE system.
+//! User-supplied Initial Value Problem.
 
 use crate::{
     Float,
@@ -6,7 +6,7 @@ use crate::{
     solve::event::EventConfig,
 };
 
-/// User-supplied ODE system.
+/// User-supplied IVP system.
 ///
 /// Implement this trait for your problem to provide the right-hand side
 /// function y' = f(x, y). The integrator repeatedly calls `ode` with the
@@ -17,14 +17,14 @@ use crate::{
 ///
 /// ```ignore
 /// struct VanDerPol { eps: f64 }
-/// impl ODE for VanDerPol {
+/// impl IVP for VanDerPol {
 ///     fn ode(&self, x: f64, y: &[f64], dydx: &mut [f64]) {
 ///         dydx[0] = y[1];
 ///         dydx[1] = ((1.0 - y[0]*y[0])*y[1] - y[0]) / self.eps;
 ///     }
 /// }
 /// ```
-pub trait ODE {
+pub trait IVP {
     /// Compute the derivative dydx at (x, y).
     fn ode(&self, x: Float, y: &[Float], dydx: &mut [Float]);
 
