@@ -1,6 +1,6 @@
 //! LU decomposition for real and complex matrices.
 
-use crate::error::Error;
+use crate::error::{Error, LinearAlgebraError};
 
 use super::base::Matrix;
 
@@ -37,22 +37,22 @@ use super::base::Matrix;
 pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
     let n = a.nrows();
     if n != a.ncols() {
-        return Err(Error::NonSquareMatrix {
+        return Err(Error::LinearAlgebra(LinearAlgebraError::NonSquareMatrix {
             rows: n,
             cols: a.ncols(),
-        });
+        }));
     }
 
     if ip.len() != n {
-        return Err(Error::PivotSizeMismatch {
+        return Err(Error::LinearAlgebra(LinearAlgebraError::PivotSizeMismatch {
             expected: n,
             actual: ip.len(),
-        });
+        }));
     }
 
     if n == 1 {
         if a[(0, 0)] == 0.0 {
-            return Err(Error::SingularMatrix);
+            return Err(Error::LinearAlgebra(LinearAlgebraError::SingularMatrix));
         }
         ip[0] = 0;
         return Ok(());
@@ -79,7 +79,7 @@ pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
 
         // Check for singularity
         if pivot == 0.0 {
-            return Err(Error::SingularMatrix);
+            return Err(Error::LinearAlgebra(LinearAlgebraError::SingularMatrix));
         }
 
         // If m != k, swap only the k-th column entries between rows m and k now
@@ -118,7 +118,7 @@ pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
 
     // Check if the final diagonal element is non-zero
     if a[(n - 1, n - 1)] == 0.0 {
-        return Err(Error::SingularMatrix);
+        return Err(Error::LinearAlgebra(LinearAlgebraError::SingularMatrix));
     }
 
     Ok(())
@@ -178,22 +178,22 @@ pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
 pub fn lu_decomp_complex(ar: &mut Matrix, ai: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
     let n = ar.nrows();
     if n != ar.ncols() || n != ai.nrows() || n != ai.ncols() {
-        return Err(Error::NonSquareMatrix {
+        return Err(Error::LinearAlgebra(LinearAlgebraError::NonSquareMatrix {
             rows: n,
             cols: ar.ncols(),
-        });
+        }));
     }
 
     if ip.len() != n {
-        return Err(Error::PivotSizeMismatch {
+        return Err(Error::LinearAlgebra(LinearAlgebraError::PivotSizeMismatch {
             expected: n,
             actual: ip.len(),
-        });
+        }));
     }
 
     if n == 1 {
         if ar[(0, 0)].abs() + ai[(0, 0)].abs() == 0.0 {
-            return Err(Error::SingularMatrix);
+            return Err(Error::LinearAlgebra(LinearAlgebraError::SingularMatrix));
         }
         ip[0] = 0;
         return Ok(());
@@ -221,7 +221,7 @@ pub fn lu_decomp_complex(ar: &mut Matrix, ai: &mut Matrix, ip: &mut [usize]) -> 
 
         // Check for singularity
         if tr.abs() + ti.abs() == 0.0 {
-            return Err(Error::SingularMatrix);
+            return Err(Error::LinearAlgebra(LinearAlgebraError::SingularMatrix));
         }
 
         // If m != k, swap only the (m,k) and (k,k) entries now
@@ -295,7 +295,7 @@ pub fn lu_decomp_complex(ar: &mut Matrix, ai: &mut Matrix, ip: &mut [usize]) -> 
 
     // Check final diagonal element
     if ar[(n - 1, n - 1)].abs() + ai[(n - 1, n - 1)].abs() == 0.0 {
-        return Err(Error::SingularMatrix);
+        return Err(Error::LinearAlgebra(LinearAlgebraError::SingularMatrix));
     }
 
     Ok(())

@@ -20,17 +20,64 @@
 
 use crate::{
     Float,
-    error::Error,
+    error::{Error, ConfigError},
     interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
+use bon::Builder;
 
-/// DOP853 - Dormand–Prince 8(5,3) explicit Runge–Kutta integrator.
-#[derive(Clone, Copy, Debug)]
-pub struct DOP853;
+/// DOP853 - Dormand–Prince 8(5,3) explicit Runge–Kutta integrator with configuration.
+#[derive(Builder, Clone, Debug)]
+pub struct DOP853 {
+    /// Machine rounding unit (default: 2.3e-16 for f64)
+    #[builder(default = 2.3e-16)]
+    pub uround: Float,
+    /// Safety factor for step size control (default: 0.9)
+    #[builder(default = 0.9)]
+    pub safety_factor: Float,
+    /// Minimum step scaling factor (default: 0.333)
+    #[builder(default = 0.333)]
+    pub scale_min: Float,
+    /// Maximum step scaling factor (default: 6.0)
+    #[builder(default = 6.0)]
+    pub scale_max: Float,
+    /// Stabilization parameter for step control (default: 0.0)
+    #[builder(default = 0.0)]
+    pub beta: Float,
+    /// Maximum step size (default: None = |xend - x|)
+    pub max_step: Option<Float>,
+    /// Initial step size (default: None = automatic)
+    pub first_step: Option<Float>,
+    /// Maximum number of steps (default: 100_000)
+    #[builder(default = 100_000)]
+    pub max_steps: usize,
+    /// Interval for stiffness detection (default: 1000 steps)
+    #[builder(default = 1000)]
+    pub stiff_test: usize,
+    /// Enable dense output (default: true)
+    #[builder(default = true)]
+    pub dense_output: bool,
+}
+
+impl Default for DOP853 {
+    fn default() -> Self {
+        Self {
+            uround: 2.3e-16,
+            safety_factor: 0.9,
+            scale_min: 0.333,
+            scale_max: 6.0,
+            beta: 0.0,
+            max_step: None,
+            first_step: None,
+            max_steps: 100_000,
+            stiff_test: 1000,
+            dense_output: true,
+        }
+    }
+}
 
 impl DOP853 {
     /// Dormand–Prince DOP853 — explicit Runge–Kutta 8(5,3) solver with adaptive
@@ -53,35 +100,20 @@ impl DOP853 {
     ///
     /// ## Output Control
     /// - `solout`: Optional mutable reference to a `SolOut` callback used for
-    ///   intermediate output and event handling. If `dense_output` is `true` the
-    ///   callback may receive a dense interpolant; otherwise interpolation is
-    ///   computed only when needed to satisfy a previously requested `xout`.
-    /// - `dense_output`: If `true`, dense‑output coefficients are computed every
-    ///   accepted step to enable fast interpolation via the provided interpolant.
+    ///   intermediate output and event handling.
     ///
-    /// ## Optional Settings
-    ///
-    /// Below are optional parameters to customize the integrator's settings.
-    /// If `None` is provided the default value is used. The default values
-    /// should be suitable for most problems.
-    ///
-    /// - `uround`: Machine rounding unit (default `2.3e-16`).
-    /// - `safety_factor`: Safety factor for stepsize control (default `0.9`).
-    /// - `scale_min`, `scale_max`: Lower/upper bounds for the stepsize scale.
-    /// - `beta`: Stabilization parameter for step control (default `0.0`).
-    /// - `h_max`: Maximum allowed step size (default `|xend - x|`).
-    /// - `h0`: Optional initial step-size guess; when `None` a heuristic is used.
-    /// - `max_steps`: Maximum number of steps (default `100_000`).
-    /// - `stiff_test`: Number of accepted steps between stiffness tests
-    ///   (default `1000`).
+    /// Solver settings (`uround`, `safety_factor`, `scale_min`, `scale_max`, `beta`, 
+    /// `max_step`, `first_step`, `max_steps`, `stiff_test`, `dense_output`) are 
+    /// configured via the `DOP853` struct fields.
     ///
     /// # Returns
-    /// `Result<IntegrationResult, Vec<Error>>` with [`IntegrationResult`] containing
+    /// `Result<IntegrationResult, Error>` with [`IntegrationResult`] containing
     /// the final `x`, the predicted next step size `h`, the [`Status`] of the solver,
     /// the [`Evals`] and [`Steps`] statistics of the solver.
     ///
-    /// On error, a vector of [`Error`] values describing input validation issues.
+    /// On error, an [`Error`] value describing the input validation issue.
     pub fn solve<F, S>(
+        &self,
         f: &F,
         mut x: Float,
         xend: Float,
@@ -89,97 +121,72 @@ impl DOP853 {
         rtol: Tolerance,
         atol: Tolerance,
         mut solout: Option<&mut S>,
-        dense_output: bool,
-        uround: Option<Float>,
-        safety_factor: Option<Float>,
-        scale_min: Option<Float>,
-        scale_max: Option<Float>,
-        beta: Option<Float>,
-        h_max: Option<Float>,
-        h0: Option<Float>,
-        max_steps: Option<usize>,
-        stiff_test: Option<usize>,
-    ) -> Result<IntegrationResult, Vec<Error>>
+    ) -> Result<IntegrationResult, Error>
     where
         F: IVP,
         S: SolOut,
     {
         // --- Input Validation ---
-        let mut errors: Vec<Error> = Vec::new();
 
         // Rounding Unit
-        let uround = match uround {
-            Some(u) => {
-                if u <= 1e-35 || u >= 1.0 {
-                    errors.push(Error::URoundOutOfRange(u));
-                }
-                u
-            }
-            None => 2.3e-16,
-        };
+        let uround = self.uround;
+        if uround <= 1e-35 || uround >= 1.0 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "uround",
+                value: uround,
+                min: 1e-35,
+                max: 1.0,
+            }));
+        }
 
         // Safety Factor
-        let safety_factor = match safety_factor {
-            Some(f) => {
-                if f >= 1.0 || f <= 1e-4 {
-                    errors.push(Error::SafetyFactorOutOfRange(f));
-                }
-                f
-            }
-            None => 0.9,
-        };
+        let safety_factor = self.safety_factor;
+        if safety_factor >= 1.0 || safety_factor <= 1e-4 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "safety_factor",
+                value: safety_factor,
+                min: 1e-4,
+                max: 1.0,
+            }));
+        }
 
         // Parameters for step size selection
-        let facc1 = match scale_min {
-            Some(f) => 1.0 / f,
-            None => 3.0,
-        };
-        let facc2 = match scale_max {
-            Some(f) => 1.0 / f,
-            None => 1.0 / 6.0,
-        };
+        let facc1 = 1.0 / self.scale_min;
+        let facc2 = 1.0 / self.scale_max;
 
         // Beta for step control stabilization
-        let beta = match beta {
-            Some(b) => {
-                if b > 0.2 {
-                    errors.push(Error::BetaTooLarge(b));
-                }
-                b
-            }
-            None => 0.00,
-        };
+        let beta = self.beta;
+        if beta > 0.2 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "beta",
+                value: beta,
+                min: 0.0,
+                max: 0.2,
+            }));
+        }
 
         // Maximum step size
-        let h_max = match h_max {
+        let h_max = match self.max_step {
             Some(h) => h.abs(),
             None => (xend - x).abs(),
         };
 
         // Maximum Number of Steps
-        let nmax = match max_steps {
-            Some(n) => {
-                if n <= 0 {
-                    errors.push(Error::NMaxMustBePositive(n));
-                }
-                n
-            }
-            None => 100_000,
-        };
+        let nmax = self.max_steps;
+        if nmax == 0 {
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "max_steps",
+                value: nmax,
+            }));
+        }
 
         // Number of steps before performing a stiffness test
-        let nstiff = match stiff_test {
-            Some(n) => {
-                if n <= 0 {
-                    errors.push(Error::NStiffMustBePositive(n));
-                }
-                n
-            }
-            None => 1000,
-        };
-
-        if !errors.is_empty() {
-            return Err(errors);
+        let nstiff = self.stiff_test;
+        if nstiff == 0 {
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "stiff_test",
+                value: nstiff,
+            }));
         }
 
         // --- Declarations ---
@@ -223,7 +230,7 @@ impl DOP853 {
         // --- Initializations ---
         f.ode(x, &y, &mut k1);
         evals.ode += 1;
-        let mut h = match h0 {
+        let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
@@ -478,7 +485,7 @@ impl DOP853 {
 
                 // Prepare dense output
                 event = xout.map_or(false, |xo| xo <= xph);
-                if dense_output || event {
+                if self.dense_output || event {
                     for i in 0..n {
                         cont[i] = y[i];
                         let ydiff = k5[i] - y[i];
@@ -605,7 +612,7 @@ impl DOP853 {
                 // Call to SolOut
                 if let Some(solout) = solout.as_mut() {
                     // See if interpolation is provided
-                    let interpolation = if dense_output || event {
+                    let interpolation = if self.dense_output || event {
                         Some(interpolator)
                     } else {
                         None

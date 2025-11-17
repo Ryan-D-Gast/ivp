@@ -6,7 +6,7 @@
 
 use crate::{
     Float,
-    error::Error,
+    error::{Error, ConfigError},
     interpolate::Interpolate,
     matrix::{Matrix, MatrixStorage, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{Evals, IntegrationResult, Steps, Tolerance},
@@ -14,10 +14,80 @@ use crate::{
     solout::{ControlFlag, SolOut},
     status::Status,
 };
+use bon::Builder;
 
-/// RADAU — 3-stage, order-5 Radau IIA implicit Runge–Kutta solver.
-#[derive(Clone, Copy, Debug)]
-pub struct RADAU;
+/// RADAU — 3-stage, order-5 Radau IIA implicit Runge–Kutta solver with configuration.
+#[derive(Builder, Clone, Debug)]
+pub struct RADAU {
+    /// Maximum number of steps (default: 100_000)
+    #[builder(default = 100_000)]
+    pub max_steps: usize,
+    /// Machine rounding unit (default: 2.3e-16)
+    #[builder(default = 2.3e-16)]
+    pub uround: Float,
+    /// Safety factor for step control (default: 0.9)
+    #[builder(default = 0.9)]
+    pub safety_factor: Float,
+    /// Minimum step scaling factor (default: 0.2)
+    #[builder(default = 0.2)]
+    pub scale_min: Float,
+    /// Maximum step scaling factor (default: 8.0)
+    #[builder(default = 8.0)]
+    pub scale_max: Float,
+    /// Maximum step size (default: None = |xend - x|)
+    pub max_step: Option<Float>,
+    /// Minimum step size (default: None = 0.0)
+    pub min_step: Option<Float>,
+    /// Maximum Newton iterations (default: 7)
+    #[builder(default = 7)]
+    pub newton_maxiter: usize,
+    /// Newton tolerance (default: None = derived from tolerances)
+    pub newton_tol: Option<Float>,
+    /// Use predictive controller (default: true)
+    #[builder(default = true)]
+    pub predictive: bool,
+    /// Index-1 variables count (default: None = all)
+    pub nind1: Option<usize>,
+    /// Index-2 variables count (default: None = 0)
+    pub nind2: Option<usize>,
+    /// Index-3 variables count (default: None = 0)
+    pub nind3: Option<usize>,
+    /// Jacobian matrix storage (default: Full)
+    #[builder(default = MatrixStorage::Full)]
+    pub jac_storage: MatrixStorage,
+    /// Mass matrix storage (default: Full)
+    #[builder(default = MatrixStorage::Full)]
+    pub mass_storage: MatrixStorage,
+    /// Initial step size (default: None = 1e-6 with correct sign)
+    pub first_step: Option<Float>,
+    /// Enable dense output (default: true)
+    #[builder(default = true)]
+    pub dense_output: bool,
+}
+
+impl Default for RADAU {
+    fn default() -> Self {
+        Self {
+            max_steps: 100_000,
+            uround: 2.3e-16,
+            safety_factor: 0.9,
+            scale_min: 0.2,
+            scale_max: 8.0,
+            max_step: None,
+            min_step: None,
+            newton_maxiter: 7,
+            newton_tol: None,
+            predictive: true,
+            nind1: None,
+            nind2: None,
+            nind3: None,
+            jac_storage: MatrixStorage::Full,
+            mass_storage: MatrixStorage::Full,
+            first_step: None,
+            dense_output: true,
+        }
+    }
+}
 
 impl RADAU {
     /// Radau IIA(5) — implicit Runge–Kutta solver with adaptive steps and dense output.
@@ -36,105 +106,85 @@ impl RADAU {
     ///
     /// ## Output Control
     /// - `solout`: Optional mutable `SolOut` callback invoked initially and after each accepted step.
-    /// - `dense_output`: If `true`, pass an interpolant to `solout` for efficient dense queries.
-    /// 
-    /// ## Optional Settings
     ///
-    /// Below are optional parameters to customize the integrator's settings.
-    /// If `None` is provided the default value is used. The default values
-    /// should be suitable for most problems.
-    /// 
-    /// - `nmax` (default 100_000)
-    /// - `uround` in (1e-35, 1.0), default 2.3e-16
-    /// - `safety_factor` in (1e-4, 1.0), default 0.9
-    /// - `scale_min` (default 0.2), `scale_max` (default 8.0) → limits for step growth/shrink
-    /// - `hmax` (default |xend - x|), `hmin` (default 0.0)
-    /// - `newton_maxiter` (default 7), `newton_tol` (default derived from tolerances)
-    /// - `predictive` Gustafsson controller (default true)
-    /// - DAE partition sizes: `nind1`, `nind2`, `nind3` (default all index‑1 variables)
-    /// - Matrix storage: `jac_storage`, `mass_storage` (default Full)
-    /// - `h0` initial step (default 1e-6 with correct sign)
+    /// Solver settings are configured via the `RADAU` struct fields.
     ///
     /// # Returns
-    /// A `Result` with `IntegrationResult` on success or a list of input `Error`s.
+    /// A `Result` with `IntegrationResult` on success or an input `Error`.
     pub fn solve<F, S>(
+        &self,
         f: &F,
         mut x: Float,
         xend: Float,
         y: &mut [Float],
-        mut rtol: Tolerance,
-        mut atol: Tolerance,
+        rtol: Tolerance,
+        atol: Tolerance,
         mut solout: Option<&mut S>,
-        dense_output: bool,
-        nmax: Option<usize>,
-        uround: Option<Float>,
-        safety_factor: Option<Float>,
-        scale_min: Option<Float>,
-        scale_max: Option<Float>,
-        hmax: Option<Float>,
-        hmin: Option<Float>,
-        newton_maxiter: Option<usize>,
-        newton_tol: Option<Float>,
-        predictive: Option<bool>,
-        nind1: Option<usize>,
-        nind2: Option<usize>,
-        nind3: Option<usize>,
-        jac_storage: Option<MatrixStorage>,
-        mass_storage: Option<MatrixStorage>,
-        h0: Option<Float>,
-    ) -> Result<IntegrationResult, Vec<Error>>
+    ) -> Result<IntegrationResult, Error>
     where
         F: IVP,
         S: SolOut,
     {
         // --- Input Validation ---
-        let mut errors: Vec<Error> = Vec::new();
 
         // nmax
-        let nmax = nmax.unwrap_or(100_000);
+        let nmax = self.max_steps;
         if nmax == 0 {
-            errors.push(Error::NMaxMustBePositive(0));
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "max_steps",
+                value: nmax,
+            }));
         }
         // uround
-        let uround = match uround {
-            Some(u) if (1e-35..1.0).contains(&u) => u,
-            Some(u) => {
-                errors.push(Error::URoundOutOfRange(u));
-                u
-            }
-            None => 2.3e-16,
-        };
+        let uround = self.uround;
+        if uround <= 1e-35 || uround >= 1.0 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "uround",
+                value: uround,
+                min: 1e-35,
+                max: 1.0,
+            }));
+        }
         // safety factor
-        let safety_factor = match safety_factor {
-            Some(s) if s > 1e-4 && s < 1.0 => s,
-            Some(s) => {
-                errors.push(Error::SafetyFactorOutOfRange(s));
-                s
-            }
-            None => 0.9,
-        };
+        let safety_factor = self.safety_factor;
+        if safety_factor <= 1e-4 || safety_factor >= 1.0 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "safety_factor",
+                value: safety_factor,
+                min: 1e-4,
+                max: 1.0,
+            }));
+        }
         // Step-size scaling bounds: clamp factor quot in [facc2, facc1]
-        let scale_min = scale_min.unwrap_or(0.2);
-        let scale_max = scale_max.unwrap_or(8.0);
+        let scale_min = self.scale_min;
+        let scale_max = self.scale_max;
         let facl = 1.0 / scale_min;
         let facr = 1.0 / scale_max;
         if scale_min <= 0.0 || !(scale_min < scale_max) {
-            errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
+            return Err(Error::Config(ConfigError::InvalidScaleFactors {
+                min: scale_min,
+                max: scale_max,
+            }));
         }
 
         // hmax and hmin
-        let hmax = hmax.unwrap_or_else(|| (xend - x).abs());
-        let hmin = hmin.unwrap_or(0.0);
+        let hmax = self.max_step.unwrap_or_else(|| (xend - x).abs());
+        let hmin = self.min_step.unwrap_or(0.0);
 
         // Max newton iterations
-        let max_newton = newton_maxiter.unwrap_or(7);
-        if max_newton <= 0 {
-            errors.push(Error::NewtonMaxIterMustBePositive(0));
+        let max_newton = self.newton_maxiter;
+        if max_newton == 0 {
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "newton_maxiter",
+                value: max_newton,
+            }));
         }
 
         // Adjust tolerances
         let expm = 2.0 / 3.0;
         let n = y.len();
+        let mut rtol = rtol;
+        let mut atol = atol;
         for i in 0..n {
             let quot = atol[i] / rtol[i];
             rtol[i] = 0.1 * rtol[i].powf(expm);
@@ -142,7 +192,7 @@ impl RADAU {
         }
 
         // Newton tolerance
-        let newton_tol = match newton_tol {
+        let newton_tol = match self.newton_tol {
             Some(v) => v,
             None => {
                 let tolst = rtol[0];
@@ -151,13 +201,13 @@ impl RADAU {
         };
 
         // Predictive step-size control
-        let predictive = predictive.unwrap_or(true);
+        let predictive = self.predictive;
 
         // Differential Algebraic equation index settings.
         // Accept counts and infer nind1 when omitted.
-        let nind1_opt = nind1;
-        let nind2_opt = nind2;
-        let nind3_opt = nind3;
+        let nind1_opt = self.nind1;
+        let nind2_opt = self.nind2;
+        let nind3_opt = self.nind3;
         let mut nind1 = nind1_opt.unwrap_or(0);
         let nind2 = nind2_opt.unwrap_or(0);
         let nind3 = nind3_opt.unwrap_or(0);
@@ -170,42 +220,41 @@ impl RADAU {
         } else if nind1_opt.is_none() {
             // Infer nind1 so that counts sum to n
             if nind2 + nind3 > n {
-                errors.push(Error::InvalidDAEPartition {
+                return Err(Error::Config(ConfigError::InvalidDAEPartition {
                     n,
                     nind1,
                     nind2,
                     nind3,
-                });
+                }));
             } else {
                 nind1 = n - nind2 - nind3;
             }
         } else {
             // Validate explicit sums
             if nind1 + nind2 + nind3 != n {
-                errors.push(Error::InvalidDAEPartition {
+                return Err(Error::Config(ConfigError::InvalidDAEPartition {
                     n,
                     nind1,
                     nind2,
                     nind3,
-                });
+                }));
             }
         }
 
         // Initial step size: use provided h0 or default to 1e-6 (signed)
         let posneg = (xend - x).signum();
-        let mut h = if let Some(h0) = h0 {
+        let mut h = if let Some(h0) = self.first_step {
             h0
         } else {
             1.0e-6 * posneg
         };
         if h == 0.0 || (h.signum() != posneg && posneg != 0.0) {
-            errors.push(Error::InvalidStepSize(h));
+            return Err(Error::Config(ConfigError::InvalidStepSize {
+                value: h,
+                expected_sign: posneg,
+            }));
         }
         h = h.clamp(-hmax, hmax);
-
-        if !errors.is_empty() {
-            return Err(errors);
-        }
 
         // --- Declarations ---
 
@@ -225,8 +274,8 @@ impl RADAU {
         let mut cont = vec![0.0; n * 4];
 
         // Jacobian and mass matrices with user-preferred storage
-        let mut jac = Matrix::from_storage(n, n, jac_storage.unwrap_or(MatrixStorage::Full));
-        let mut mass = Matrix::from_storage(n, n, mass_storage.unwrap_or(MatrixStorage::Full));
+        let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
+        let mut mass = Matrix::from_storage(n, n, self.mass_storage.clone());
 
         // Counters
         let mut evals = Evals::new();
@@ -669,7 +718,7 @@ impl RADAU {
                 if let Some(sol) = solout.as_mut() {
                     // Build interpolant if requested or an event output is due
                     let event = xout.map_or(false, |xo| xo <= x);
-                    let interpolation = if dense_output || event {
+                    let interpolation = if self.dense_output || event {
                         Some(interpolator)
                     } else {
                         None

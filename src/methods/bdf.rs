@@ -1,7 +1,7 @@
 //! BDF — variable order (1..5) Backward Differentiation Formula solver.
 
 use crate::{
-    error::Error,
+    error::{Error, ConfigError},
     interpolate::Interpolate,
     matrix::{lin_solve, lu_decomp, Matrix, MatrixStorage},
     methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
@@ -10,9 +10,9 @@ use crate::{
     status::Status,
     Float,
 };
+use bon::Builder;
 
 const MAX_ORDER: usize = 5;
-const NEWTON_MAXITER_DEFAULT: usize = 4;
 const MIN_FACTOR: Float = 0.2;
 const MAX_FACTOR: Float = 10.0;
 const SAFETY_DEFAULT: Float = 0.9;
@@ -21,9 +21,41 @@ const BDF_COEFFS_PER_STATE: usize = MAX_ORDER + 2;
 // Fixed coefficients
 const KAPPA: [Float; MAX_ORDER + 1] = [0.0, -0.1850, -1.0 / 9.0, -0.0823, -0.0415, 0.0];
 
-/// BDF — variable order (1..5) Backward Differentiation Formula solver.
-#[derive(Clone, Copy, Debug)]
-pub struct BDF;
+/// BDF — variable order (1..5) Backward Differentiation Formula solver with configuration.
+#[derive(Builder, Clone, Debug)]
+pub struct BDF {
+    /// Maximum number of steps (default: 100_000)
+    #[builder(default = 100_000)]
+    pub max_steps: usize,
+    /// Maximum step size (default: None = |xend - x|)
+    pub max_step: Option<Float>,
+    /// Minimum step size (default: None = 0.0)
+    pub min_step: Option<Float>,
+    /// Maximum Newton iterations per step (default: 4)
+    #[builder(default = 4)]
+    pub newton_maxiter: usize,
+    /// Newton convergence tolerance (default: None = derived from tolerances)
+    pub newton_tol: Option<Float>,
+    /// Jacobian matrix storage (default: Full)
+    #[builder(default = MatrixStorage::Full)]
+    pub jac_storage: MatrixStorage,
+    /// Initial step size (default: None = automatic)
+    pub first_step: Option<Float>,
+}
+
+impl Default for BDF {
+    fn default() -> Self {
+        Self {
+            max_steps: 100_000,
+            max_step: None,
+            min_step: None,
+            newton_maxiter: 4,
+            newton_tol: None,
+            jac_storage: MatrixStorage::Full,
+            first_step: None,
+        }
+    }
+}
 
 impl BDF {
     /// Solve an initial value problem using the variable-order BDF(1-5) method.
@@ -48,39 +80,20 @@ impl BDF {
     ///   intermediate output. If provided, the callback may receive a dense
     ///   interpolant for efficient interpolation within accepted steps.
     ///
-    /// ## Optional Settings
-    ///
-    /// Below are optional parameters to customize the integrator's settings.
-    /// If `None` is provided the default value is used. The default values
-    /// should be suitable for most problems.
-    ///
-    /// - `nmax` (default 100_000): Maximum number of integration steps.
-    /// - `max_step` (default `|xend - x|`): Maximum step size.
-    /// - `min_step` (default `0.0`): Minimum step size.
-    /// - `newton_maxiter` (default `4`): Maximum Newton iterations per step.
-    /// - `newton_tol` (default derived from tolerances): Newton convergence tolerance.
-    /// - `jac_storage` (default `Full`): Matrix storage type for Jacobian.
-    /// - `h0` (default heuristic): Initial step size guess.
+    /// Solver settings are configured via the `BDF` struct fields.
     ///
     /// # Returns
-    /// A `Result` with `IntegrationResult` on success or a vector of `Error`
-    /// values describing input validation issues.
+    /// A `Result` with `IntegrationResult` on success or an `Error` if validation fails.
     pub fn solve<F, S>(
+        &self,
         f: &F,
         mut x: Float,
         xend: Float,
         y: &mut [Float],
-        mut rtol: Tolerance,
-        mut atol: Tolerance,
+        rtol: Tolerance,
+        atol: Tolerance,
         mut solout: Option<&mut S>,
-        nmax: Option<usize>,
-        max_step: Option<Float>,
-        min_step: Option<Float>,
-        newton_maxiter: Option<usize>,
-        newton_tol: Option<Float>,
-        jac_storage: Option<MatrixStorage>,
-        h0: Option<Float>,
-    ) -> Result<IntegrationResult, Vec<Error>>
+    ) -> Result<IntegrationResult, Error>
     where
         F: IVP,
         S: SolOut,
@@ -96,42 +109,37 @@ impl BDF {
             ));
         }
 
-        let mut errors = Vec::new();
-
         // Convert tolerances to per-component vectors and validate non-negativity/length
         for i in 0..n {
             if rtol[i] < 0.0 {
-                errors.push(Error::NegativeTolerance {
+                return Err(Error::Config(ConfigError::NegativeTolerance {
                     kind: "relative",
                     index: i,
                     value: rtol[i],
-                });
-                rtol[i] = rtol[i].abs();
+                }));
             }
             if atol[i] < 0.0 {
-                errors.push(Error::NegativeTolerance {
+                return Err(Error::Config(ConfigError::NegativeTolerance {
                     kind: "absolute",
                     index: i,
                     value: atol[i],
-                });
-                atol[i] = atol[i].abs();
+                }));
             }
         }
 
-        let nmax = nmax.unwrap_or(100_000);
+        let nmax = self.max_steps;
         if nmax == 0 {
-            errors.push(Error::NMaxMustBePositive(0));
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "max_steps",
+                value: nmax,
+            }));
         }
 
         let diff = xend - x;
         let direction = diff.signum();
 
-        let hmax = max_step.unwrap_or_else(|| (xend - x).abs()).abs();
-        let hmin = min_step.unwrap_or(0.0).abs();
-
-        if !errors.is_empty() {
-            return Err(errors);
-        }
+        let hmax = self.max_step.unwrap_or_else(|| (xend - x).abs()).abs();
+        let hmin = self.min_step.unwrap_or(0.0).abs();
 
         let mut evals = Evals::new();
         let mut steps = Steps::new();
@@ -141,7 +149,7 @@ impl BDF {
         f.ode(x, y, &mut f0);
         evals.ode += 1;
 
-        let mut jac = Matrix::from_storage(n, n, jac_storage.unwrap_or(MatrixStorage::Full));
+        let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
         f.jac(x, y, &mut jac);
         evals.jac += 1;
 
@@ -163,7 +171,7 @@ impl BDF {
             .iter(n)
             .fold(Float::INFINITY, Float::min)
             .max(Float::EPSILON);
-        let mut newton_tol_val = newton_tol.unwrap_or_else(|| {
+        let mut newton_tol_val = self.newton_tol.unwrap_or_else(|| {
             let eps_term = 10.0 * Float::EPSILON / rtol_min;
             let sqrt_term = rtol_min.sqrt().min(0.03);
             eps_term.max(sqrt_term)
@@ -171,12 +179,15 @@ impl BDF {
         if newton_tol_val <= 0.0 {
             newton_tol_val = 1e-9;
         }
-        let newton_maxiter_val = newton_maxiter.unwrap_or(NEWTON_MAXITER_DEFAULT).max(1);
+        let newton_maxiter_val = self.newton_maxiter.max(1);
 
         // Initial step size selection
-        let mut h_abs = if let Some(h) = h0 {
+        let mut h_abs = if let Some(h) = self.first_step {
             if h == 0.0 || h.signum() != direction {
-                errors.push(Error::InvalidStepSize(h));
+                return Err(Error::Config(ConfigError::InvalidStepSize {
+                    value: h,
+                    expected_sign: direction,
+                }));
             }
             h.abs()
         } else {
@@ -195,10 +206,6 @@ impl BDF {
             };
             guess.abs()
         };
-
-        if !errors.is_empty() {
-            return Err(errors);
-        }
 
         h_abs = h_abs.min(hmax.max(Float::MIN_POSITIVE));
         let mut current_h = h_abs;

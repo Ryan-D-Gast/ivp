@@ -2,17 +2,52 @@
 
 use crate::{
     Float,
-    error::Error,
+    error::{Error, ConfigError},
     interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
+use bon::Builder;
 
 /// Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator.
-#[derive(Clone, Copy, Debug)]
-pub struct RK23;
+#[derive(Builder, Clone, Debug)]
+pub struct RK23 {
+    /// Safety factor for step size selection (default: 0.9)
+    #[builder(default = 0.9)]
+    pub safety_factor: Float,
+    /// Minimum allowed scaling factor (default: 0.2)
+    #[builder(default = 0.2)]
+    pub scale_min: Float,
+    /// Maximum allowed scaling factor (default: 10.0)
+    #[builder(default = 10.0)]
+    pub scale_max: Float,
+    /// Maximum step size (default: None = unlimited)
+    pub max_step: Option<Float>,
+    /// Initial step size (default: None = auto)
+    pub first_step: Option<Float>,
+    /// Maximum number of steps (default: 10_000)
+    #[builder(default = 10_000)]
+    pub max_steps: usize,
+    /// Enable dense output (default: true)
+    #[builder(default = true)]
+    pub dense_output: bool,
+}
+
+impl Default for RK23 {
+    fn default() -> Self {
+        Self {
+            safety_factor: 0.9,
+            scale_min: 0.2,
+            scale_max: 10.0,
+            max_step: None,
+            first_step: None,
+            max_steps: 10_000,
+            dense_output: true,
+        }
+    }
+}
 
 impl RK23 {
     /// Bogacki–Shampine 3(2) pair (RK23) — adaptive solver with optional dense output.
@@ -40,20 +75,13 @@ impl RK23 {
     /// - `dense_output`: If `true`, dense‑output coefficients are computed every
     ///   accepted step to enable fast interpolation via the provided interpolant.
     /// 
-    /// ## Optional Settings
-    /// 
-    /// Below are optional parameters to customize the integrator's settings.
-    /// If `None` is provided the default value is used. The default values
-    /// should be suitable for most problems.
-    /// 
-    /// - `safety_factor` (default `0.9`), `scale_min` (default `0.2`),
-    ///   `scale_max` (default `5.0`), `hmax` (default `|xend - x|`), `h0` (initial
-    ///   step, heuristic if `None`), and `max_steps` (default `100_000`).
+    /// Solver settings (`safety_factor`, `scale_min`, `scale_max`, `max_step`, `first_step`, `max_steps`)
+    /// are configured via the `RK23` struct fields.
     ///
     /// # Returns
-    /// A `Result` with `IntegrationResult` on success or a vector of `Error`
-    /// values describing input validation issues.
+    /// A `Result` with `IntegrationResult` on success or an `Error` if validation fails.
     pub fn solve<F, S>(
+        &self,
         f: &F,
         mut x: Float,
         xend: Float,
@@ -61,59 +89,48 @@ impl RK23 {
         rtol: Tolerance,
         atol: Tolerance,
         mut solout: Option<&mut S>,
-        dense_output: bool,
-        safety_factor: Option<Float>,
-        scale_min: Option<Float>,
-        scale_max: Option<Float>,
-        hmax: Option<Float>,
-        h0: Option<Float>,
-        max_steps: Option<usize>,
-    ) -> Result<IntegrationResult, Vec<Error>>
+    ) -> Result<IntegrationResult, Error>
     where
         F: IVP,
         S: SolOut,
     {
         // --- Input Validation ---
-        let mut errors: Vec<Error> = Vec::new();
-
+        
         // Maximum Number of Steps
-        let nmax = match max_steps {
-            Some(n) => {
-                if n <= 0 {
-                    errors.push(Error::NMaxMustBePositive(n));
-                }
-                n
-            }
-            None => 100_000,
-        };
+        let nmax = self.max_steps;
+        if nmax == 0 {
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "max_steps",
+                value: nmax,
+            }));
+        }
 
         // Safety Factor
-        let safety_factor = match safety_factor {
-            Some(f) => {
-                if f >= 1.0 || f <= 1e-4 {
-                    errors.push(Error::SafetyFactorOutOfRange(f));
-                }
-                f
-            }
-            None => 0.9,
-        };
+        let safety_factor = self.safety_factor;
+        if safety_factor >= 1.0 || safety_factor <= 1e-4 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "safety_factor",
+                value: safety_factor,
+                min: 1e-4,
+                max: 1.0,
+            }));
+        }
 
         // Step size scaling factors
-        let scale_min = scale_min.unwrap_or(0.2);
-        let scale_max = scale_max.unwrap_or(5.0);
+        let scale_min = self.scale_min;
+        let scale_max = self.scale_max;
         if scale_min <= 0.0 || scale_max <= scale_min {
-            errors.push(Error::InvalidScaleFactors(scale_min, scale_max));
+            return Err(Error::Config(ConfigError::InvalidScaleFactors {
+                min: scale_min,
+                max: scale_max,
+            }));
         }
 
         // Error exponent
         let error_exponent = -1.0 / 3.0;
 
         // Maximum step size
-        let hmax = hmax.map(|h| h.abs()).unwrap_or((xend - x).abs());
-
-        if !errors.is_empty() {
-            return Err(errors);
-        }
+        let hmax = self.max_step.map(|h| h.abs()).unwrap_or((xend - x).abs());
 
         // --- Declarations ---
         let n = y.len();
@@ -134,7 +151,7 @@ impl RK23 {
         // --- Initializations ---
         f.ode(x, &y, &mut k1);
         evals.ode += 1;
-        let mut h = match h0 {
+        let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
@@ -236,7 +253,7 @@ impl RK23 {
                 x += h;
 
                 // Prepare dense output
-                if dense_output && solout.is_some() {
+                if self.dense_output && solout.is_some() {
                     cont[0..n].copy_from_slice(&ye);
                     for i in 0..n {
                         cont[n + i] = k1[i];
@@ -248,7 +265,7 @@ impl RK23 {
                 // Optional callback function
                 if let Some(sol) = solout.as_mut() {
                     let event = xout.map_or(false, |xo| xo <= x);
-                    let interpolation = if dense_output || event {
+                    let interpolation = if self.dense_output || event {
                         Some(interpolator)
                     } else {
                         None

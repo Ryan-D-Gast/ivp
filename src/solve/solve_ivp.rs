@@ -35,7 +35,7 @@ use super::{
 ///   - `nfev`, `nstep`, `naccpt`, `nrejct`, `status`: Solver statistics and final status
 ///   - Continuous evaluation is available via `Solution::sol`, `sol_many`, `sol_span`
 ///     when `options.dense_output == true`.
-/// - `Err(Vec<Error>)`: One or more errors encountered during integration.
+/// - `Err(Error)`: Error encountered during integration or validation.
 ///
 /// Notes:
 /// - Sampling:
@@ -102,7 +102,7 @@ pub fn solve_ivp<F>(
     xend: Float,
     y0: &[Float],
     options: Options,
-) -> Result<Solution, Vec<Error>>
+) -> Result<Solution, Error>
 where
     F: IVP,
 {
@@ -114,20 +114,26 @@ where
         Method::RK4 => {
             let h = options.first_step.unwrap_or_else(|| (xend - x0) / 100.0);
             let mut y = y0.to_vec();
-            RK4::solve(
+            let solver = RK4::builder()
+                .max_steps(options.max_steps.unwrap_or(100_000))
+                .build();
+            solver.solve(
                 f,
                 x0,
                 xend,
                 &mut y,
                 h,
                 Some(&mut default_solout),
-                true,
-                options.max_steps,
             )
         }
         Method::RK23 => {
             let mut y = y0.to_vec();
-            RK23::solve(
+            let solver = RK23::builder()
+                .maybe_max_step(options.max_step)
+                .maybe_first_step(options.first_step)
+                .max_steps(options.max_steps.unwrap_or(10_000))
+                .build();
+            solver.solve(
                 f,
                 x0,
                 xend,
@@ -135,18 +141,16 @@ where
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
-                true,
-                None,
-                None,
-                None,
-                options.max_step,
-                options.first_step,
-                options.max_steps,
             )
         }
         Method::DOPRI5 => {
             let mut y = y0.to_vec();
-            DOPRI5::solve(
+            let solver = DOPRI5::builder()
+                .maybe_max_step(options.max_step)
+                .maybe_first_step(options.first_step)
+                .max_steps(options.max_steps.unwrap_or(100_000))
+                .build();
+            solver.solve(
                 f,
                 x0,
                 xend,
@@ -154,21 +158,16 @@ where
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
-                true,
-                None,
-                None,
-                None,
-                None,
-                None,
-                options.max_step,
-                options.first_step,
-                options.max_steps,
-                None,
             )
         }
         Method::DOP853 => {
             let mut y = y0.to_vec();
-            DOP853::solve(
+            let solver = DOP853::builder()
+                .maybe_max_step(options.max_step)
+                .maybe_first_step(options.first_step)
+                .max_steps(options.max_steps.unwrap_or(100_000))
+                .build();
+            solver.solve(
                 f,
                 x0,
                 xend,
@@ -176,21 +175,22 @@ where
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
-                true,
-                None,
-                None,
-                None,
-                None,
-                None,
-                options.max_step,
-                options.first_step,
-                options.max_steps,
-                None,
             )
         }
         Method::RADAU => {
             let mut y = y0.to_vec();
-            RADAU::solve(
+            let solver = RADAU::builder()
+                .maybe_max_step(options.max_step)
+                .maybe_min_step(options.min_step)
+                .maybe_first_step(options.first_step)
+                .max_steps(options.max_steps.unwrap_or(100_000))
+                .maybe_nind1(options.nind1)
+                .maybe_nind2(options.nind2)
+                .maybe_nind3(options.nind3)
+                .jac_storage(options.jac_storage)
+                .mass_storage(options.mass_storage)
+                .build();
+            solver.solve(
                 f,
                 x0,
                 xend,
@@ -198,28 +198,18 @@ where
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
-                true,
-                options.max_steps,
-                None,
-                None,
-                None,
-                None,
-                options.max_step,
-                options.min_step,
-                None,
-                None,
-                None,
-                options.nind1,
-                options.nind2,
-                options.nind3,
-                Some(options.jac_storage),
-                Some(options.mass_storage),
-                options.first_step,
             )
         }
         Method::BDF => {
             let mut y = y0.to_vec();
-            BDF::solve(
+            let solver = BDF::builder()
+                .maybe_max_step(options.max_step)
+                .maybe_min_step(options.min_step)
+                .maybe_first_step(options.first_step)
+                .max_steps(options.max_steps.unwrap_or(100_000))
+                .jac_storage(options.jac_storage)
+                .build();
+            solver.solve(
                 f,
                 x0,
                 xend,
@@ -227,13 +217,6 @@ where
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
-                options.max_steps,
-                options.max_step,
-                options.min_step,
-                None,
-                None,
-                Some(options.jac_storage),
-                options.first_step,
             )
         }
     };

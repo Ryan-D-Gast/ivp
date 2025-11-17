@@ -2,17 +2,34 @@
 
 use crate::{
     Float,
-    error::Error,
+    error::{Error, ConfigError},
     interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps},
     ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
+use bon::Builder;
 
-/// Classic explicit Runge–Kutta 4 (RK4) fixed-step integrator.
-#[derive(Clone, Copy, Debug)]
-pub struct RK4;
+/// Classic explicit Runge–Kutta 4 (RK4) fixed-step integrator with configuration.
+#[derive(Builder, Clone, Debug)]
+pub struct RK4 {
+    /// Maximum number of steps (default: 100_000)
+    #[builder(default = 100_000)]
+    pub max_steps: usize,
+    /// Enable dense output (default: true)
+    #[builder(default = true)]
+    pub dense_output: bool,
+}
+
+impl Default for RK4 {
+    fn default() -> Self {
+        Self {
+            max_steps: 100_000,
+            dense_output: true,
+        }
+    }
+}
 
 impl RK4 { 
     /// Classical explicit Runge–Kutta 4 (RK4) — fixed-step solver with optional dense output.
@@ -40,45 +57,41 @@ impl RK4 {
     /// ## Optional Settings
     /// - `max_steps`: Optional upper bound on the number of steps (default `100_000`).
     ///
+    /// Solver settings are configured via the `RK4` struct fields.
+    ///
     /// # Returns
-    /// A `Result` with `IntegrationResult` on success or a vector of `Error`
-    /// values describing input validation issues.
+    /// A `Result` with `IntegrationResult` on success or an `Error` if validation fails.
     pub fn solve<F, S>(
+        &self,
         f: &F,
         mut x: Float,
         xend: Float,
         y: &mut [Float],
         h: Float,
         mut solout: Option<&mut S>,
-        dense_output: bool,
-        max_steps: Option<usize>,
-    ) -> Result<IntegrationResult, Vec<Error>>
+    ) -> Result<IntegrationResult, Error>
     where
         F: IVP,
         S: SolOut,
     {
         // --- Input Validation ---
-        let mut errors = Vec::new();
-
+        
         // Initial Step Size
         let posneg = (xend - x).signum();
         if h == 0.0 || h.signum() != posneg {
-            errors.push(Error::InvalidStepSize(h));
+            return Err(Error::Config(ConfigError::InvalidStepSize {
+                value: h,
+                expected_sign: posneg,
+            }));
         }
 
         // Maximum Number of Steps
-        let nmax = match max_steps {
-            Some(n) => {
-                if n <= 0 {
-                    errors.push(Error::NMaxMustBePositive(n));
-                }
-                n
-            }
-            None => 100_000,
-        };
-
-        if !errors.is_empty() {
-            return Err(errors);
+        let nmax = self.max_steps;
+        if nmax == 0 {
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "max_steps",
+                value: nmax,
+            }));
         }
 
         // --- Declarations ---
@@ -176,7 +189,7 @@ impl RK4 {
 
             // Decide if we must build dense output (for user xout events as well)
             let event = xout.map_or(false, |xo| xo <= x);
-            if (dense_output || event) && solout.is_some() {
+            if (self.dense_output || event) && solout.is_some() {
                 cont[0..n].copy_from_slice(&yt);
                 for i in 0..n {
                     cont[n + i] = k4[i];
@@ -187,7 +200,7 @@ impl RK4 {
 
             // Optional callback function
             if let Some(sol) = solout.as_mut() {
-                let interpolation = if dense_output || xout.map_or(false, |xo| xo <= x) {
+                let interpolation = if self.dense_output || xout.map_or(false, |xo| xo <= x) {
                     Some(interpolator)
                 } else {
                     None
