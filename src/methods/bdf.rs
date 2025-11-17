@@ -87,9 +87,9 @@ impl BDF {
     pub fn solve<F, S>(
         &self,
         f: &F,
-        mut x: Float,
-        xend: Float,
+        x: &mut Float,
         y: &mut [Float],
+        xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
         mut solout: Option<&mut S>,
@@ -101,13 +101,14 @@ impl BDF {
         let n = y.len();
         if n == 0 {
             return Ok(IntegrationResult::new(
-                xend,
                 0.0,
                 Status::Success,
                 Evals::new(),
                 Steps::new(),
             ));
         }
+        
+        let mut xc = *x;
 
         // Convert tolerances to per-component vectors and validate non-negativity/length
         for i in 0..n {
@@ -135,10 +136,10 @@ impl BDF {
             }));
         }
 
-        let diff = xend - x;
+        let diff = xend - xc;
         let direction = diff.signum();
 
-        let hmax = self.max_step.unwrap_or_else(|| (xend - x).abs()).abs();
+        let hmax = self.max_step.unwrap_or_else(|| (xend - xc).abs()).abs();
         let hmin = self.min_step.unwrap_or(0.0).abs();
 
         let mut evals = Evals::new();
@@ -146,11 +147,11 @@ impl BDF {
 
         // Workspace vectors
         let mut f0 = vec![0.0; n];
-        f.ode(x, y, &mut f0);
+        f.ode(xc, y, &mut f0);
         evals.ode += 1;
 
         let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
-        f.jac(x, y, &mut jac);
+        f.jac(xc, y, &mut jac);
         evals.jac += 1;
 
         // Precompute gamma, alpha, error_const arrays
@@ -194,10 +195,10 @@ impl BDF {
             let mut f1 = vec![0.0; n];
             let mut y1 = vec![0.0; n];
             let guess = hinit(
-                f, x, y, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
+                f, xc, y, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
             );
             // Ensure x + h isn't larger than xend
-            let diff = xend - x;
+            let diff = xend - xc;
             let max_h = diff.abs();
             let guess = if guess.abs() > max_h {
                 max_h * direction
@@ -236,11 +237,10 @@ impl BDF {
         let mut cont = vec![0.0; n * CONT_BLOCK];
         // Initial callback
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseBdf15>(x, x, y, None) {
+            match sol.solout::<DenseBdf15>(xc, xc, y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
-                        x,
                         direction * current_h,
                         Status::UserInterrupt,
                         evals,
@@ -248,9 +248,9 @@ impl BDF {
                     ));
                 }
                 ControlFlag::ModifiedSolution(nx, ny) => {
-                    x = nx;
+                    xc = nx;
                     y.copy_from_slice(&ny);
-                    f.ode(x, y, &mut f0);
+                    f.ode(xc, y, &mut f0);
                     evals.ode += 1;
                     d[0].copy_from_slice(y);
                     for i in 0..n {
@@ -261,7 +261,7 @@ impl BDF {
                     }
                     order = 1;
                     n_equal_steps = 0;
-                    f.jac(x, y, &mut jac);
+                    f.jac(xc, y, &mut jac);
                     evals.jac += 1;
                 }
                 ControlFlag::XOut(_) => {}
@@ -296,10 +296,10 @@ impl BDF {
             }
 
             let mut h_signed = direction * h_try;
-            let x_start = x;
-            let mut x_new = x + h_signed;
+            let x_start = xc;
+            let mut x_new = xc + h_signed;
             if direction * (x_new - xend) > 0.0 {
-                let step_to_end = (xend - x).abs();
+                let step_to_end = (xend - xc).abs();
                 if step_to_end == 0.0 {
                     status = Status::Success;
                     break;
@@ -309,12 +309,12 @@ impl BDF {
                 current_h *= factor;
                 h_try = current_h;
                 h_signed = direction * h_try;
-                x_new = x + h_signed;
+                x_new = xc + h_signed;
                 n_equal_steps = 0;
             }
 
             // Step size guard against stagnation
-            if (x + 0.1 * h_signed.abs()) == x {
+            if (xc + 0.1 * h_signed.abs()) == xc {
                 status = Status::StepSizeTooSmall;
                 break;
             }
@@ -472,8 +472,11 @@ impl BDF {
 
             steps.accepted += 1;
             n_equal_steps += 1;
-            x = x_new;
+            xc = x_new;
             y.copy_from_slice(&y_new);
+
+            // Update x and y together
+            *x = xc;
             for i in 0..n {
                 d[order + 2][i] = delta[i] - d[order + 1][i];
                 d[order + 1][i] = delta[i];
@@ -498,16 +501,16 @@ impl BDF {
             // Callback
             if let Some(sol) = solout.as_mut() {
                 let interp = DenseBdf15::new(cont.as_ptr(), cont.len(), x_start, h_signed);
-                match sol.solout::<DenseBdf15>(x - h_signed, x, y, Some(&interp)) {
+                match sol.solout::<DenseBdf15>(xc - h_signed, xc, y, Some(&interp)) {
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
                         break;
                     }
                     ControlFlag::ModifiedSolution(nx, ny) => {
-                        x = nx;
+                        xc = nx;
                         y.copy_from_slice(&ny);
-                        f.ode(x, y, &mut f0);
+                        f.ode(xc, y, &mut f0);
                         evals.ode += 1;
                         d[0].copy_from_slice(y);
                         for i in 0..n {
@@ -518,14 +521,14 @@ impl BDF {
                         }
                         order = 1;
                         n_equal_steps = 0;
-                        f.jac(x, y, &mut jac);
+                        f.jac(xc, y, &mut jac);
                         evals.jac += 1;
                     }
                     ControlFlag::XOut(_) => {}
                 }
             }
 
-            if direction * (x - xend) >= 0.0 {
+            if direction * (xc - xend) >= 0.0 {
                 status = Status::Success;
                 break;
             }
@@ -580,12 +583,11 @@ impl BDF {
             }
 
             // Update Jacobian for next step
-            f.jac(x, y, &mut jac);
+            f.jac(xc, y, &mut jac);
             evals.jac += 1;
         }
 
         Ok(IntegrationResult::new(
-            x,
             direction * current_h,
             status,
             evals,

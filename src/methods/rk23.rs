@@ -52,7 +52,7 @@ impl Default for RK23 {
 impl RK23 {
     /// Bogacki–Shampine 3(2) pair (RK23) — adaptive solver with optional dense output.
     ///
-    /// This function integrates the autonomous system `y' = f(x, y)` from `x` to
+    /// This function integrates the autonomous system `y' = f(xc, y)` from `x` to
     /// `xend`, advancing the provided state buffer `y` in-place. It performs
     /// classical error control using the embedded 2nd‑order estimate and can, if
     /// requested, provide dense-output coefficients for interpolation inside each
@@ -83,9 +83,9 @@ impl RK23 {
     pub fn solve<F, S>(
         &self,
         f: &F,
-        mut x: Float,
-        xend: Float,
+        x: &mut Float,
         y: &mut [Float],
+        xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
         mut solout: Option<&mut S>,
@@ -130,10 +130,11 @@ impl RK23 {
         let error_exponent = -1.0 / 3.0;
 
         // Maximum step size
-        let hmax = self.max_step.map(|h| h.abs()).unwrap_or((xend - x).abs());
+        let hmax = self.max_step.map(|h| h.abs()).unwrap_or((xend - *x).abs());
 
         // --- Declarations ---
         let n = y.len();
+        let mut xc = *x;
         let mut k1 = vec![0.0; n];
         let mut k2 = vec![0.0; n];
         let mut k3 = vec![0.0; n];
@@ -144,19 +145,19 @@ impl RK23 {
         let mut evals = Evals::new();
         let mut steps = Steps::new();
         let mut status = Status::Success;
-        let mut xold = x;
+        let mut xold = xc;
         let mut xout: Option<Float> = None;
-        let posneg = (xend - x).signum();
+        let posneg = (xend - xc).signum();
 
         // --- Initializations ---
-        f.ode(x, &y, &mut k1);
+        f.ode(xc, &y, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, x, &y, posneg, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
+                    f, xc, &y, posneg, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
                 )
             }
         };
@@ -168,12 +169,11 @@ impl RK23 {
             &h as *const Float,
         );
 
-        // Initial SolOut call (no interpolator yet; xold == x)
+        // Initial SolOut call (no interpolator yet; xold == xc)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseOutput>(xold, x, &y, None) {
+            match sol.solout::<DenseOutput>(xold, xc, &y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
-                        x,
                         h,
                         status: Status::UserInterrupt,
                         evals,
@@ -181,9 +181,9 @@ impl RK23 {
                     });
                 }
                 ControlFlag::ModifiedSolution(xm, ym) => {
-                    x = xm;
+                    xc = xm;
                     y.copy_from_slice(&ym);
-                    f.ode(x, &y, &mut k1);
+                    f.ode(xc, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -202,21 +202,21 @@ impl RK23 {
             }
 
             // Check for last step adjustment
-            if (x + h - xend) * posneg > 0.0 {
-                h = xend - x;
+            if (xc + h - xend) * posneg > 0.0 {
+                h = xend - xc;
             }
 
             // Stage 2
             for i in 0..n {
                 yt[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(x + C2 * h, &yt, &mut k2);
+            f.ode(xc + C2 * h, &yt, &mut k2);
 
             // Stage 3
             for i in 0..n {
                 yt[i] = y[i] + h * A32 * k2[i];
             }
-            f.ode(x + C3 * h, &yt, &mut k3);
+            f.ode(xc + C3 * h, &yt, &mut k3);
 
             // Compute solution and error estimate
             for i in 0..n {
@@ -224,7 +224,7 @@ impl RK23 {
             }
 
             // Stage 4/1: derivative at new point, also used as k1 if accepted.
-            f.ode(x + h, &yt, &mut k4);
+            f.ode(xc + h, &yt, &mut k4);
 
             evals.ode += 3;
 
@@ -249,8 +249,11 @@ impl RK23 {
                 // Update state
                 ye.copy_from_slice(&y);
                 y.copy_from_slice(&yt);
-                xold = x;
-                x += h;
+                xold = xc;
+                xc += h;
+
+                // Update x and y together
+                *x = xc;
 
                 // Prepare dense output
                 if self.dense_output && solout.is_some() {
@@ -264,26 +267,26 @@ impl RK23 {
 
                 // Optional callback function
                 if let Some(sol) = solout.as_mut() {
-                    let event = xout.map_or(false, |xo| xo <= x);
+                    let event = xout.map_or(false, |xo| xo <= xc);
                     let interpolation = if self.dense_output || event {
                         Some(interpolator)
                     } else {
                         None
                     };
-                    match sol.solout(xold, x, &y, interpolation) {
+                    match sol.solout(xold, xc, &y, interpolation) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
                         ControlFlag::ModifiedSolution(xm, ym) => {
                             // Update with modified solution
-                            x = xm;
+                            xc = xm;
                             for i in 0..n {
                                 y[i] = ym[i];
                             }
 
-                            // Recompute k1 at new (x, y).
-                            f.ode(x, &y, &mut k1);
+                            // Recompute k1 at new (xc, y).
+                            f.ode(xc, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
@@ -307,7 +310,7 @@ impl RK23 {
                 }
 
                 // Normal exit
-                if x == xend {
+                if xc == xend {
                     break;
                 }
             } else {
@@ -319,17 +322,17 @@ impl RK23 {
             }
         }
 
-        Ok(IntegrationResult::new(x, h, status, evals, steps))
+        Ok(IntegrationResult::new(h, status, evals, steps))
     }
 
     /// Dense output evaluation for RK23
     pub fn interpolate(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
         let n = yi.len();
-        let x = (xi - xold) / h;
-        let x2 = x * x;
-        let x3 = x2 * x;
+        let xc = (xi - xold) / h;
+        let x2 = xc * xc;
+        let x3 = x2 * xc;
         for i in 0..n {
-            yi[i] = cont[i] + h * (cont[n + i] * x + cont[2 * n + i] * x2 + cont[3 * n + i] * x3);
+            yi[i] = cont[i] + h * (cont[n + i] * xc + cont[2 * n + i] * x2 + cont[3 * n + i] * x3);
         }
     }
 }
@@ -402,3 +405,4 @@ const D31: Float = 5.0 / 9.0;
 const D32: Float = -2.0 / 3.0;
 const D33: Float = -8.0 / 9.0;
 const D34: Float = 1.0;
+

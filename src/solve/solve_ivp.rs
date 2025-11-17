@@ -108,26 +108,28 @@ where
 {
     // Prepare the default SolOut (wrapping user callback if provided)
     let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output, options.first_step, x0);
+    
+    // Create mutable copies for the solver to mutate
+    let mut x = x0;
+    let mut y = y0.to_vec();
 
     // Dispatch by method
     let result = match options.method {
         Method::RK4 => {
             let h = options.first_step.unwrap_or_else(|| (xend - x0) / 100.0);
-            let mut y = y0.to_vec();
             let solver = RK4::builder()
                 .max_steps(options.max_steps.unwrap_or(100_000))
                 .build();
             solver.solve(
                 f,
-                x0,
-                xend,
+                &mut x,
                 &mut y,
+                xend,
                 h,
                 Some(&mut default_solout),
             )
         }
         Method::RK23 => {
-            let mut y = y0.to_vec();
             let solver = RK23::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_first_step(options.first_step)
@@ -135,16 +137,15 @@ where
                 .build();
             solver.solve(
                 f,
-                x0,
-                xend,
+                &mut x,
                 &mut y,
+                xend,
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
             )
         }
         Method::DOPRI5 => {
-            let mut y = y0.to_vec();
             let solver = DOPRI5::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_first_step(options.first_step)
@@ -152,16 +153,15 @@ where
                 .build();
             solver.solve(
                 f,
-                x0,
-                xend,
+                &mut x,
                 &mut y,
+                xend,
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
             )
         }
         Method::DOP853 => {
-            let mut y = y0.to_vec();
             let solver = DOP853::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_first_step(options.first_step)
@@ -169,16 +169,15 @@ where
                 .build();
             solver.solve(
                 f,
-                x0,
-                xend,
+                &mut x,
                 &mut y,
+                xend,
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
             )
         }
         Method::RADAU => {
-            let mut y = y0.to_vec();
             let solver = RADAU::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_min_step(options.min_step)
@@ -192,16 +191,15 @@ where
                 .build();
             solver.solve(
                 f,
-                x0,
-                xend,
+                &mut x,
                 &mut y,
+                xend,
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),
             )
         }
         Method::BDF => {
-            let mut y = y0.to_vec();
             let solver = BDF::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_min_step(options.min_step)
@@ -211,9 +209,9 @@ where
                 .build();
             solver.solve(
                 f,
-                x0,
-                xend,
+                &mut x,
                 &mut y,
+                xend,
                 options.rtol,
                 options.atol,
                 Some(&mut default_solout),

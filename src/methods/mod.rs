@@ -28,8 +28,6 @@ use std::{
 /// The output of a numerical integrator
 #[derive(Clone, Debug)]
 pub struct IntegrationResult {
-    /// The final value of the independent variable
-    pub x: Float,
     /// The step size of the next integration step
     pub h: Float,
     /// Status of the integration
@@ -41,9 +39,8 @@ pub struct IntegrationResult {
 }
 
 impl IntegrationResult {
-    pub fn new(x: Float, h: Float, status: Status, evals: Evals, steps: Steps) -> Self {
+    pub fn new(h: Float, status: Status, evals: Evals, steps: Steps) -> Self {
         Self {
-            x,
             h,
             status,
             evals,
