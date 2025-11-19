@@ -235,7 +235,7 @@ impl BDF {
         let mut cont = vec![0.0; n * CONT_BLOCK];
         // Initial callback
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseBdf15>(*x, *x, y, None) {
+            match sol.solout::<DenseBdf15>(*x, x, y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -245,9 +245,8 @@ impl BDF {
                         steps,
                     ));
                 }
-                ControlFlag::ModifiedSolution(nx, ny) => {
-                    *x = nx;
-                    y.copy_from_slice(&ny);
+                ControlFlag::ModifiedSolution => {
+                    // Update derivatives at new (x, y).
                     f.ode(*x, y, &mut f0);
                     evals.ode += 1;
                     d[0].copy_from_slice(y);
@@ -497,15 +496,14 @@ impl BDF {
             // Callback
             if let Some(sol) = solout.as_mut() {
                 let interp = DenseBdf15::new(cont.as_ptr(), cont.len(), x_start, h_signed);
-                match sol.solout::<DenseBdf15>(*x - h_signed, *x, y, Some(&interp)) {
+                match sol.solout::<DenseBdf15>(*x - h_signed, x, y, Some(&interp)) {
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
                         break;
                     }
-                    ControlFlag::ModifiedSolution(nx, ny) => {
-                        *x = nx;
-                        y.copy_from_slice(&ny);
+                    ControlFlag::ModifiedSolution => {
+                        // Update derivatives at new (x, y).
                         f.ode(*x, y, &mut f0);
                         evals.ode += 1;
                         d[0].copy_from_slice(y);

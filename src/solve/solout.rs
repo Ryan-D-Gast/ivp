@@ -110,8 +110,8 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
     fn solout<I: Interpolate>(
         &mut self,
         xold: Float,
-        x: Float,
-        y: &[Float],
+        x: &mut Float,
+        y: &mut [Float],
         interpolator: Option<&I>,
     ) -> ControlFlag {
         // ============================================================================
@@ -122,7 +122,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         
         if let Some(g_prev) = self.prev_event {
             // Evaluate event function at the current endpoint
-            let g_curr = self.ode.event(x, y, &mut self.event_config);
+            let g_curr = self.ode.event(*x, y, &mut self.event_config);
 
             // Check if a zero-crossing occurred in the requested direction
             let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
@@ -138,7 +138,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
             if crossed(g_prev, g_curr, &self.event_config.direction) {
                 // Refine event location via bisection on [xold, x]
                 let mut a = xold;
-                let mut b = x;
+                let mut b = *x;
                 let mut g_left = g_prev;
                 let mut g_right = g_curr;
                 let mut y_mid_buf = vec![0.0; y.len()];
@@ -202,7 +202,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
             self.prev_event = Some(g_curr);
         } else {
             // Initial call: evaluate and cache event value without detecting crossings
-            let g0 = self.ode.event(x, y, &mut self.event_config);
+            let g0 = self.ode.event(*x, y, &mut self.event_config);
             self.prev_event = Some(g0);
         }
 
@@ -215,7 +215,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         // Collect interpolation coefficients from each accepted step for later
         // continuous evaluation. Skip the initial callback and degenerate segments.
         
-        if self.collect_dense && x != xold && interpolator.is_some() {
+        if self.collect_dense && *x != xold && interpolator.is_some() {
             let (cont, cxold, h) = interpolator.unwrap().get_cont();
             if h != 0.0 {
                 self.dense_segs.push((cont, cxold, h));
@@ -232,16 +232,16 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
             
             let mut i = self.next_idx;
             
-            if (xold - x).abs() <= self.tol {
+            if (xold - *x).abs() <= self.tol {
                 // Initial callback (xold == x): output at matching t_eval points
-                while i < t_eval.len() && (t_eval[i] - x).abs() <= self.tol {
+                while i < t_eval.len() && (t_eval[i] - *x).abs() <= self.tol {
                     self.t.push(t_eval[i]);
                     self.y.push(y.to_vec());
                     i += 1;
                 }
             } else {
                 // Regular accepted step: interpolate at all t_eval[i] in (xold, x]
-                while i < t_eval.len() && t_eval[i] <= x + self.tol {
+                while i < t_eval.len() && t_eval[i] <= *x + self.tol {
                     if t_eval[i] >= xold - self.tol {
                         let mut yi = vec![0.0; y.len()];
                         interpolator.unwrap().interpolate(t_eval[i], &mut yi);
@@ -260,11 +260,11 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
             if let Some(h0) = self.first_step {
                 // First-step enforcement: skip intermediate outputs until we reach/pass
                 // the target, then interpolate to the exact point.
-                if !self.first_output_done && (xold - x).abs() > self.tol {
+                if !self.first_output_done && (xold - *x).abs() > self.tol {
                     let target = self.x0 + h0;
-                    let direction = (x - xold).signum();
+                    let direction = (*x - xold).signum();
                     
-                    if direction * (x - target) >= -self.tol {
+                    if direction * (*x - target) >= -self.tol {
                         // We've reached or passed the target point
                         if let Some(interp) = interpolator {
                             let mut yi = vec![0.0; y.len()];
@@ -275,8 +275,8 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                         }
                         
                         // Also output current endpoint if distinct from target
-                        if (x - target).abs() > self.tol {
-                            self.t.push(x);
+                        if (*x - target).abs() > self.tol {
+                            self.t.push(*x);
                             self.y.push(y.to_vec());
                         }
                         return ControlFlag::Continue;
@@ -288,8 +288,8 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
             }
             
             // Normal output: record endpoint (avoid duplicates)
-            if self.t.is_empty() || (self.t.last().unwrap() - x).abs() > self.tol {
-                self.t.push(x);
+            if self.t.is_empty() || (self.t.last().unwrap() - *x).abs() > self.tol {
+                self.t.push(*x);
                 self.y.push(y.to_vec());
             }
         }

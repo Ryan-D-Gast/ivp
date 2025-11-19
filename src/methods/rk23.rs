@@ -170,7 +170,7 @@ impl RK23 {
 
         // Initial SolOut call (no interpolator yet; xold == *x)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseOutput>(xold, *x, &y, None) {
+            match sol.solout::<DenseOutput>(xold, x, y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -179,9 +179,8 @@ impl RK23 {
                         steps,
                     });
                 }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    *x = xm;
-                    y.copy_from_slice(&ym);
+                ControlFlag::ModifiedSolution => {
+                    // Recompute k1 at new (x, y).
                     f.ode(*x, &y, &mut k1);
                     evals.ode += 1;
                 }
@@ -269,18 +268,13 @@ impl RK23 {
                     } else {
                         None
                     };
-                    match sol.solout(xold, *x, &y, interpolation) {
+                    match sol.solout(xold, x, y, interpolation) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
-                        ControlFlag::ModifiedSolution(xm, ym) => {
+                        ControlFlag::ModifiedSolution => {
                             // Update with modified solution
-                            *x = xm;
-                            for i in 0..n {
-                                y[i] = ym[i];
-                            }
-
                             // Recompute k1 at new (*x, y).
                             f.ode(*x, &y, &mut k1);
                             evals.ode += 1;

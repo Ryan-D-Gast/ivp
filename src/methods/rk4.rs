@@ -120,7 +120,7 @@ impl RK4 {
 
         // Initial SolOut call (no interpolator yet; xold == *x)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseOutput>(xold, *x, &y, None) {
+            match sol.solout::<DenseOutput>(xold, x, y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -129,11 +129,7 @@ impl RK4 {
                         steps,
                     });
                 }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    *x = xm;
-                    for i in 0..n {
-                        y[i] = ym[i];
-                    }
+                ControlFlag::ModifiedSolution => {
                     f.ode(*x, &y, &mut k1);
                     evals.ode += 1;
                 }
@@ -205,18 +201,13 @@ impl RK4 {
                 } else {
                     None
                 };
-                match sol.solout(xold, *x, &y, interpolation) {
+                match sol.solout(xold, x, y, interpolation) {
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
                         break;
                     }
-                    ControlFlag::ModifiedSolution(xm, ym) => {
-                        // Update with modified solution
-                        *x = xm;
-                        for i in 0..n {
-                            y[i] = ym[i];
-                        }
-                        // Recompute k1 at new (*x, y).
+                    ControlFlag::ModifiedSolution => {
+                        // Recompute k1 at new (x, y).
                         f.ode(*x, &y, &mut k1);
                         evals.ode += 1;
                     }

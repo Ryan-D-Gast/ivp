@@ -337,7 +337,7 @@ impl RADAU {
 
         // Initial callback (xold=xc; no interpolator yet)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseRadau>(xold, *x, &y, None) {
+            match sol.solout::<DenseRadau>(xold, x, y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -347,9 +347,8 @@ impl RADAU {
                         steps,
                     ));
                 }
-                ControlFlag::ModifiedSolution(nx, ny) => {
-                    *x = nx;
-                    y.copy_from_slice(&ny);
+                ControlFlag::ModifiedSolution => {
+                    // Update derivatives at new (x, y).
                     f.ode(*x, &y, &mut f0);
                     evals.ode += 1;
                 }
@@ -708,6 +707,10 @@ impl RADAU {
                     cont[3 * n + i] = cont[2 * n + i] - acont3;
                 }
 
+                // New derivative at x+h
+                f.ode(*x, &y, &mut f0);
+                evals.ode += 1;
+
                 // Compute error scale
                 for i in 0..n {
                     scal[i] = atol[i] + rtol[i] * y[i].abs();
@@ -722,15 +725,14 @@ impl RADAU {
                     } else {
                         None
                     };
-                    match sol.solout(xold, *x, &y, interpolation) {
+                    match sol.solout(xold, x, y, interpolation) {
                         ControlFlag::Continue => {}
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break 'main;
                         }
-                        ControlFlag::ModifiedSolution(nx, ny) => {
-                            *x = nx;
-                            y.copy_from_slice(&ny);
+                        ControlFlag::ModifiedSolution => {
+                            // Update derivatives at new (x, y).
                             f.ode(*x, &y, &mut f0);
                             evals.ode += 1;
                         }
@@ -745,10 +747,6 @@ impl RADAU {
                     status = Status::Success;
                     break 'main;
                 }
-
-                // New derivative at x+h
-                f.ode(*x, &y, &mut f0);
-                evals.ode += 1;
 
                 // Step accepted so we can reset singular counter
                 singular_count = 0;

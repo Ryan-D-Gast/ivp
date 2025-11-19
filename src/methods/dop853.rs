@@ -250,7 +250,7 @@ impl DOP853 {
 
         // Initial call to SolOut
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, *x, &y, None) {
+            match solout.solout::<DenseOutput>(xold, x, y, None) {
                 ControlFlag::Interrupt => {
                     status = Status::UserInterrupt;
                     return Ok(IntegrationResult {
@@ -260,14 +260,8 @@ impl DOP853 {
                         steps,
                     });
                 }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    // Update with modified solution
-                    *x = xm;
-                    for i in 0..n {
-                        y[i] = ym[i];
-                    }
-
-                    // Recompute k1 at new (x, y).
+                ControlFlag::ModifiedSolution => {
+                    // Update derivatives at new (x, y).
                     f.ode(*x, &y, &mut k1);
                     evals.ode += 1;
                 }
@@ -616,18 +610,14 @@ impl DOP853 {
                     } else {
                         None
                     };
-                    match solout.solout(xold, *x, &y, interpolation) {
+                    match solout.solout(xold, x, y, interpolation) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
-                        ControlFlag::ModifiedSolution(xm, ym) => {
-                            // Update with modified solution
-                            *x = xm;
-                            y.copy_from_slice(&ym);
-
-                            // Recompute k4 at new (x, y)
-                            f.ode(*x, &y, &mut k4);
+                        ControlFlag::ModifiedSolution => {
+                            // Update derivatives at new (x, y).
+                            f.ode(*x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {

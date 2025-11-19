@@ -246,7 +246,7 @@ impl DOPRI5 {
 
         // Initial SolOut call
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, *x, &y, None) {
+            match solout.solout::<DenseOutput>(xold, x, y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -255,9 +255,8 @@ impl DOPRI5 {
                         steps,
                     });
                 }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    *x = xm;
-                    y.copy_from_slice(&ym);
+                ControlFlag::ModifiedSolution => {
+                    // Recompute k1 at new (x, y).
                     f.ode(*x, &y, &mut k1);
                     evals.ode += 1;
                 }
@@ -420,15 +419,14 @@ impl DOPRI5 {
                     } else {
                         None
                     };
-                    match solout.solout(xold, *x, &y, interpolation) {
+                    match solout.solout(xold, x, y, interpolation) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
-                        ControlFlag::ModifiedSolution(xm, ym) => {
-                            *x = xm;
-                            y.copy_from_slice(&ym);
-                            f.ode(*x, &y, &mut k2);
+                        ControlFlag::ModifiedSolution => {
+                            // Update derivatives at new (x, y).
+                            f.ode(*x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {

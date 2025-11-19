@@ -37,11 +37,11 @@ use crate::{Float, interpolate::Interpolate};
 /// }
 /// impl SolOut for Printer {
 ///     fn solout(&mut self, xold, x, y, interpolator) -> ControlFlag {
-///         if xold == x {
+///         if xold == *x {
 ///             println!("x = {}, y = {:?}", xold, y);
 ///             self.xout = xold + self.dx;
 ///         }
-///         while self.xout <= x {
+///         while self.xout <= *x {
 ///             let yi = interpolator.interpolate(self.xout);
 ///             println!("x = {}, y = {:?}", self.xout, yi);
 ///             self.xout += self.dx;
@@ -54,8 +54,8 @@ pub trait SolOut {
     fn solout<I: Interpolate>(
         &mut self,
         xold: Float,
-        x: Float,
-        y: &[Float],
+        x: &mut Float,
+        y: &mut [Float],
         interpolator: Option<&I>,
     ) -> ControlFlag;
 }
@@ -72,5 +72,5 @@ pub enum ControlFlag {
     Continue,
     Interrupt,
     XOut(Float),
-    ModifiedSolution(Float, Vec<Float>),
+    ModifiedSolution,
 }
