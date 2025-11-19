@@ -196,7 +196,6 @@ impl DOPRI5 {
 
         // --- Declarations ---
         let n = y.len();
-        let mut xc = *x;
         let mut k1 = vec![0.0; n];
         let mut k2 = vec![0.0; n];
         let mut k3 = vec![0.0; n];
@@ -217,22 +216,22 @@ impl DOPRI5 {
         let mut xph;
         let mut evals = Evals::new();
         let mut steps = Steps::new();
-        let mut xold = xc;
+        let mut xold = *x;
         let mut xout = None;
         let mut event;
         let status;
         let expo1 = 0.2 - beta * 0.75;
-        let posneg = (xend - xc).signum();
+        let posneg = (xend - *x).signum();
 
         // --- Initializations ---
-        f.ode(xc, &y, &mut k1);
+        f.ode(*x, &y, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, xc, &y, posneg, &k1, &mut k2, &mut k3, 5, h_max, &atol, &rtol,
+                    f, *x, &y, posneg, &k1, &mut k2, &mut k3, 5, h_max, &atol, &rtol,
                 )
             }
         };
@@ -247,7 +246,7 @@ impl DOPRI5 {
 
         // Initial SolOut call
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, xc, &y, None) {
+            match solout.solout::<DenseOutput>(xold, *x, &y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -257,9 +256,9 @@ impl DOPRI5 {
                     });
                 }
                 ControlFlag::ModifiedSolution(xm, ym) => {
-                    xc = xm;
+                    *x = xm;
                     y.copy_from_slice(&ym);
-                    f.ode(xc, &y, &mut k1);
+                    f.ode(*x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -284,8 +283,8 @@ impl DOPRI5 {
             }
 
             // Adjust last step to land on xend
-            if (xc + 1.01 * h - xend) * posneg > 0.0 {
-                h = xend - xc;
+            if (*x + 1.01 * h - xend) * posneg > 0.0 {
+                h = xend - *x;
                 last = true;
             }
 
@@ -295,32 +294,32 @@ impl DOPRI5 {
             for i in 0..n {
                 y1[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(xc + C2 * h, &y1, &mut k2);
+            f.ode(*x + C2 * h, &y1, &mut k2);
 
             // Stage 3
             for i in 0..n {
                 y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
             }
-            f.ode(xc + C3 * h, &y1, &mut k3);
+            f.ode(*x + C3 * h, &y1, &mut k3);
 
             // Stage 4
             for i in 0..n {
                 y1[i] = y[i] + h * (A41 * k1[i] + A42 * k2[i] + A43 * k3[i]);
             }
-            f.ode(xc + C4 * h, &y1, &mut k4);
+            f.ode(*x + C4 * h, &y1, &mut k4);
 
             // Stage 5
             for i in 0..n {
                 y1[i] = y[i] + h * (A51 * k1[i] + A52 * k2[i] + A53 * k3[i] + A54 * k4[i]);
             }
-            f.ode(xc + C5 * h, &y1, &mut k5);
+            f.ode(*x + C5 * h, &y1, &mut k5);
 
             // Stage 6 (ysti)
             for i in 0..n {
                 y1[i] =
                     y[i] + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
             }
-            xph = xc + h;
+            xph = *x + h;
             f.ode(xph, &y1, &mut k6);
 
             // Final stage
@@ -412,11 +411,8 @@ impl DOPRI5 {
                 // Update state variables
                 k1.copy_from_slice(&k2);
                 y.copy_from_slice(&y1);
-                xold = xc;
-                xc = xph;
-
-                // Update x and y together
-                *x = xc;
+                xold = *x;
+                *x = xph;
 
                 if let Some(solout) = solout.as_mut() {
                     let interpolation = if self.dense_output || event {
@@ -424,15 +420,15 @@ impl DOPRI5 {
                     } else {
                         None
                     };
-                    match solout.solout(xold, xc, &y, interpolation) {
+                    match solout.solout(xold, *x, &y, interpolation) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
                         ControlFlag::ModifiedSolution(xm, ym) => {
-                            xc = xm;
+                            *x = xm;
                             y.copy_from_slice(&ym);
-                            f.ode(xc, &y, &mut k2);
+                            f.ode(*x, &y, &mut k2);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
