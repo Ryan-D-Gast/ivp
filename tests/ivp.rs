@@ -153,11 +153,18 @@ impl IVP for ShoZeroEventAll {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
-    fn event(&self, _t: f64, y: &[f64], cfg: &mut EventConfig) -> f64 {
+    fn events(&self, _t: f64, y: &[f64], out: &mut [f64]) {
+        out[0] = y[0];
+    }
+    fn n_events(&self) -> usize {
+        1
+    }
+    fn event_config(&self, _index: usize) -> EventConfig {
+        let mut cfg = EventConfig::default();
         // Detect all zero-crossings, stop after 2
         cfg.all();
         cfg.terminal_count(2);
-        y[0]
+        cfg
     }
 }
 
@@ -167,10 +174,17 @@ impl IVP for ShoZeroEventPositive {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
-    fn event(&self, _t: f64, y: &[f64], cfg: &mut EventConfig) -> f64 {
+    fn events(&self, _t: f64, y: &[f64], out: &mut [f64]) {
+        out[0] = y[0];
+    }
+    fn n_events(&self) -> usize {
+        1
+    }
+    fn event_config(&self, _index: usize) -> EventConfig {
+        let mut cfg = EventConfig::default();
         cfg.positive();
         cfg.terminal();
-        y[0]
+        cfg
     }
 }
 
@@ -180,10 +194,17 @@ impl IVP for ShoZeroEventNegative {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
-    fn event(&self, _t: f64, y: &[f64], cfg: &mut EventConfig) -> f64 {
+    fn events(&self, _t: f64, y: &[f64], out: &mut [f64]) {
+        out[0] = y[0];
+    }
+    fn n_events(&self) -> usize {
+        1
+    }
+    fn event_config(&self, _index: usize) -> EventConfig {
+        let mut cfg = EventConfig::default();
         cfg.negative();
         cfg.terminal();
-        y[0]
+        cfg
     }
 }
 
@@ -206,7 +227,7 @@ fn event_detection_all_and_directional() {
     // All crossings, stop after 2 -> expect near pi/2 and 3pi/2, terminates at latter
     let f_all = ShoZeroEventAll;
     let sol_all = solve_ivp(&f_all, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
-    let zeros = find_near_zero_times(&sol_all.t_events, &sol_all.y_events, 1e-8);
+    let zeros = find_near_zero_times(&sol_all.t_events[0], &sol_all.y_events[0], 1e-8);
     // Expect at least two event samples recorded
     assert!(
         zeros.len() >= 2,
@@ -230,7 +251,7 @@ fn event_detection_all_and_directional() {
     // Positive-going only -> expect ~3pi/2
     let f_pos = ShoZeroEventPositive;
     let sol_pos = solve_ivp(&f_pos, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
-    let zeros_pos = find_near_zero_times(&sol_pos.t_events, &sol_pos.y_events, 1e-8);
+    let zeros_pos = find_near_zero_times(&sol_pos.t_events[0], &sol_pos.y_events[0], 1e-8);
     assert!(!zeros_pos.is_empty());
     let z = zeros_pos[0];
     assert!(
@@ -242,7 +263,7 @@ fn event_detection_all_and_directional() {
     // Negative-going only -> expect ~pi/2
     let f_neg = ShoZeroEventNegative;
     let sol_neg = solve_ivp(&f_neg, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
-    let zeros_neg = find_near_zero_times(&sol_neg.t_events, &sol_neg.y_events, 1e-8);
+    let zeros_neg = find_near_zero_times(&sol_neg.t_events[0], &sol_neg.y_events[0], 1e-8);
     assert!(!zeros_neg.is_empty());
     let z = zeros_neg[0];
     assert!(

@@ -72,10 +72,11 @@ impl ContinuousOutput {
     }
 
     fn find_segment(&self, t: Float) -> Option<&Segment> {
+        let tol = 1e-12;
         for seg in &self.segs {
             let left = seg.xold.min(seg.xold + seg.h);
             let right = seg.xold.max(seg.xold + seg.h);
-            if t >= left && t <= right {
+            if t >= left - tol && t <= right + tol {
                 return Some(seg);
             }
         }

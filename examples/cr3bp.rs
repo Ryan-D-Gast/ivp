@@ -43,15 +43,21 @@ impl IVP for CR3BP {
         dsdt[5] = -(1.0 - self.mu) * vz / r13.powi(3) - self.mu * vz / r23.powi(3);
     }
 
-    fn event(&self, _x: f64, sv: &[f64], event: &mut EventConfig) -> f64 {
+    fn events(&self, _x: f64, sv: &[f64], out: &mut [f64]) {
+        // Example event: crossing the x-axis (sv=0)
+        out[0] = sv[1];
+    }
+
+    fn n_events(&self) -> usize {
+        1
+    }
+
+    fn event_config(&self, _index: usize) -> EventConfig {
+        let mut event = EventConfig::default();
         // Terminate after 1 occurrence of the event
         event.terminal();
         event.positive(); // Only detect positive-going zero crossings
-        // Other options: event.negative(), event.all() <- All is default feel free to omit
-        // For recording multiple events before termination, use event.terminal_count(n) instead of event.terminal()
-
-        // Example event: crossing the x-axis (sv=0)
-        sv[1]
+        event
     }
 }
 
@@ -83,8 +89,10 @@ fn main() {
             }
 
             println!("t and y at events:");
-            for (ti, yi) in sol.events() {
-                println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
+            if !sol.t_events.is_empty() && !sol.t_events[0].is_empty() {
+                for (ti, yi) in sol.t_events[0].iter().zip(sol.y_events[0].iter()) {
+                    println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
+                }
             }
         }
         Err(err) => eprintln!("Integration failed: {:?}", err),

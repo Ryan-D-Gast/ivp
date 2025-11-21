@@ -29,9 +29,9 @@ where
     /// Collected solution states corresponding to `t`
     y: Vec<Vec<Float>>,
     /// Times at which events occurred
-    t_events: Vec<Float>,
+    t_events: Vec<Vec<Float>>,
     /// Solution states at event times
-    y_events: Vec<Vec<Float>>,
+    y_events: Vec<Vec<Vec<Float>>>,
     /// Whether to collect dense output interpolation data
     collect_dense: bool,
     /// Dense output segments: (coefficients, xold, h) for each accepted step
@@ -39,11 +39,11 @@ where
     /// Solution state from the previous step (for event detection)
     yold: Vec<Float>,
     /// Event detection configuration
-    event_config: EventConfig,
+    event_config: Vec<EventConfig>,
     /// Event function value from the previous step (for zero-crossing detection)
-    prev_event: Option<Float>,
+    prev_event: Vec<Float>,
     /// Count of detected events (for terminal event handling)
-    event_hits: usize,
+    event_hits: Vec<usize>,
     /// Optional first step size: if set, the first output after the initial condition
     /// will be at exactly `x0 + first_step` (only when `t_eval` is not provided)
     first_step: Option<Float>,
@@ -65,6 +65,12 @@ where
         first_step: Option<Float>,
         x0: Float,
     ) -> Self {
+        let n_events = ode.n_events();
+        let mut event_config = Vec::with_capacity(n_events);
+        for i in 0..n_events {
+            event_config.push(ode.event_config(i));
+        }
+
         Self {
             ode,
             t_eval,
@@ -72,13 +78,13 @@ where
             tol: 1e-12,
             t: Vec::new(),
             y: Vec::new(),
-            t_events: Vec::new(),
-            y_events: Vec::new(),
+            t_events: vec![Vec::new(); n_events],
+            y_events: vec![Vec::new(); n_events],
             collect_dense,
             dense_segs: Vec::new(),
-            event_config: EventConfig::new(),
-            prev_event: None,
-            event_hits: 0,
+            event_config,
+            prev_event: vec![0.0; n_events],
+            event_hits: vec![0; n_events],
             yold: Vec::new(),
             first_step,
             x0,
@@ -92,8 +98,8 @@ where
     ) -> (
         Vec<Float>,
         Vec<Vec<Float>>,
-        Vec<Float>,
         Vec<Vec<Float>>,
+        Vec<Vec<Vec<Float>>>,
         Vec<(Vec<Float>, Float, Float)>,
     ) {
         (
@@ -115,101 +121,6 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         interpolator: Option<&I>,
     ) -> ControlFlag {
         // ============================================================================
-        // Event Detection
-        // ============================================================================
-        // Monitor the user-defined event function for zero-crossings. Uses bisection
-        // to refine the event location when a sign change is detected.
-        
-        if let Some(g_prev) = self.prev_event {
-            // Evaluate event function at the current endpoint
-            let g_curr = self.ode.event(*x, y, &mut self.event_config);
-
-            // Check if a zero-crossing occurred in the requested direction
-            let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
-                match dir {
-                    Direction::All => {
-                        (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0)
-                    }
-                    Direction::Positive => left < 0.0 && right >= 0.0,
-                    Direction::Negative => left > 0.0 && right <= 0.0,
-                }
-            };
-
-            if crossed(g_prev, g_curr, &self.event_config.direction) {
-                // Refine event location via bisection on [xold, x]
-                let mut a = xold;
-                let mut b = *x;
-                let mut g_left = g_prev;
-                let mut g_right = g_curr;
-                let mut y_mid_buf = vec![0.0; y.len()];
-
-                // Check if event is already at an endpoint (within tolerance)
-                if g_left.abs() <= self.tol {
-                    self.t_events.push(a);
-                    self.y_events.push(self.yold.clone());
-                } else if g_right.abs() <= self.tol {
-                    self.t_events.push(b);
-                    self.y_events.push(y.to_vec());
-                } else {
-                    // Bisection refinement
-                    for _ in 0..100 {
-                        if (b - a).abs() <= self.tol {
-                            break;
-                        }
-                        let mid = 0.5 * (a + b);
-                        interpolator.unwrap().interpolate(mid, &mut y_mid_buf);
-                        let g_mid = self.ode.event(mid, &y_mid_buf, &mut self.event_config);
-
-                        // Select subinterval preserving the zero-crossing
-                        let left_cross = crossed(g_left, g_mid, &self.event_config.direction);
-                        let right_cross = crossed(g_mid, g_right, &self.event_config.direction);
-
-                        if left_cross {
-                            b = mid;
-                            g_right = g_mid;
-                        } else if right_cross {
-                            a = mid;
-                            g_left = g_mid;
-                        } else {
-                            // Fallback: standard sign-based bisection
-                            if g_left.signum() * g_mid.signum() <= 0.0 {
-                                b = mid;
-                                g_right = g_mid;
-                            } else {
-                                a = mid;
-                                g_left = g_mid;
-                            }
-                        }
-                    }
-
-                    // Record refined event location
-                    let mut y_at_b = vec![0.0; y.len()];
-                    interpolator.unwrap().interpolate(b, &mut y_at_b);
-                    self.t_events.push(b);
-                    self.y_events.push(y_at_b);
-                }
-
-                // Check for terminal event
-                self.event_hits += 1;
-                if let Some(limit) = self.event_config.terminal_count {
-                    if self.event_hits >= limit {
-                        return ControlFlag::Interrupt;
-                    }
-                }
-            }
-
-            // Cache current event value for next step
-            self.prev_event = Some(g_curr);
-        } else {
-            // Initial call: evaluate and cache event value without detecting crossings
-            let g0 = self.ode.event(*x, y, &mut self.event_config);
-            self.prev_event = Some(g0);
-        }
-
-        // Update state history for event detection
-        self.yold = y.to_vec();
-
-        // ============================================================================
         // Dense Output Collection
         // ============================================================================
         // Collect interpolation coefficients from each accepted step for later
@@ -221,6 +132,111 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                 self.dense_segs.push((cont, cxold, h));
             }
         }
+
+        // ============================================================================
+        // Event Detection
+        // ============================================================================
+        // Monitor the user-defined event function for zero-crossings. Uses bisection
+        // to refine the event location when a sign change is detected.
+        
+        let n_events = self.ode.n_events();
+        if n_events > 0 {
+            let mut g_curr_vec = vec![0.0; n_events];
+            self.ode.events(*x, y, &mut g_curr_vec);
+
+            // If this is the first step (yold is empty), just initialize prev_event
+            if self.yold.is_empty() {
+                self.prev_event = g_curr_vec;
+            } else {
+                for i in 0..n_events {
+                    let g_prev = self.prev_event[i];
+                    let g_curr = g_curr_vec[i];
+                    let config = &self.event_config[i];
+
+                    // Check if a zero-crossing occurred in the requested direction
+                    let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
+                        match dir {
+                            Direction::All => {
+                                (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0)
+                            }
+                            Direction::Positive => left < 0.0 && right >= 0.0,
+                            Direction::Negative => left > 0.0 && right <= 0.0,
+                        }
+                    };
+
+                    if crossed(g_prev, g_curr, &config.direction) {
+                        // Refine event location via bisection on [xold, x]
+                        let mut a = xold;
+                        let mut b = *x;
+                        let mut g_left = g_prev;
+                        let mut g_right = g_curr;
+                        let mut y_mid_buf = vec![0.0; y.len()];
+                        let mut g_mid_vec = vec![0.0; n_events];
+
+                        // Check if event is already at an endpoint (within tolerance)
+                        if g_left.abs() <= self.tol {
+                            self.t_events[i].push(a);
+                            self.y_events[i].push(self.yold.clone());
+                        } else if g_right.abs() <= self.tol {
+                            self.t_events[i].push(b);
+                            self.y_events[i].push(y.to_vec());
+                        } else {
+                            // Bisection refinement
+                            for _ in 0..100 {
+                                if (b - a).abs() <= self.tol {
+                                    break;
+                                }
+                                let mid = 0.5 * (a + b);
+                                interpolator.unwrap().interpolate(mid, &mut y_mid_buf);
+                                self.ode.events(mid, &y_mid_buf, &mut g_mid_vec);
+                                let g_mid = g_mid_vec[i];
+
+                                // Select subinterval preserving the zero-crossing
+                                let left_cross = crossed(g_left, g_mid, &config.direction);
+                                let right_cross = crossed(g_mid, g_right, &config.direction);
+
+                                if left_cross {
+                                    b = mid;
+                                    g_right = g_mid;
+                                } else if right_cross {
+                                    a = mid;
+                                    g_left = g_mid;
+                                } else {
+                                    // Fallback: standard sign-based bisection
+                                    if g_left.signum() * g_mid.signum() <= 0.0 {
+                                        b = mid;
+                                        g_right = g_mid;
+                                    } else {
+                                        a = mid;
+                                        g_left = g_mid;
+                                    }
+                                }
+                            }
+
+                            // Record refined event location
+                            let mut y_at_b = vec![0.0; y.len()];
+                            interpolator.unwrap().interpolate(b, &mut y_at_b);
+                            self.t_events[i].push(b);
+                            self.y_events[i].push(y_at_b);
+                        }
+
+                        // Check for terminal event
+                        self.event_hits[i] += 1;
+                        if let Some(limit) = config.terminal_count {
+                            if self.event_hits[i] >= limit {
+                                return ControlFlag::Interrupt;
+                            }
+                        }
+                    }
+                    
+                    // Update prev_event for this event
+                    self.prev_event[i] = g_curr;
+                }
+            }
+        }
+
+        // Update state history for event detection
+        self.yold = y.to_vec();
 
         // ============================================================================
         // Output Sampling

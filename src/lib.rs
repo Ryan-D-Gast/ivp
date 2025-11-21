@@ -93,6 +93,9 @@ pub mod solout;
 pub mod solve;
 pub mod status;
 
+#[cfg(feature = "python")]
+pub mod python;
+
 // -- Numerical methods --
 pub mod methods;
 
