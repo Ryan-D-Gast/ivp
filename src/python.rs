@@ -14,6 +14,49 @@ struct PyOdeSolution {
 }
 
 #[cfg(feature = "python")]
+impl PyOdeSolution {
+    // Helper function for evaluating at multiple times (not exposed to Python)
+    fn evaluate_array_helper<'py>(&self, py: Python<'py>, t_slice: &[Float]) -> PyResult<Bound<'py, PyAny>> {
+        if t_slice.is_empty() {
+            return Ok(PyArray1::from_vec(py, Vec::<Float>::new()).into_any());
+        }
+        
+        let mut flat_results = Vec::new();
+        let mut n_states = 0;
+        
+        for (i, &ti) in t_slice.iter().enumerate() {
+            if let Some(yi) = self.inner.evaluate_extrapolate(ti) {
+                if i == 0 {
+                    n_states = yi.len();
+                    flat_results.reserve(t_slice.len() * n_states);
+                }
+                flat_results.extend(yi);
+            } else {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!("t={} is outside the solution range", ti)));
+            }
+        }
+        
+        // Handle empty state vector case
+        if n_states == 0 {
+            let arr = PyArray1::from_vec(py, Vec::<Float>::new()).reshape((0, t_slice.len()))?;
+            return Ok(arr.into_any());
+        }
+        
+        // Result shape: (n_states, n_points) to match SciPy
+        let n_points = t_slice.len();
+        let mut transposed = vec![0.0; n_points * n_states];
+        for i in 0..n_points {
+            for j in 0..n_states {
+                transposed[j * n_points + i] = flat_results[i * n_states + j];
+            }
+        }
+        
+        let arr = PyArray1::from_vec(py, transposed).reshape((n_states, n_points))?;
+        Ok(arr.into_any())
+    }
+}
+
+#[cfg(feature = "python")]
 #[pymethods]
 impl PyOdeSolution {
     fn __repr__(&self) -> String {
@@ -36,45 +79,19 @@ impl PyOdeSolution {
 
     fn __call__<'py>(&self, py: Python<'py>, t: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // t can be float or array
+        // Use evaluate_extrapolate to match SciPy's behavior of allowing extrapolation
         if let Ok(t_val) = t.extract::<Float>() {
-            if let Some(y) = self.inner.evaluate(t_val) {
+            if let Some(y) = self.inner.evaluate_extrapolate(t_val) {
                 return Ok(PyArray1::from_vec(py, y).into_any());
             } else {
                 return Err(pyo3::exceptions::PyValueError::new_err("t is outside the solution range"));
             }
         } else if let Ok(t_arr) = t.extract::<PyReadonlyArray1<Float>>() {
             let t_slice = t_arr.as_slice()?;
-            
-            if t_slice.is_empty() {
-                 return Ok(PyArray1::from_vec(py, Vec::<Float>::new()).into_any());
-            }
-            
-            let mut flat_results = Vec::new();
-            let mut n_states = 0;
-            
-            for (i, &ti) in t_slice.iter().enumerate() {
-                if let Some(yi) = self.inner.evaluate(ti) {
-                    if i == 0 {
-                        n_states = yi.len();
-                        flat_results.reserve(t_slice.len() * n_states);
-                    }
-                    flat_results.extend(yi);
-                } else {
-                     return Err(pyo3::exceptions::PyValueError::new_err(format!("t={} is outside the solution range", ti)));
-                }
-            }
-            
-            // Result shape: (n_states, n_points) to match SciPy
-            let n_points = t_slice.len();
-            let mut transposed = vec![0.0; n_points * n_states];
-            for i in 0..n_points {
-                for j in 0..n_states {
-                    transposed[j * n_points + i] = flat_results[i * n_states + j];
-                }
-            }
-            
-            let arr = PyArray1::from_vec(py, transposed).reshape((n_states, n_points))?;
-            return Ok(arr.into_any());
+            return self.evaluate_array_helper(py, t_slice);
+        } else if let Ok(t_list) = t.extract::<Vec<Float>>() {
+            // Also accept Python lists
+            return self.evaluate_array_helper(py, &t_list);
         }
         
         Err(pyo3::exceptions::PyTypeError::new_err("t must be float or 1D array"))
@@ -156,46 +173,82 @@ struct PythonIVP<'py> {
 }
 
 #[cfg(feature = "python")]
+impl<'py> PythonIVP<'py> {
+    fn new(
+        fun: Bound<'py, PyAny>,
+        events: Vec<Bound<'py, PyAny>>,
+        args: Option<Bound<'py, PyTuple>>,
+        event_configs: Vec<EventConfig>,
+        py: Python<'py>,
+        _n: usize,
+    ) -> Self {
+        Self {
+            fun,
+            events,
+            args,
+            event_configs,
+            py,
+        }
+    }
+}
+
+#[cfg(feature = "python")]
 impl<'py> IVP for PythonIVP<'py> {
+    #[inline]
     fn ode(&self, x: Float, y: &[Float], dydx: &mut [Float]) {
-        // Convert y to numpy array
+        // Create numpy array from y slice
         let y_arr = PyArray1::from_slice(self.py, y);
         
-        // Prepare args
-        let args = if let Some(args) = &self.args {
-            // Create a new tuple with (x, y_arr, *args)
-            // But wait, scipy signature is fun(t, y, *args)
-            // PyO3 call needs a tuple of arguments.
-            // If args is present, we need to prepend t and y.
-            let mut call_args = Vec::with_capacity(2 + args.len());
+        // Build call arguments
+        let args = if let Some(extra_args) = &self.args {
+            let mut call_args = Vec::with_capacity(2 + extra_args.len());
             call_args.push(x.into_pyobject(self.py).unwrap().into_any());
             call_args.push(y_arr.into_any());
-            for arg in args.iter() {
+            for arg in extra_args.iter() {
                 call_args.push(arg);
             }
             PyTuple::new(self.py, call_args).unwrap()
         } else {
-            PyTuple::new(self.py, &[x.into_pyobject(self.py).unwrap().into_any(), y_arr.into_any()]).unwrap()
+            PyTuple::new(self.py, &[
+                x.into_pyobject(self.py).unwrap().into_any(),
+                y_arr.into_any()
+            ]).unwrap()
         };
 
         // Call function
-        let result = self.fun.call1(args).expect("Failed to call ODE function");
+        let result = match self.fun.call1(args) {
+            Ok(r) => r,
+            Err(e) => panic!("ODE function raised an exception: {}", e),
+        };
         
-        // Parse result
-        // Result should be array_like
+        // Parse result - try numpy array first (most common case)
+        // Also handle integer arrays by converting
         if let Ok(res_arr) = result.extract::<PyReadonlyArray1<Float>>() {
             let res_slice = res_arr.as_slice().expect("Failed to get slice from result");
-            if res_slice.len() != dydx.len() {
-                panic!("Derivative shape mismatch");
-            }
+            debug_assert_eq!(res_slice.len(), dydx.len(), "Derivative shape mismatch");
             dydx.copy_from_slice(res_slice);
-        } else if let Ok(res_list) = result.cast::<PyList>() {
-             if res_list.len() != dydx.len() {
-                panic!("Derivative shape mismatch");
+        } else if let Ok(res_arr) = result.extract::<PyReadonlyArray1<i64>>() {
+            // Handle integer numpy arrays
+            let res_slice = res_arr.as_slice().expect("Failed to get slice from result");
+            debug_assert_eq!(res_slice.len(), dydx.len(), "Derivative shape mismatch");
+            for (i, &val) in res_slice.iter().enumerate() {
+                dydx[i] = val as Float;
             }
+        } else if let Ok(res_arr) = result.extract::<PyReadonlyArray1<i32>>() {
+            let res_slice = res_arr.as_slice().expect("Failed to get slice from result");
+            debug_assert_eq!(res_slice.len(), dydx.len(), "Derivative shape mismatch");
+            for (i, &val) in res_slice.iter().enumerate() {
+                dydx[i] = val as Float;
+            }
+        } else if let Ok(res_list) = result.cast::<PyList>() {
+            debug_assert_eq!(res_list.len(), dydx.len(), "Derivative shape mismatch");
             for (i, item) in res_list.iter().enumerate() {
                 dydx[i] = item.extract::<Float>().expect("Failed to extract float from result list");
             }
+        } else if let Ok(res_tuple) = result.extract::<Vec<Float>>() {
+            // Handle tuple return values
+            debug_assert_eq!(res_tuple.len(), dydx.len(), "Derivative shape mismatch");
+            dydx.copy_from_slice(&res_tuple);
         } else {
             panic!("ODE function must return array_like");
         }
@@ -205,16 +258,19 @@ impl<'py> IVP for PythonIVP<'py> {
         let y_arr = PyArray1::from_slice(self.py, y);
         
         for (i, event_fun) in self.events.iter().enumerate() {
-             let args = if let Some(args) = &self.args {
-                let mut call_args = Vec::with_capacity(2 + args.len());
+            let args = if let Some(extra_args) = &self.args {
+                let mut call_args = Vec::with_capacity(2 + extra_args.len());
                 call_args.push(x.into_pyobject(self.py).unwrap().into_any());
                 call_args.push(y_arr.clone().into_any());
-                for arg in args.iter() {
+                for arg in extra_args.iter() {
                     call_args.push(arg);
                 }
                 PyTuple::new(self.py, call_args).unwrap()
             } else {
-                PyTuple::new(self.py, &[x.into_pyobject(self.py).unwrap().into_any(), y_arr.clone().into_any()]).unwrap()
+                PyTuple::new(self.py, &[
+                    x.into_pyobject(self.py).unwrap().into_any(),
+                    y_arr.clone().into_any()
+                ]).unwrap()
             };
 
             let result = event_fun.call1(args).expect("Failed to call event function");
@@ -319,7 +375,7 @@ impl<'py> IVP for PythonIVP<'py> {
 fn solve_ivp_py<'py>(
     py: Python<'py>,
     fun: Bound<'py, PyAny>,
-    t_span: (f64, f64),
+    t_span: Bound<'py, PyAny>,
     y0: Bound<'py, PyAny>,
     method: Option<Bound<'py, PyAny>>,
     t_eval: Option<Bound<'py, PyAny>>,
@@ -331,9 +387,26 @@ fn solve_ivp_py<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let _ = vectorized;
     
-    // Parse y0
+    // Parse t_span - accept both tuple and list
+    let (t0, tf): (f64, f64) = if let Ok(tup) = t_span.extract::<(f64, f64)>() {
+        tup
+    } else if let Ok(lst) = t_span.extract::<Vec<f64>>() {
+        if lst.len() != 2 {
+            return Err(pyo3::exceptions::PyValueError::new_err("t_span must have exactly 2 elements"));
+        }
+        (lst[0], lst[1])
+    } else {
+        return Err(pyo3::exceptions::PyValueError::new_err("t_span must be a tuple or list of 2 floats"));
+    };
+    
+    // Parse y0 - handle various array-like inputs including integer arrays
     let y0_vec: Vec<Float> = if let Ok(arr) = y0.extract::<PyReadonlyArray1<Float>>() {
         arr.as_slice()?.to_vec()
+    } else if let Ok(arr) = y0.extract::<PyReadonlyArray1<i64>>() {
+        // Handle integer numpy arrays - convert to float
+        arr.as_slice()?.iter().map(|&x| x as Float).collect()
+    } else if let Ok(arr) = y0.extract::<PyReadonlyArray1<i32>>() {
+        arr.as_slice()?.iter().map(|&x| x as Float).collect()
     } else if let Ok(lst) = y0.cast::<PyList>() {
         lst.iter().map(|x| x.extract::<Float>()).collect::<Result<Vec<_>, _>>()?
     } else {
@@ -370,8 +443,14 @@ fn solve_ivp_py<'py>(
 
     if let Some(ev) = &events {
         if let Ok(lst) = ev.cast::<PyList>() {
+            // List of event functions
             for item in lst.iter() {
                 event_funs.push(item.clone());
+            }
+        } else if let Ok(tup) = ev.extract::<Vec<Bound<'py, PyAny>>>() {
+            // Tuple of event functions (extract as Vec)
+            for item in tup {
+                event_funs.push(item);
             }
         } else {
             // Single callable
@@ -440,15 +519,18 @@ fn solve_ivp_py<'py>(
         .atol(atol)
         .build();
 
-    let python_ivp = PythonIVP {
+    // Create optimized Python IVP wrapper with pre-allocated buffers
+    let n = y0_vec.len();
+    let python_ivp = PythonIVP::new(
         fun,
-        events: event_funs,
+        event_funs,
         args,
         event_configs,
         py,
-    };
+        n,
+    );
 
-    let result = solve_ivp(&python_ivp, t_span.0, t_span.1, &y0_vec, opts);
+    let result = solve_ivp(&python_ivp, t0, tf, &y0_vec, opts);
 
     match result {
         Ok(sol) => {

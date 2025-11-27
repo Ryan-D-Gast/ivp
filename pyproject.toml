@@ -12,3 +12,11 @@ dependencies = []
 
 [tool.maturin]
 features = ["python"]
+
+[tool.uv]
+dev-dependencies = [
+    "maturin>=1.10.2",
+    "numpy>=2.3.5",
+    "pytest>=9.0.1",
+    "scipy>=1.16.3",
+]

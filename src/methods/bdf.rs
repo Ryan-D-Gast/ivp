@@ -182,7 +182,9 @@ impl BDF {
 
         // Initial step size selection
         let mut h_abs = if let Some(h) = self.first_step {
-            if h == 0.0 || h.signum() != direction {
+            // Auto-correct the sign - just use absolute value
+            // since h_abs is always positive and direction is applied later
+            if h == 0.0 {
                 return Err(Error::Config(ConfigError::InvalidStepSize {
                     value: h,
                     expected_sign: direction,
@@ -544,20 +546,21 @@ impl BDF {
                     err_p = weighted_rms_scaled(&rhs, &scale);
                 }
 
+                // SciPy approach: compute factors = error_norms ** (-1 / (order + k))
+                // When error_norm is 0, this gives infinity, which gets capped by MAX_FACTOR
                 let errors = [err_m, error_norm, err_p];
                 let mut factors = [0.0; 3];
                 for (idx, err) in errors.iter().enumerate() {
                     let exponent = -1.0 / (order as Float + idx as Float);
-                    if err.is_finite() && *err > 0.0 {
-                        factors[idx] = err.powf(exponent);
-                    } else {
-                        factors[idx] = 0.0;
-                    }
+                    // 0.0.powf(negative) = inf in Rust, matching SciPy behavior
+                    factors[idx] = err.powf(exponent);
                 }
-                let (best_idx, best_factor) = factors
+                
+                // Find best order change: argmax(factors) - 1
+                let (best_idx, _) = factors
                     .iter()
                     .enumerate()
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or((1, &1.0));
 
                 let mut new_order = order;
@@ -567,8 +570,9 @@ impl BDF {
                     new_order += 1;
                 }
 
-                let mut step_factor = (*best_factor).max(1.0);
-                step_factor = (safety * step_factor).min(MAX_FACTOR);
+                // SciPy: factor = min(MAX_FACTOR, safety * max(factors))
+                let max_factor = factors.iter().cloned().fold(0.0, Float::max);
+                let step_factor = (safety * max_factor).min(MAX_FACTOR);
                 change_d(&mut d, new_order, step_factor, &mut scratch_change);
                 current_h *= step_factor;
                 order = new_order;
@@ -596,6 +600,12 @@ impl BDF {
         }
         const BLOCK: usize = BDF_COEFFS_PER_STATE;
         let n = yi.len();
+        
+        // Handle empty state vector case
+        if n == 0 {
+            return;
+        }
+        
         debug_assert_eq!(cont.len(), n * BLOCK);
 
         let order = cont[BLOCK - 1].round().clamp(1.0, MAX_ORDER as Float) as usize;

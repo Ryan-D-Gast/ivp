@@ -138,6 +138,10 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         // ============================================================================
         // Monitor the user-defined event function for zero-crossings. Uses bisection
         // to refine the event location when a sign change is detected.
+        // 
+        // Important: When multiple events occur in the same step, we must process them
+        // in chronological order. If a terminal event occurs, any events after it
+        // in time should not be recorded.
         
         let n_events = self.ode.n_events();
         if n_events > 0 {
@@ -148,21 +152,25 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
             if self.yold.is_empty() {
                 self.prev_event = g_curr_vec;
             } else {
+                // Helper to check direction-aware crossing
+                let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
+                    match dir {
+                        Direction::All => {
+                            (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0)
+                        }
+                        Direction::Positive => left < 0.0 && right >= 0.0,
+                        Direction::Negative => left > 0.0 && right <= 0.0,
+                    }
+                };
+
+                // First pass: find all events in this step and their refined times
+                // Store as (time, event_index, y_at_event)
+                let mut detected_events: Vec<(Float, usize, Vec<Float>)> = Vec::new();
+                
                 for i in 0..n_events {
                     let g_prev = self.prev_event[i];
                     let g_curr = g_curr_vec[i];
                     let config = &self.event_config[i];
-
-                    // Check if a zero-crossing occurred in the requested direction
-                    let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
-                        match dir {
-                            Direction::All => {
-                                (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0)
-                            }
-                            Direction::Positive => left < 0.0 && right >= 0.0,
-                            Direction::Negative => left > 0.0 && right <= 0.0,
-                        }
-                    };
 
                     if crossed(g_prev, g_curr, &config.direction) {
                         // Refine event location via bisection on [xold, x]
@@ -173,13 +181,10 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                         let mut y_mid_buf = vec![0.0; y.len()];
                         let mut g_mid_vec = vec![0.0; n_events];
 
-                        // Check if event is already at an endpoint (within tolerance)
-                        if g_left.abs() <= self.tol {
-                            self.t_events[i].push(a);
-                            self.y_events[i].push(self.yold.clone());
+                        let (event_t, event_y) = if g_left.abs() <= self.tol {
+                            (a, self.yold.clone())
                         } else if g_right.abs() <= self.tol {
-                            self.t_events[i].push(b);
-                            self.y_events[i].push(y.to_vec());
+                            (b, y.to_vec())
                         } else {
                             // Bisection refinement
                             for _ in 0..100 {
@@ -191,7 +196,6 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                                 self.ode.events(mid, &y_mid_buf, &mut g_mid_vec);
                                 let g_mid = g_mid_vec[i];
 
-                                // Select subinterval preserving the zero-crossing
                                 let left_cross = crossed(g_left, g_mid, &config.direction);
                                 let right_cross = crossed(g_mid, g_right, &config.direction);
 
@@ -202,7 +206,6 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                                     a = mid;
                                     g_left = g_mid;
                                 } else {
-                                    // Fallback: standard sign-based bisection
                                     if g_left.signum() * g_mid.signum() <= 0.0 {
                                         b = mid;
                                         g_right = g_mid;
@@ -213,25 +216,48 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                                 }
                             }
 
-                            // Record refined event location
                             let mut y_at_b = vec![0.0; y.len()];
                             interpolator.unwrap().interpolate(b, &mut y_at_b);
-                            self.t_events[i].push(b);
-                            self.y_events[i].push(y_at_b);
-                        }
+                            (b, y_at_b)
+                        };
 
-                        // Check for terminal event
-                        self.event_hits[i] += 1;
-                        if let Some(limit) = config.terminal_count {
-                            if self.event_hits[i] >= limit {
-                                return ControlFlag::Interrupt;
-                            }
+                        detected_events.push((event_t, i, event_y));
+                    }
+                }
+
+                // Sort events by time (handle both forward and backward integration)
+                let forward = *x > xold;
+                if forward {
+                    detected_events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                } else {
+                    detected_events.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+                }
+
+                // Process events in chronological order
+                for (event_t, i, event_y) in detected_events {
+                    let config = &self.event_config[i];
+                    
+                    // Record the event
+                    self.t_events[i].push(event_t);
+                    self.y_events[i].push(event_y.clone());
+                    self.event_hits[i] += 1;
+
+                    // Check for terminal event
+                    if let Some(limit) = config.terminal_count {
+                        if self.event_hits[i] >= limit {
+                            // Add the terminal event point to the output
+                            self.t.push(event_t);
+                            self.y.push(event_y);
+                            
+                            // Update prev_event before returning
+                            self.prev_event = g_curr_vec;
+                            return ControlFlag::Interrupt;
                         }
                     }
-                    
-                    // Update prev_event for this event
-                    self.prev_event[i] = g_curr;
                 }
+                
+                // Update prev_event for all events
+                self.prev_event = g_curr_vec;
             }
         }
 
@@ -256,15 +282,32 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                     i += 1;
                 }
             } else {
-                // Regular accepted step: interpolate at all t_eval[i] in (xold, x]
-                while i < t_eval.len() && t_eval[i] <= *x + self.tol {
-                    if t_eval[i] >= xold - self.tol {
-                        let mut yi = vec![0.0; y.len()];
-                        interpolator.unwrap().interpolate(t_eval[i], &mut yi);
-                        self.t.push(t_eval[i]);
-                        self.y.push(yi);
+                // Regular accepted step: interpolate at all t_eval[i] within [xold, x] or [x, xold]
+                // Handle both forward (x > xold) and backward (x < xold) integration
+                let forward = *x > xold;
+                
+                if forward {
+                    // Forward integration: t_eval[i] in (xold, x]
+                    while i < t_eval.len() && t_eval[i] <= *x + self.tol {
+                        if t_eval[i] >= xold - self.tol {
+                            let mut yi = vec![0.0; y.len()];
+                            interpolator.unwrap().interpolate(t_eval[i], &mut yi);
+                            self.t.push(t_eval[i]);
+                            self.y.push(yi);
+                        }
+                        i += 1;
                     }
-                    i += 1;
+                } else {
+                    // Backward integration: t_eval is sorted decreasing, t_eval[i] in [x, xold)
+                    while i < t_eval.len() && t_eval[i] >= *x - self.tol {
+                        if t_eval[i] <= xold + self.tol {
+                            let mut yi = vec![0.0; y.len()];
+                            interpolator.unwrap().interpolate(t_eval[i], &mut yi);
+                            self.t.push(t_eval[i]);
+                            self.y.push(yi);
+                        }
+                        i += 1;
+                    }
                 }
             }
             self.next_idx = i;

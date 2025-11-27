@@ -295,8 +295,8 @@ impl RK23 {
                 h *= (safety_factor * err.powf(error_exponent))
                     .min(scale_max)
                     .max(scale_min);
-                if h > hmax {
-                    h = hmax;
+                if h.abs() > hmax {
+                    h = hmax * posneg;
                 }
 
                 // Normal exit

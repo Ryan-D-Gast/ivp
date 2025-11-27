@@ -1,0 +1,17 @@
+# Configuration for building on ARM64 Windows (e.g., Snapdragon X Elite) with x64 Python
+# 
+# The .cargo/config.toml target setting does NOT work with maturin's PEP 517 builds.
+# Instead, use the environment variable:
+#
+#   $env:CARGO_BUILD_TARGET = "x86_64-pc-windows-msvc"
+#
+# Or on bash/zsh:
+#   export CARGO_BUILD_TARGET=x86_64-pc-windows-msvc
+#
+# Then run: uv run <script.py> or maturin develop
+#
+# This is needed because maturin bypasses .cargo/config.toml when invoked via PEP 517.
+
+[build]
+# This only works for direct cargo commands, not maturin PEP 517 builds
+target = "x86_64-pc-windows-msvc"

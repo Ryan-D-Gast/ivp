@@ -244,11 +244,12 @@ impl RADAU {
         // Initial step size: use provided h0 or default to 1e-6 (signed)
         let posneg = (xend - *x).signum();
         let mut h = if let Some(h0) = self.first_step {
-            h0
+            // Auto-correct the sign of h0 to match integration direction
+            h0.abs() * posneg
         } else {
             1.0e-6 * posneg
         };
-        if h == 0.0 || (h.signum() != posneg && posneg != 0.0) {
+        if h == 0.0 {
             return Err(Error::Config(ConfigError::InvalidStepSize {
                 value: h,
                 expected_sign: posneg,
@@ -500,15 +501,15 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] = y[i] + z1[i];
                 }
-                f.ode(*x + C1 * h, &cont, &mut z1);
+                f.ode(*x + C1 * h, &cont[..n], &mut z1);
                 for i in 0..n {
                     cont[i] = y[i] + z2[i];
                 }
-                f.ode(*x + C2 * h, &cont, &mut z2);
+                f.ode(*x + C2 * h, &cont[..n], &mut z2);
                 for i in 0..n {
                     cont[i] = y[i] + z3[i];
                 }
-                f.ode(xph, &cont, &mut z3);
+                f.ode(xph, &cont[..n], &mut z3);
                 evals.ode += 3;
 
                 // --- Solve the linear systems ---
@@ -651,7 +652,7 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] += y[i];
                 }
-                f.ode(*x, &cont, &mut f1);
+                f.ode(*x, &cont[..n], &mut f1);
                 evals.ode += 1;
 
                 // contv = f1 + f2; solve again

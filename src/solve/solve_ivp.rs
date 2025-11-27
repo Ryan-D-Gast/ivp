@@ -106,8 +106,77 @@ pub fn solve_ivp<F>(
 where
     F: IVP,
 {
+    // Handle zero-interval case: when x0 == xend, return immediately with initial state
+    if (xend - x0).abs() < 1e-15 {
+        // If t_eval is provided, return all t_eval points that match x0
+        let (t, y) = if let Some(ref t_eval) = options.t_eval {
+            let matching: Vec<_> = t_eval.iter()
+                .filter(|&&t| (t - x0).abs() < 1e-12)
+                .copied()
+                .collect();
+            let y_vals: Vec<Vec<Float>> = matching.iter().map(|_| y0.to_vec()).collect();
+            (matching, y_vals)
+        } else {
+            (vec![x0], vec![y0.to_vec()])
+        };
+        
+        // Create a "constant" ContinuousOutput if dense_output is requested
+        // This allows sol(t) to return y0 for any t (with extrapolation)
+        let continuous_sol = if options.dense_output {
+            Some(ContinuousOutput::constant(options.method, x0, y0))
+        } else {
+            None
+        };
+        
+        return Ok(Solution {
+            t,
+            y,
+            t_events: vec![Vec::new(); f.n_events()],
+            y_events: vec![Vec::new(); f.n_events()],
+            nfev: 0,
+            njev: 0,
+            nlu: 0,
+            nstep: 0,
+            naccpt: 0,
+            nrejct: 0,
+            status: crate::status::Status::Success,
+            continuous_sol,
+        });
+    }
+    
+    // Handle empty state vector case: nothing to integrate
+    if y0.is_empty() {
+        let t = if let Some(ref t_eval) = options.t_eval {
+            t_eval.clone()
+        } else {
+            vec![x0, xend]
+        };
+        let y: Vec<Vec<Float>> = t.iter().map(|_| Vec::new()).collect();
+        
+        let continuous_sol = if options.dense_output {
+            Some(ContinuousOutput::constant(options.method, x0, y0))
+        } else {
+            None
+        };
+        
+        return Ok(Solution {
+            t,
+            y,
+            t_events: vec![Vec::new(); f.n_events()],
+            y_events: vec![Vec::new(); f.n_events()],
+            nfev: 0,
+            njev: 0,
+            nlu: 0,
+            nstep: 0,
+            naccpt: 0,
+            nrejct: 0,
+            status: crate::status::Status::Success,
+            continuous_sol,
+        });
+    }
+
     // Prepare the default SolOut (wrapping user callback if provided)
-    let mut default_solout = DefaultSolOut::new(f, options.t_eval, options.dense_output, options.first_step, x0);
+    let mut default_solout = DefaultSolOut::new(f, options.t_eval.clone(), options.dense_output, options.first_step, x0);
     
     // Create mutable copies for the solver to mutate
     let mut x = x0;
