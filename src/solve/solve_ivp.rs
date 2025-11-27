@@ -178,10 +178,6 @@ where
     // Prepare the default SolOut (wrapping user callback if provided)
     let n_states = y0.len();
     let mut default_solout = DefaultSolOut::new(f, options.t_eval.clone(), options.dense_output, options.first_step, x0, n_states);
-    
-    // Create mutable copies for the solver to mutate
-    let mut x = x0;
-    let mut y = y0.to_vec();
 
     // Dispatch by method
     let result = match options.method {
@@ -192,8 +188,8 @@ where
                 .build();
             solver.solve(
                 f,
-                &mut x,
-                &mut y,
+                x0,
+                y0,
                 xend,
                 h,
                 Some(&mut default_solout),
@@ -207,8 +203,8 @@ where
                 .build();
             solver.solve(
                 f,
-                &mut x,
-                &mut y,
+                x0,
+                y0,
                 xend,
                 options.rtol,
                 options.atol,
@@ -223,8 +219,8 @@ where
                 .build();
             solver.solve(
                 f,
-                &mut x,
-                &mut y,
+                x0,
+                y0,
                 xend,
                 options.rtol,
                 options.atol,
@@ -239,8 +235,8 @@ where
                 .build();
             solver.solve(
                 f,
-                &mut x,
-                &mut y,
+                x0,
+                y0,
                 xend,
                 options.rtol,
                 options.atol,
@@ -261,8 +257,8 @@ where
                 .build();
             solver.solve(
                 f,
-                &mut x,
-                &mut y,
+                x0,
+                y0,
                 xend,
                 options.rtol,
                 options.atol,
@@ -279,8 +275,8 @@ where
                 .build();
             solver.solve(
                 f,
-                &mut x,
-                &mut y,
+                x0,
+                y0,
                 xend,
                 options.rtol,
                 options.atol,

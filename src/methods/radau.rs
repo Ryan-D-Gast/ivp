@@ -92,16 +92,16 @@ impl Default for RADAU {
 impl RADAU {
     /// Radau IIA(5) — implicit Runge–Kutta solver with adaptive steps and dense output.
     ///
-    /// This function integrates a stiff system or index‑1/2/3 DAE `M·y' = f(x, y)` from `x` to
-    /// `xend`, advancing `y` in-place. It uses simplified Newton iterations with a numerically
-    /// approximated Jacobian by default, performs adaptive step control, and can provide dense output.
+    /// This function integrates a stiff system or index‑1/2/3 DAE `M·y' = f(x, y)` from `x0` to
+    /// `xend`. It uses simplified Newton iterations with a numerically approximated Jacobian
+    /// by default, performs adaptive step control, and can provide dense output.
     ///
     /// # Arguments
     ///
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing `IVP` (optionally providing `jac`, `mass`).
-    /// - `x`: Initial abscissa; `xend`: final abscissa.
-    /// - `y`: Initial state; on success contains the state at `xend`.
+    /// - `x0`: Initial abscissa; `xend`: final abscissa.
+    /// - `y0`: Initial state.
     /// - `rtol`, `atol`: Relative/absolute tolerances (scalar or vector).
     ///
     /// ## Output Control
@@ -114,8 +114,8 @@ impl RADAU {
     pub fn solve<F, S>(
         &self,
         f: &F,
-        x: &mut Float,
-        y: &mut [Float],
+        x0: Float,
+        y0: &[Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -125,6 +125,10 @@ impl RADAU {
         F: IVP,
         S: SolOut,
     {
+        // Create mutable copies for the solver to mutate
+        let mut x = x0;
+        let mut y = y0.to_vec();
+
         // --- Input Validation ---
 
         // nmax
@@ -168,7 +172,7 @@ impl RADAU {
         }
 
         // hmax and hmin
-        let hmax = self.max_step.unwrap_or_else(|| (xend - *x).abs());
+        let hmax = self.max_step.unwrap_or_else(|| (xend - x).abs());
         let hmin = self.min_step.unwrap_or(0.0);
 
         // Max newton iterations
@@ -242,7 +246,7 @@ impl RADAU {
         }
 
         // Initial step size: use provided h0 or default to 1e-6 (signed)
-        let posneg = (xend - *x).signum();
+        let posneg = (xend - x).signum();
         let mut h = if let Some(h0) = self.first_step {
             // Auto-correct the sign of h0 to match integration direction
             h0.abs() * posneg
@@ -311,7 +315,7 @@ impl RADAU {
 
         // Error and time bookkeeping
         let mut err: Float;
-        let mut xold = *x;
+        let mut xold = x;
         let mut xph;
 
         // Flags
@@ -322,7 +326,7 @@ impl RADAU {
         // --- Initializations ---
 
         let mut f0 = vec![0.0; n];
-        f.ode(*x, &y, &mut f0);
+        f.ode(x, &y, &mut f0);
         evals.ode += 1;
 
         // Persistent pointer-based interpolator
@@ -338,7 +342,7 @@ impl RADAU {
 
         // Initial callback (xold=xc; no interpolator yet)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseRadau>(xold, x, y, None) {
+            match sol.solout::<DenseRadau>(xold, &mut x, &mut y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -350,7 +354,7 @@ impl RADAU {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.ode(*x, &y, &mut f0);
+                    f.ode(x, &y, &mut f0);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -371,7 +375,7 @@ impl RADAU {
         'main: loop {
             if call_jac {
                 // Jacobian and mass at (x, y)
-                f.jac(*x, &y, &mut jac);
+                f.jac(x, &y, &mut jac);
                 evals.jac += 1;
             }
 
@@ -446,7 +450,7 @@ impl RADAU {
                     scal[i] /= hhfac.powi(2);
                 }
             }
-            xph = *x + h;
+            xph = x + h;
 
             // Initialize stage increments and transforms
             if first {
@@ -501,11 +505,11 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] = y[i] + z1[i];
                 }
-                f.ode(*x + C1 * h, &cont[..n], &mut z1);
+                f.ode(x + C1 * h, &cont[..n], &mut z1);
                 for i in 0..n {
                     cont[i] = y[i] + z2[i];
                 }
-                f.ode(*x + C2 * h, &cont[..n], &mut z2);
+                f.ode(x + C2 * h, &cont[..n], &mut z2);
                 for i in 0..n {
                     cont[i] = y[i] + z3[i];
                 }
@@ -652,7 +656,7 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] += y[i];
                 }
-                f.ode(*x, &cont[..n], &mut f1);
+                f.ode(x, &cont[..n], &mut f1);
                 evals.ode += 1;
 
                 // contv = f1 + f2; solve again
@@ -693,9 +697,9 @@ impl RADAU {
                 }
 
                 // Update solution
-                xold = *x;
+                xold = x;
                 hold = h;
-                *x = xph;
+                x = xph;
 
                 // Dense output coefficients and update y
                 for i in 0..n {
@@ -709,7 +713,7 @@ impl RADAU {
                 }
 
                 // New derivative at x+h
-                f.ode(*x, &y, &mut f0);
+                f.ode(x, &y, &mut f0);
                 evals.ode += 1;
 
                 // Compute error scale
@@ -720,13 +724,13 @@ impl RADAU {
                 // Callback with optional dense interpolant
                 if let Some(sol) = solout.as_mut() {
                     // Build interpolant if requested or an event output is due
-                    let event = xout.map_or(false, |xo| xo <= *x);
+                    let event = xout.map_or(false, |xo| xo <= x);
                     let interpolation = if self.dense_output || event {
                         Some(interpolator)
                     } else {
                         None
                     };
-                    match sol.solout(xold, x, y, interpolation) {
+                    match sol.solout(xold, &mut x, &mut y, interpolation) {
                         ControlFlag::Continue => {}
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
@@ -734,7 +738,7 @@ impl RADAU {
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.ode(*x, &y, &mut f0);
+                            f.ode(x, &y, &mut f0);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
@@ -762,8 +766,8 @@ impl RADAU {
                 }
 
                 // Sophisticated step size control
-                if (*x + hnew / quot1 - xend) * posneg >= 0.0 {
-                    h = xend - *x;
+                if (x + hnew / quot1 - xend) * posneg >= 0.0 {
+                    h = xend - x;
                     last = true;
                 } else {
                     qt = hnew / h;

@@ -64,8 +64,8 @@ impl RK4 {
     pub fn solve<F, S>(
         &self,
         f: &F,
-        x: &mut Float,
-        y: &mut [Float],
+        x0: Float,
+        y0: &[Float],
         xend: Float,
         h: Float,
         mut solout: Option<&mut S>,
@@ -74,10 +74,14 @@ impl RK4 {
         F: IVP,
         S: SolOut,
     {
+        // Create mutable copies for the solver to mutate
+        let mut x = x0;
+        let mut y = y0.to_vec();
+
         // --- Input Validation ---
         
         // Initial Step Size
-        let posneg = (xend - *x).signum();
+        let posneg = (xend - x).signum();
         if h == 0.0 || h.signum() != posneg {
             return Err(Error::Config(ConfigError::InvalidStepSize {
                 value: h,
@@ -105,11 +109,11 @@ impl RK4 {
         let mut evals = Evals::new();
         let mut steps = Steps::new();
         let mut status = Status::Success;
-        let mut xold = *x;
+        let mut xold = x;
         let mut xout: Option<Float> = None;
 
         // --- Initializations ---
-        f.ode(*x, &y, &mut k1);
+        f.ode(x, &y, &mut k1);
         // Prepare a persistent interpolator object (pointer-based) used when needed
         let interpolator = &DenseOutput::new(
             cont.as_ptr(),
@@ -118,9 +122,9 @@ impl RK4 {
             &h as *const Float,
         );
 
-        // Initial SolOut call (no interpolator yet; xold == *x)
+        // Initial SolOut call (no interpolator yet; xold == x)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseOutput>(xold, x, y, None) {
+            match sol.solout::<DenseOutput>(xold, &mut x, &mut y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -130,7 +134,7 @@ impl RK4 {
                     });
                 }
                 ControlFlag::ModifiedSolution => {
-                    f.ode(*x, &y, &mut k1);
+                    f.ode(x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -150,7 +154,7 @@ impl RK4 {
 
             // Adjust last step so we land exactly on xend
             let mut last = false;
-            if (*x + 1.01 * h - xend) * h.signum() > 0.0 {
+            if (x + 1.01 * h - xend) * h.signum() > 0.0 {
                 last = true;
             }
 
@@ -158,33 +162,33 @@ impl RK4 {
             for i in 0..n {
                 yt[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(*x + C2 * h, &yt, &mut k2);
+            f.ode(x + C2 * h, &yt, &mut k2);
 
             for i in 0..n {
                 yt[i] = y[i] + h * A32 * k2[i];
             }
-            f.ode(*x + C3 * h, &yt, &mut k3);
+            f.ode(x + C3 * h, &yt, &mut k3);
 
             for i in 0..n {
                 yt[i] = y[i] + h * A43 * k3[i];
             }
-            f.ode(*x + C4 * h, &yt, &mut k4);
+            f.ode(x + C4 * h, &yt, &mut k4);
 
-            xold = *x;
+            xold = x;
             yt.copy_from_slice(&y);
 
             // Update solution
-            *x += h;
+            x += h;
             for i in 0..n {
                 y[i] += h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i] + B4 * k4[i]);
             }
-            f.ode(*x, &y, &mut k1);
+            f.ode(x, &y, &mut k1);
 
             evals.ode += 4;
             steps.total += 1;
 
             // Decide if we must build dense output (for user xout events as well)
-            let event = xout.map_or(false, |xo| xo <= *x);
+            let event = xout.map_or(false, |xo| xo <= x);
             if (self.dense_output || event) && solout.is_some() {
                 cont[0..n].copy_from_slice(&yt);
                 for i in 0..n {
@@ -196,19 +200,19 @@ impl RK4 {
 
             // Optional callback function
             if let Some(sol) = solout.as_mut() {
-                let interpolation = if self.dense_output || xout.map_or(false, |xo| xo <= *x) {
+                let interpolation = if self.dense_output || xout.map_or(false, |xo| xo <= x) {
                     Some(interpolator)
                 } else {
                     None
                 };
-                match sol.solout(xold, x, y, interpolation) {
+                match sol.solout(xold, &mut x, &mut y, interpolation) {
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
                         break;
                     }
                     ControlFlag::ModifiedSolution => {
                         // Recompute k1 at new (x, y).
-                        f.ode(*x, &y, &mut k1);
+                        f.ode(x, &y, &mut k1);
                         evals.ode += 1;
                     }
                     ControlFlag::XOut(xo) => {

@@ -69,10 +69,9 @@ impl BDF {
     ///
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing `IVP`.
-    /// - `x`: Initial independent variable value.
+    /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
-    /// - `y`: Mutable slice containing the initial state; on success contains the
-    ///   state at the final time.
+    /// - `y0`: Slice containing the initial state.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
     ///
     /// ## Output Control
@@ -87,8 +86,8 @@ impl BDF {
     pub fn solve<F, S>(
         &self,
         f: &F,
-        x: &mut Float,
-        y: &mut [Float],
+        x0: Float,
+        y0: &[Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -98,6 +97,8 @@ impl BDF {
         F: IVP,
         S: SolOut,
     {
+        let mut x = x0;
+        let mut y = y0.to_vec();
         let n = y.len();
         if n == 0 {
             return Ok(IntegrationResult::new(
@@ -134,10 +135,10 @@ impl BDF {
             }));
         }
 
-        let diff = xend - *x;
+        let diff = xend - x;
         let direction = diff.signum();
 
-        let hmax = self.max_step.unwrap_or_else(|| (xend - *x).abs()).abs();
+        let hmax = self.max_step.unwrap_or_else(|| (xend - x).abs()).abs();
         let hmin = self.min_step.unwrap_or(0.0).abs();
 
         let mut evals = Evals::new();
@@ -145,11 +146,11 @@ impl BDF {
 
         // Workspace vectors
         let mut f0 = vec![0.0; n];
-        f.ode(*x, y, &mut f0);
+        f.ode(x, &y, &mut f0);
         evals.ode += 1;
 
         let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
-        f.jac(*x, y, &mut jac);
+        f.jac(x, &y, &mut jac);
         evals.jac += 1;
 
         // Precompute gamma, alpha, error_const arrays
@@ -195,10 +196,10 @@ impl BDF {
             let mut f1 = vec![0.0; n];
             let mut y1 = vec![0.0; n];
             let guess = hinit(
-                f, *x, y, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
+                f, x, &y, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
             );
             // Ensure x + h isn't larger than xend
-            let diff = xend - *x;
+            let diff = xend - x;
             let max_h = diff.abs();
             let guess = if guess.abs() > max_h {
                 max_h * direction
@@ -213,7 +214,7 @@ impl BDF {
 
         // Difference arrays (order+3) x n
         let mut d = vec![vec![0.0; n]; MAX_ORDER + 3];
-        d[0].copy_from_slice(y);
+        d[0].copy_from_slice(&y);
         for i in 0..n {
             d[1][i] = f0[i] * current_h * direction;
         }
@@ -237,7 +238,7 @@ impl BDF {
         let mut cont = vec![0.0; n * CONT_BLOCK];
         // Initial callback
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseBdf15>(*x, x, y, None) {
+            match sol.solout::<DenseBdf15>(x, &mut x, &mut y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -249,9 +250,9 @@ impl BDF {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.ode(*x, y, &mut f0);
+                    f.ode(x, &y, &mut f0);
                     evals.ode += 1;
-                    d[0].copy_from_slice(y);
+                    d[0].copy_from_slice(&y);
                     for i in 0..n {
                         d[1][i] = f0[i] * current_h * direction;
                     }
@@ -260,7 +261,7 @@ impl BDF {
                     }
                     order = 1;
                     n_equal_steps = 0;
-                    f.jac(*x, y, &mut jac);
+                    f.jac(x, &y, &mut jac);
                     evals.jac += 1;
                 }
                 ControlFlag::XOut(_) => {}
@@ -295,10 +296,10 @@ impl BDF {
             }
 
             let mut h_signed = direction * h_try;
-            let x_start = *x;
-            let mut x_new = *x + h_signed;
+            let x_start = x;
+            let mut x_new = x + h_signed;
             if direction * (x_new - xend) > 0.0 {
-                let step_to_end = (xend - *x).abs();
+                let step_to_end = (xend - x).abs();
                 if step_to_end == 0.0 {
                     status = Status::Success;
                     break;
@@ -308,12 +309,12 @@ impl BDF {
                 current_h *= factor;
                 h_try = current_h;
                 h_signed = direction * h_try;
-                x_new = *x + h_signed;
+                x_new = x + h_signed;
                 n_equal_steps = 0;
             }
 
             // Step size guard against stagnation
-            if (*x + 0.1 * h_signed.abs()) == *x {
+            if (x + 0.1 * h_signed.abs()) == x {
                 status = Status::StepSizeTooSmall;
                 break;
             }
@@ -464,7 +465,6 @@ impl BDF {
                 factor = factor.max(MIN_FACTOR);
                 change_d(&mut d, order, factor, &mut scratch_change);
                 current_h *= factor;
-                *x = *x;
                 n_equal_steps = 0;
                 steps.rejected += 1;
                 continue;
@@ -472,7 +472,7 @@ impl BDF {
 
             steps.accepted += 1;
             n_equal_steps += 1;
-            *x = x_new;
+            x = x_new;
             y.copy_from_slice(&y_new);
             for i in 0..n {
                 d[order + 2][i] = delta[i] - d[order + 1][i];
@@ -498,7 +498,7 @@ impl BDF {
             // Callback
             if let Some(sol) = solout.as_mut() {
                 let interp = DenseBdf15::new(cont.as_ptr(), cont.len(), x_start, h_signed);
-                match sol.solout::<DenseBdf15>(*x - h_signed, x, y, Some(&interp)) {
+                match sol.solout::<DenseBdf15>(x - h_signed, &mut x, &mut y, Some(&interp)) {
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
@@ -506,9 +506,9 @@ impl BDF {
                     }
                     ControlFlag::ModifiedSolution => {
                         // Update derivatives at new (x, y).
-                        f.ode(*x, y, &mut f0);
+                        f.ode(x, &y, &mut f0);
                         evals.ode += 1;
-                        d[0].copy_from_slice(y);
+                        d[0].copy_from_slice(&y);
                         for i in 0..n {
                             d[1][i] = f0[i] * current_h * direction;
                         }
@@ -517,14 +517,14 @@ impl BDF {
                         }
                         order = 1;
                         n_equal_steps = 0;
-                        f.jac(*x, y, &mut jac);
+                        f.jac(x, &y, &mut jac);
                         evals.jac += 1;
                     }
                     ControlFlag::XOut(_) => {}
                 }
             }
 
-            if direction * (*x - xend) >= 0.0 {
+            if direction * (x - xend) >= 0.0 {
                 status = Status::Success;
                 break;
             }
@@ -581,7 +581,7 @@ impl BDF {
             }
 
             // Update Jacobian for next step
-            f.jac(*x, y, &mut jac);
+            f.jac(x, &y, &mut jac);
             evals.jac += 1;
         }
 

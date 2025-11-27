@@ -83,19 +83,18 @@ impl DOP853 {
     /// Dormand–Prince DOP853 — explicit Runge–Kutta 8(5,3) solver with adaptive
     /// step-size control and optional dense output.
     ///
-    /// This function integrates the autonomous system `y' = f(x, y)` from `x` to
-    /// `xend`, advancing the provided state buffer `y` in-place. It performs
-    /// classical error control (embedded estimates) and, optionally, computes
-    /// dense-output coefficients for continuous interpolation inside each step.
+    /// This function integrates the autonomous system `y' = f(x, y)` from `x0` to
+    /// `xend`. It performs classical error control (embedded estimates) and,
+    /// optionally, computes dense-output coefficients for continuous interpolation
+    /// inside each step.
     ///
     /// # Arguments
     ///
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing `IVP`.
-    /// - `x`: Initial independent variable value.
+    /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
-    /// - `y`: Mutable slice containing the initial state; on success contains the
-    ///   state at the final time.
+    /// - `y0`: Slice containing the initial state.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
     ///
     /// ## Output Control
@@ -115,8 +114,8 @@ impl DOP853 {
     pub fn solve<F, S>(
         &self,
         f: &F,
-        x: &mut Float,
-        y: &mut [Float],
+        x0: Float,
+        y0: &[Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -126,6 +125,10 @@ impl DOP853 {
         F: IVP,
         S: SolOut,
     {
+        // Create mutable copies for the solver to mutate
+        let mut x = x0;
+        let mut y = y0.to_vec();
+
         // --- Input Validation ---
 
         // Rounding Unit
@@ -168,7 +171,7 @@ impl DOP853 {
         // Maximum step size
         let h_max = match self.max_step {
             Some(h) => h.abs(),
-            None => (xend - *x).abs(),
+            None => (xend - x).abs(),
         };
 
         // Maximum Number of Steps
@@ -220,22 +223,22 @@ impl DOP853 {
         let mut reject = false;
         let mut evals = Evals::new();
         let mut steps = Steps::new();
-        let mut xold = *x;
+        let mut xold = x;
         let mut xout = None;
         let mut event;
         let expo1 = 1.0 / 8.0 - beta * 0.2;
         let status;
-        let posneg = (xend - *x).signum();
+        let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.ode(*x, &y, &mut k1);
+        f.ode(x, &y, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, *x, &y, posneg, &k1, &mut k2, &mut y1, 8, h_max, &atol, &rtol,
+                    f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, h_max, &atol, &rtol,
                 )
             }
         };
@@ -250,7 +253,7 @@ impl DOP853 {
 
         // Initial call to SolOut
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, x, y, None) {
+            match solout.solout::<DenseOutput>(xold, &mut x, &mut y, None) {
                 ControlFlag::Interrupt => {
                     status = Status::UserInterrupt;
                     return Ok(IntegrationResult {
@@ -262,7 +265,7 @@ impl DOP853 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.ode(*x, &y, &mut k1);
+                    f.ode(x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -282,14 +285,14 @@ impl DOP853 {
             }
 
             // Check for underflow due to machine rounding
-            if 0.1 * h.abs() <= (*x).abs() * uround {
+            if 0.1 * h.abs() <= x.abs() * uround {
                 status = Status::StepSizeTooSmall;
                 break;
             }
 
             // Adjust last step to land on xend
-            if (*x + 1.01 * h - xend) * posneg > 0.0 {
-                h = xend - *x;
+            if (x + 1.01 * h - xend) * posneg > 0.0 {
+                h = xend - x;
                 last = true;
             }
 
@@ -300,43 +303,43 @@ impl DOP853 {
             for i in 0..n {
                 y1[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(*x + C2 * h, &y1, &mut k2);
+            f.ode(x + C2 * h, &y1, &mut k2);
             // Stage 3
             for i in 0..n {
                 y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
             }
-            f.ode(*x + C3 * h, &y1, &mut k3);
+            f.ode(x + C3 * h, &y1, &mut k3);
 
             // Stage 4
             for i in 0..n {
                 y1[i] = y[i] + h * (A41 * k1[i] + A43 * k3[i]);
             }
-            f.ode(*x + C4 * h, &y1, &mut k4);
+            f.ode(x + C4 * h, &y1, &mut k4);
 
             // Stage 5
             for i in 0..n {
                 y1[i] = y[i] + h * (A51 * k1[i] + A53 * k3[i] + A54 * k4[i]);
             }
-            f.ode(*x + C5 * h, &y1, &mut k5);
+            f.ode(x + C5 * h, &y1, &mut k5);
 
             // Stage 6
             for i in 0..n {
                 y1[i] = y[i] + h * (A61 * k1[i] + A64 * k4[i] + A65 * k5[i]);
             }
-            f.ode(*x + C6 * h, &y1, &mut k6);
+            f.ode(x + C6 * h, &y1, &mut k6);
 
             // Stage 7
             for i in 0..n {
                 y1[i] = y[i] + h * (A71 * k1[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
             }
-            f.ode(*x + C7 * h, &y1, &mut k7);
+            f.ode(x + C7 * h, &y1, &mut k7);
 
             // Stage 8
             for i in 0..n {
                 y1[i] = y[i]
                     + h * (A81 * k1[i] + A84 * k4[i] + A85 * k5[i] + A86 * k6[i] + A87 * k7[i]);
             }
-            f.ode(*x + C8 * h, &y1, &mut k8);
+            f.ode(x + C8 * h, &y1, &mut k8);
 
             // Stage 9
             for i in 0..n {
@@ -348,7 +351,7 @@ impl DOP853 {
                         + A97 * k7[i]
                         + A98 * k8[i]);
             }
-            f.ode(*x + C9 * h, &y1, &mut k9);
+            f.ode(x + C9 * h, &y1, &mut k9);
 
             // Stage 10
             for i in 0..n {
@@ -361,7 +364,7 @@ impl DOP853 {
                         + A108 * k8[i]
                         + A109 * k9[i]);
             }
-            f.ode(*x + C10 * h, &y1, &mut k10);
+            f.ode(x + C10 * h, &y1, &mut k10);
 
             // Stage 11
             for i in 0..n {
@@ -375,10 +378,10 @@ impl DOP853 {
                         + A119 * k9[i]
                         + A1110 * k10[i]);
             }
-            f.ode(*x + C11 * h, &y1, &mut k2);
+            f.ode(x + C11 * h, &y1, &mut k2);
 
             // Stage 12
-            xph = *x + h;
+            xph = x + h;
             for i in 0..n {
                 y1[i] = y[i]
                     + h * (A121 * k1[i]
@@ -535,7 +538,7 @@ impl DOP853 {
                                 + A1412 * k3[i]
                                 + A1413 * k4[i]);
                     }
-                    f.ode(*x + C14 * h, &y1, &mut k10);
+                    f.ode(x + C14 * h, &y1, &mut k10);
 
                     for i in 0..n {
                         y1[i] = y[i]
@@ -548,7 +551,7 @@ impl DOP853 {
                                 + A1513 * k4[i]
                                 + A1514 * k10[i]);
                     }
-                    f.ode(*x + C15 * h, &y1, &mut k2);
+                    f.ode(x + C15 * h, &y1, &mut k2);
 
                     for i in 0..n {
                         y1[i] = y[i]
@@ -561,7 +564,7 @@ impl DOP853 {
                                 + A1614 * k10[i]
                                 + A1615 * k2[i]);
                     }
-                    f.ode(*x + C16 * h, &y1, &mut k3);
+                    f.ode(x + C16 * h, &y1, &mut k3);
                     evals.ode += 3;
 
                     // Add contributions of last three stages
@@ -599,8 +602,8 @@ impl DOP853 {
                 // Update state variables
                 k1.copy_from_slice(&k4);
                 y.copy_from_slice(&k5);
-                xold = *x;
-                *x = xph;
+                xold = x;
+                x = xph;
 
                 // Call to SolOut
                 if let Some(solout) = solout.as_mut() {
@@ -610,14 +613,14 @@ impl DOP853 {
                     } else {
                         None
                     };
-                    match solout.solout(xold, x, y, interpolation) {
+                    match solout.solout(xold, &mut x, &mut y, interpolation) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.ode(*x, &y, &mut k1);
+                            f.ode(x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {

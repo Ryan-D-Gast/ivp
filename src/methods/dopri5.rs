@@ -92,19 +92,18 @@ impl DOPRI5 {
     /// Dormand–Prince DOPRI5 — explicit embedded Runge–Kutta 5(4) solver with
     /// adaptive step-size control and optional dense output.
     ///
-    /// This function integrates the autonomous system `y' = f(x, y)` from `x` to
-    /// `xend`, advancing the provided state buffer `y` in-place. It performs
-    /// classical error control (embedded estimates) and, optionally, computes
-    /// dense-output coefficients for continuous interpolation inside each step.
+    /// This function integrates the autonomous system `y' = f(x, y)` from `x0` to
+    /// `xend`. It performs classical error control (embedded estimates) and,
+    /// optionally, computes dense-output coefficients for continuous interpolation
+    /// inside each step.
     ///
     /// # Arguments
     ///
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing `IVP`.
-    /// - `x`: Initial independent variable value.
+    /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
-    /// - `y`: Mutable slice containing the initial state; on success contains the
-    ///   state at the final time.
+    /// - `y0`: Slice containing the initial state.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
     ///
     /// ## Output Control
@@ -123,8 +122,8 @@ impl DOPRI5 {
     pub fn solve<F, S>(
         &self,
         f: &F,
-        x: &mut Float,
-        y: &mut [Float],
+        x0: Float,
+        y0: &[Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -134,6 +133,10 @@ impl DOPRI5 {
         F: IVP,
         S: SolOut,
     {
+        // Create mutable copies for the solver to mutate
+        let mut x = x0;
+        let mut y = y0.to_vec();
+
         // --- Input Validation ---
 
         // Rounding Unit
@@ -174,7 +177,7 @@ impl DOPRI5 {
         }
 
         // Maximum step size
-        let h_max = self.max_step.unwrap_or((xend - *x).abs());
+        let h_max = self.max_step.unwrap_or((xend - x).abs());
 
         // Maximum Number of Steps
         let nmax = self.max_steps;
@@ -216,22 +219,22 @@ impl DOPRI5 {
         let mut xph;
         let mut evals = Evals::new();
         let mut steps = Steps::new();
-        let mut xold = *x;
+        let mut xold = x;
         let mut xout = None;
         let mut event;
         let status;
         let expo1 = 0.2 - beta * 0.75;
-        let posneg = (xend - *x).signum();
+        let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.ode(*x, &y, &mut k1);
+        f.ode(x, &y, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, *x, &y, posneg, &k1, &mut k2, &mut k3, 5, h_max, &atol, &rtol,
+                    f, x, &y, posneg, &k1, &mut k2, &mut k3, 5, h_max, &atol, &rtol,
                 )
             }
         };
@@ -246,7 +249,7 @@ impl DOPRI5 {
 
         // Initial SolOut call
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, x, y, None) {
+            match solout.solout::<DenseOutput>(xold, &mut x, &mut y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -257,7 +260,7 @@ impl DOPRI5 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Recompute k1 at new (x, y).
-                    f.ode(*x, &y, &mut k1);
+                    f.ode(x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -282,8 +285,8 @@ impl DOPRI5 {
             }
 
             // Adjust last step to land on xend
-            if (*x + 1.01 * h - xend) * posneg > 0.0 {
-                h = xend - *x;
+            if (x + 1.01 * h - xend) * posneg > 0.0 {
+                h = xend - x;
                 last = true;
             }
 
@@ -293,32 +296,32 @@ impl DOPRI5 {
             for i in 0..n {
                 y1[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(*x + C2 * h, &y1, &mut k2);
+            f.ode(x + C2 * h, &y1, &mut k2);
 
             // Stage 3
             for i in 0..n {
                 y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
             }
-            f.ode(*x + C3 * h, &y1, &mut k3);
+            f.ode(x + C3 * h, &y1, &mut k3);
 
             // Stage 4
             for i in 0..n {
                 y1[i] = y[i] + h * (A41 * k1[i] + A42 * k2[i] + A43 * k3[i]);
             }
-            f.ode(*x + C4 * h, &y1, &mut k4);
+            f.ode(x + C4 * h, &y1, &mut k4);
 
             // Stage 5
             for i in 0..n {
                 y1[i] = y[i] + h * (A51 * k1[i] + A52 * k2[i] + A53 * k3[i] + A54 * k4[i]);
             }
-            f.ode(*x + C5 * h, &y1, &mut k5);
+            f.ode(x + C5 * h, &y1, &mut k5);
 
             // Stage 6 (ysti)
             for i in 0..n {
                 y1[i] =
                     y[i] + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
             }
-            xph = *x + h;
+            xph = x + h;
             f.ode(xph, &y1, &mut k6);
 
             // Final stage
@@ -410,8 +413,8 @@ impl DOPRI5 {
                 // Update state variables
                 k1.copy_from_slice(&k2);
                 y.copy_from_slice(&y1);
-                xold = *x;
-                *x = xph;
+                xold = x;
+                x = xph;
 
                 if let Some(solout) = solout.as_mut() {
                     let interpolation = if self.dense_output || event {
@@ -419,14 +422,14 @@ impl DOPRI5 {
                     } else {
                         None
                     };
-                    match solout.solout(xold, x, y, interpolation) {
+                    match solout.solout(xold, &mut x, &mut y, interpolation) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.ode(*x, &y, &mut k1);
+                            f.ode(x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
