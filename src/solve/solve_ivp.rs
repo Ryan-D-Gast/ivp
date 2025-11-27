@@ -176,7 +176,8 @@ where
     }
 
     // Prepare the default SolOut (wrapping user callback if provided)
-    let mut default_solout = DefaultSolOut::new(f, options.t_eval.clone(), options.dense_output, options.first_step, x0);
+    let n_states = y0.len();
+    let mut default_solout = DefaultSolOut::new(f, options.t_eval.clone(), options.dense_output, options.first_step, x0, n_states);
     
     // Create mutable copies for the solver to mutate
     let mut x = x0;

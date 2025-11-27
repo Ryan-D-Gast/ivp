@@ -35,15 +35,18 @@ pub trait IVP {
     /// When the event is found it will be recorded in the solution.
     ///
     /// The `out` slice has length equal to `n_events()`.
+    #[inline]
     #[allow(unused_variables)]
     fn events(&self, x: Float, y: &[Float], out: &mut [Float]) {}
 
     /// Number of event functions.
+    #[inline]
     fn n_events(&self) -> usize {
         0
     }
 
     /// Configuration for a specific event.
+    #[inline]
     #[allow(unused_variables)]
     fn event_config(&self, event_index: usize) -> EventConfig {
         EventConfig::default()

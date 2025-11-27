@@ -51,6 +51,13 @@ where
     x0: Float,
     /// Flag tracking whether the first-step output has been enforced
     first_output_done: bool,
+    // Pre-allocated buffers for event detection (avoid per-step allocations)
+    /// Buffer for current event function values
+    g_curr_buf: Vec<Float>,
+    /// Buffer for midpoint state during bisection
+    y_mid_buf: Vec<Float>,
+    /// Buffer for midpoint event values during bisection
+    g_mid_buf: Vec<Float>,
 }
 
 impl<'a, F> DefaultSolOut<'a, F>
@@ -64,6 +71,7 @@ where
         collect_dense: bool,
         first_step: Option<Float>,
         x0: Float,
+        n_states: usize,
     ) -> Self {
         let n_events = ode.n_events();
         let mut event_config = Vec::with_capacity(n_events);
@@ -89,6 +97,10 @@ where
             first_step,
             x0,
             first_output_done: false,
+            // Pre-allocate buffers for event detection
+            g_curr_buf: vec![0.0; n_events],
+            y_mid_buf: vec![0.0; n_states],
+            g_mid_buf: vec![0.0; n_events],
         }
     }
 
@@ -145,15 +157,15 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         
         let n_events = self.ode.n_events();
         if n_events > 0 {
-            let mut g_curr_vec = vec![0.0; n_events];
-            self.ode.events(*x, y, &mut g_curr_vec);
+            self.ode.events(*x, y, &mut self.g_curr_buf);
 
             // If this is the first step (yold is empty), just initialize prev_event
             if self.yold.is_empty() {
-                self.prev_event = g_curr_vec;
+                self.prev_event.copy_from_slice(&self.g_curr_buf);
             } else {
                 // Helper to check direction-aware crossing
-                let crossed = |left: Float, right: Float, dir: &Direction| -> bool {
+                #[inline]
+                fn crossed(left: Float, right: Float, dir: &Direction) -> bool {
                     match dir {
                         Direction::All => {
                             (left <= 0.0 && right >= 0.0) || (left >= 0.0 && right <= 0.0)
@@ -161,7 +173,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                         Direction::Positive => left < 0.0 && right >= 0.0,
                         Direction::Negative => left > 0.0 && right <= 0.0,
                     }
-                };
+                }
 
                 // First pass: find all events in this step and their refined times
                 // Store as (time, event_index, y_at_event)
@@ -169,7 +181,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                 
                 for i in 0..n_events {
                     let g_prev = self.prev_event[i];
-                    let g_curr = g_curr_vec[i];
+                    let g_curr = self.g_curr_buf[i];
                     let config = &self.event_config[i];
 
                     if crossed(g_prev, g_curr, &config.direction) {
@@ -178,23 +190,21 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                         let mut b = *x;
                         let mut g_left = g_prev;
                         let mut g_right = g_curr;
-                        let mut y_mid_buf = vec![0.0; y.len()];
-                        let mut g_mid_vec = vec![0.0; n_events];
 
                         let (event_t, event_y) = if g_left.abs() <= self.tol {
                             (a, self.yold.clone())
                         } else if g_right.abs() <= self.tol {
                             (b, y.to_vec())
                         } else {
-                            // Bisection refinement
+                            // Bisection refinement using pre-allocated buffers
                             for _ in 0..100 {
                                 if (b - a).abs() <= self.tol {
                                     break;
                                 }
                                 let mid = 0.5 * (a + b);
-                                interpolator.unwrap().interpolate(mid, &mut y_mid_buf);
-                                self.ode.events(mid, &y_mid_buf, &mut g_mid_vec);
-                                let g_mid = g_mid_vec[i];
+                                interpolator.unwrap().interpolate(mid, &mut self.y_mid_buf);
+                                self.ode.events(mid, &self.y_mid_buf, &mut self.g_mid_buf);
+                                let g_mid = self.g_mid_buf[i];
 
                                 let left_cross = crossed(g_left, g_mid, &config.direction);
                                 let right_cross = crossed(g_mid, g_right, &config.direction);
@@ -216,9 +226,9 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                                 }
                             }
 
-                            let mut y_at_b = vec![0.0; y.len()];
-                            interpolator.unwrap().interpolate(b, &mut y_at_b);
-                            (b, y_at_b)
+                            // Get final y at the refined event time
+                            interpolator.unwrap().interpolate(b, &mut self.y_mid_buf);
+                            (b, self.y_mid_buf.clone())
                         };
 
                         detected_events.push((event_t, i, event_y));
@@ -250,19 +260,23 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                             self.y.push(event_y);
                             
                             // Update prev_event before returning
-                            self.prev_event = g_curr_vec;
+                            self.prev_event.copy_from_slice(&self.g_curr_buf);
                             return ControlFlag::Interrupt;
                         }
                     }
                 }
                 
                 // Update prev_event for all events
-                self.prev_event = g_curr_vec;
+                self.prev_event.copy_from_slice(&self.g_curr_buf);
             }
         }
 
         // Update state history for event detection
-        self.yold = y.to_vec();
+        if self.yold.len() != y.len() {
+            self.yold = y.to_vec();
+        } else {
+            self.yold.copy_from_slice(y);
+        }
 
         // ============================================================================
         // Output Sampling
