@@ -6,8 +6,8 @@
 
 use crate::{
     Float,
+    dense::StepInterpolant,
     error::{Error, ConfigError},
-    interpolate::Interpolate,
     matrix::{Matrix, MatrixStorage, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{Evals, IntegrationResult, Steps, Tolerance},
     ivp::IVP,
@@ -329,20 +329,12 @@ impl RADAU {
         f.ode(x, &y, &mut f0);
         evals.ode += 1;
 
-        // Persistent pointer-based interpolator
-        let interpolator = &DenseRadau::new(
-            cont.as_ptr(),
-            cont.len(),
-            &xold as *const Float,
-            &h as *const Float,
-        );
-
         // Optional output scheduling
         let mut xout: Option<Float> = None;
 
-        // Initial callback (xold=xc; no interpolator yet)
+        // Initial callback (xold=xc; no interpolant yet)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseRadau>(xold, &mut x, &mut y, None) {
+            match sol.solout(xold, &mut x, &mut y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -725,12 +717,12 @@ impl RADAU {
                 if let Some(sol) = solout.as_mut() {
                     // Build interpolant if requested or an event output is due
                     let event = xout.map_or(false, |xo| xo <= x);
-                    let interpolation = if self.dense_output || event {
-                        Some(interpolator)
+                    let interpolant = if self.dense_output || event {
+                        Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {
                         None
                     };
-                    match sol.solout(xold, &mut x, &mut y, interpolation) {
+                    match sol.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
                         ControlFlag::Continue => {}
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
@@ -813,50 +805,6 @@ impl RADAU {
         let c3 = &cont[3 * n..4 * n];
         for i in 0..n {
             yi[i] = c0[i] + s * (c1[i] + (s - C2M1) * (c2[i] + (s - C1M1) * c3[i]));
-        }
-    }
-}
-
-/// Dense output interpolator
-struct DenseRadau {
-    cont_ptr: *const Float,
-    cont_len: usize,
-    xold_ptr: *const Float,
-    h_ptr: *const Float,
-}
-
-impl DenseRadau {
-    fn new(
-        cont_ptr: *const Float,
-        cont_len: usize,
-        xold_ptr: *const Float,
-        h_ptr: *const Float,
-    ) -> Self {
-        Self {
-            cont_ptr,
-            cont_len,
-            xold_ptr,
-            h_ptr,
-        }
-    }
-}
-
-impl Interpolate for DenseRadau {
-    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            RADAU::interpolate(xi, yi, cont, xold, h);
-        }
-    }
-
-    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            (cont.to_vec(), xold, h)
         }
     }
 }

@@ -1,64 +1,38 @@
 //! Continuous output provided by dense output coefficients (cont) from each step.
 
-use crate::{
-    methods::{BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
-    Float,
-};
+use crate::{dense::DenseSegment, Float};
 
 use super::options::Method;
-
-type ContFn = fn(Float, &mut [Float], &[Float], Float, Float);
-
-#[derive(Debug, Clone)]
-struct Segment {
-    cont: Vec<Float>,
-    xold: Float,
-    h: Float,
-}
 
 /// Piecewise dense output over all accepted steps.
 #[derive(Debug, Clone)]
 pub struct ContinuousOutput {
-    segs: Vec<Segment>,
-    cont_fn: ContFn,
-    coeffs_per_state: usize,
+    segs: Vec<DenseSegment>,
+    n_states: usize,
 }
 
 impl ContinuousOutput {
     /// Build a ContinuousOutput from per-step tuples of (cont, xold, h) and the selected method.
-    pub(crate) fn from_segments(method: Method, segs: Vec<(Vec<Float>, Float, Float)>) -> Self {
-        let (cont_fn, coeffs_per_state) = match method {
-            Method::RK4 => (RK4::interpolate as ContFn, 4),
-            Method::RK23 => (RK23::interpolate as ContFn, 4),
-            Method::DOPRI5 => (DOPRI5::interpolate as ContFn, 5),
-            Method::DOP853 => (DOP853::interpolate as ContFn, 8),
-            Method::RADAU => (RADAU::interpolate as ContFn, 4),
-            Method::BDF => (BDF::interpolate as ContFn, 7),
-        };
+    pub(crate) fn from_segments(
+        method: Method,
+        n_states: usize,
+        segs: Vec<(Vec<Float>, Float, Float)>,
+    ) -> Self {
+        let interp_fn = method.interpolate_fn();
         let segs = segs
             .into_iter()
             .filter(|(_, _, h)| *h != 0.0)
-            .map(|(cont, xold, h)| Segment { cont, xold, h })
+            .map(|(cont, xold, h)| DenseSegment::new(cont, xold, h, interp_fn))
             .collect();
-        Self {
-            segs,
-            cont_fn,
-            coeffs_per_state,
-        }
+        Self { segs, n_states }
     }
     
     /// Create a constant ContinuousOutput that always returns the initial state.
     /// Used for zero-interval integration (t0 == tf) and empty state vectors.
     pub(crate) fn constant(method: Method, x0: Float, y0: &[Float]) -> Self {
-        let (cont_fn, coeffs_per_state) = match method {
-            Method::RK4 => (RK4::interpolate as ContFn, 4),
-            Method::RK23 => (RK23::interpolate as ContFn, 4),
-            Method::DOPRI5 => (DOPRI5::interpolate as ContFn, 5),
-            Method::DOP853 => (DOP853::interpolate as ContFn, 8),
-            Method::RADAU => (RADAU::interpolate as ContFn, 4),
-            Method::BDF => (BDF::interpolate as ContFn, 7),
-        };
         let n = y0.len();
+        let coeffs_per_state = method.coeffs_per_state();
+        let interp_fn = method.interpolate_fn();
         
         // Create coefficients that interpolate to constant y0
         // Layout depends on method - generally first element of each block is the value
@@ -82,11 +56,10 @@ impl ContinuousOutput {
         }
         
         // Use a tiny h to create a valid segment at x0
-        let seg = Segment { cont, xold: x0, h: 1e-15 };
+        let seg = DenseSegment::new(cont, x0, 1e-15, interp_fn);
         Self {
             segs: vec![seg],
-            cont_fn,
-            coeffs_per_state,
+            n_states: n,
         }
     }
 
@@ -95,17 +68,18 @@ impl ContinuousOutput {
         if self.segs.is_empty() {
             return None;
         }
-        let start = self.segs.first().unwrap().xold;
-        let end = self.segs.last().map(|s| s.xold + s.h).unwrap();
+        let first = self.segs.first().unwrap();
+        let last = self.segs.last().unwrap();
+        let start = first.xold;
+        let end = last.xold + last.h;
         Some((start, end))
     }
 
     /// Interpolate y(t) if t lies within any recorded step; returns None if outside.
     pub fn evaluate(&self, t: Float) -> Option<Vec<Float>> {
         let seg = self.find_segment(t)?;
-        let n = seg.cont.len() / self.coeffs_per_state;
-        let mut yi = vec![0.0; n];
-        (self.cont_fn)(t, &mut yi, &seg.cont, seg.xold, seg.h);
+        let mut yi = vec![0.0; self.n_states];
+        seg.interpolate(t, &mut yi);
         Some(yi)
     }
 
@@ -118,13 +92,12 @@ impl ContinuousOutput {
     /// This matches SciPy's OdeSolution.__call__ behavior.
     pub fn evaluate_extrapolate(&self, t: Float) -> Option<Vec<Float>> {
         let seg = self.find_segment_extrapolate(t)?;
-        let n = seg.cont.len() / self.coeffs_per_state;
-        let mut yi = vec![0.0; n];
-        (self.cont_fn)(t, &mut yi, &seg.cont, seg.xold, seg.h);
+        let mut yi = vec![0.0; self.n_states];
+        seg.interpolate(t, &mut yi);
         Some(yi)
     }
 
-    fn find_segment(&self, t: Float) -> Option<&Segment> {
+    fn find_segment(&self, t: Float) -> Option<&DenseSegment> {
         if self.segs.is_empty() {
             return None;
         }
@@ -143,7 +116,7 @@ impl ContinuousOutput {
         None
     }
     
-    fn find_segment_extrapolate(&self, t: Float) -> Option<&Segment> {
+    fn find_segment_extrapolate(&self, t: Float) -> Option<&DenseSegment> {
         if self.segs.is_empty() {
             return None;
         }

@@ -33,7 +33,7 @@
 //! ```
 
 pub use crate::{
-    interpolate::Interpolate,
+    dense::{DenseSegment, StepInterpolant},
     matrix::{Matrix, MatrixStorage},
     ivp::IVP,
     solout::ControlFlag,

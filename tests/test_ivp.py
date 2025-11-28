@@ -180,8 +180,8 @@ def test_integration():
         assert_equal(res.status, 0)
 
         if method == 'DOP853':
-            # DOP853 spends more functions evaluation because it doesn't
-            # have enough time to develop big enough step size.
+            # DOP853 uses more function evaluations because it is slower
+            # to increase the step size.
             assert_(res.nfev < 50)
         else:
             assert_(res.nfev < 40)

@@ -7,6 +7,7 @@ use numpy::{PyArray1, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
+use crate::methods::Tolerance;
 use crate::solve::event::{Direction, EventConfig};
 use crate::solve::{solve_ivp, Method, Options};
 use crate::Float;
@@ -15,6 +16,7 @@ use super::conversion::{extract_float_array, parse_t_span};
 use super::ivp_wrapper::PythonIVP;
 use super::result::PyOdeResult;
 use super::solution::PyOdeSolution;
+use super::sparsity::SparsityStructure;
 
 /// Solve an initial value problem for a system of ODEs.
 ///
@@ -48,7 +50,7 @@ use super::solution::PyOdeSolution;
 /// * `status`, `message`, `success` - Termination info
 #[pyfunction]
 #[pyo3(name = "solve_ivp")]
-#[pyo3(signature = (fun, t_span, y0, method=None, t_eval=None, dense_output=false, events=None, vectorized=false, args=None, **options))]
+#[pyo3(signature = (fun, t_span, y0, method=None, t_eval=None, dense_output=false, events=None, vectorized=false, args=None, jac=None, jac_sparsity=None, **options))]
 pub fn solve_ivp_py<'py>(
     py: Python<'py>,
     fun: Bound<'py, PyAny>,
@@ -60,6 +62,8 @@ pub fn solve_ivp_py<'py>(
     events: Option<Bound<'py, PyAny>>,
     vectorized: bool,
     args: Option<Bound<'py, PyTuple>>,
+    jac: Option<Bound<'py, PyAny>>,
+    jac_sparsity: Option<Bound<'py, PyAny>>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let _ = vectorized; // Not currently used
@@ -77,6 +81,12 @@ pub fn solve_ivp_py<'py>(
     // Parse events
     let (event_funs, event_configs) = parse_events(&events)?;
 
+    // Parse jac_sparsity
+    let sparsity_structure = match jac_sparsity {
+        Some(sp) => Some(SparsityStructure::from_python(&sp)?),
+        None => None,
+    };
+
     // Parse solver options
     let (rtol, atol, max_step_opt, first_step_opt) = parse_options(&options)?;
 
@@ -92,7 +102,7 @@ pub fn solve_ivp_py<'py>(
         .build();
 
     // Create IVP wrapper
-    let python_ivp = PythonIVP::new(fun, event_funs, args, event_configs, py);
+    let python_ivp = PythonIVP::new(fun, event_funs, jac, sparsity_structure, args, event_configs, py);
 
     // Solve
     let result = solve_ivp(&python_ivp, t0, tf, &y0_vec, opts);
@@ -177,21 +187,27 @@ fn parse_events<'py>(
 /// Parse solver options from kwargs.
 fn parse_options(
     options: &Option<Bound<'_, PyDict>>,
-) -> PyResult<(Float, Float, Option<Float>, Option<Float>)> {
-    let mut rtol: Float = 1e-3;
-    let mut atol: Float = 1e-6;
+) -> PyResult<(Tolerance, Tolerance, Option<Float>, Option<Float>)> {
+    let mut rtol: Tolerance = Tolerance::Scalar(1e-3);
+    let mut atol: Tolerance = Tolerance::Scalar(1e-6);
     let mut max_step: Option<Float> = None;
     let mut first_step: Option<Float> = None;
 
     if let Some(opts) = options {
         if let Ok(Some(r)) = opts.get_item("rtol") {
+            // Try scalar first, then array
             if let Ok(val) = r.extract::<Float>() {
-                rtol = val;
+                rtol = Tolerance::Scalar(val);
+            } else if let Ok(arr) = r.extract::<Vec<Float>>() {
+                rtol = Tolerance::Vector(arr);
             }
         }
         if let Ok(Some(a)) = opts.get_item("atol") {
+            // Try scalar first, then array
             if let Ok(val) = a.extract::<Float>() {
-                atol = val;
+                atol = Tolerance::Scalar(val);
+            } else if let Ok(arr) = a.extract::<Vec<Float>>() {
+                atol = Tolerance::Vector(arr);
             }
         }
         if let Ok(Some(m)) = opts.get_item("max_step") {

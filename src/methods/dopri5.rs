@@ -20,8 +20,8 @@
 
 use crate::{
     Float,
+    dense::StepInterpolant,
     error::{Error, ConfigError},
-    interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ivp::IVP,
     solout::{ControlFlag, SolOut},
@@ -239,17 +239,9 @@ impl DOPRI5 {
             }
         };
 
-        // Interpolator for optional dense output to SolOut
-        let interpolator = &DenseOutput::new(
-            cont.as_ptr(),
-            cont.len(),
-            &xold as *const Float,
-            &h as *const Float,
-        );
-
         // Initial SolOut call
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, &mut x, &mut y, None) {
+            match solout.solout(xold, &mut x, &mut y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -417,12 +409,12 @@ impl DOPRI5 {
                 x = xph;
 
                 if let Some(solout) = solout.as_mut() {
-                    let interpolation = if self.dense_output || event {
-                        Some(interpolator)
+                    let interpolant = if self.dense_output || event {
+                        Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {
                         None
                     };
-                    match solout.solout(xold, &mut x, &mut y, interpolation) {
+                    match solout.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
@@ -482,50 +474,6 @@ impl DOPRI5 {
                     * (cont[n + i]
                         + theta1
                             * (cont[2 * n + i] + theta * (cont[3 * n + i] + theta1 * cont[4 * n + i])));
-        }
-    }
-}
-
-/// Dense output interpolator for DOPRI5
-struct DenseOutput {
-    cont_ptr: *const Float,
-    cont_len: usize,
-    xold_ptr: *const Float,
-    h_ptr: *const Float,
-}
-
-impl DenseOutput {
-    fn new(
-        cont_ptr: *const Float,
-        cont_len: usize,
-        xold_ptr: *const Float,
-        h_ptr: *const Float,
-    ) -> Self {
-        Self {
-            cont_ptr,
-            cont_len,
-            xold_ptr,
-            h_ptr,
-        }
-    }
-}
-
-impl Interpolate for DenseOutput {
-    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        unsafe {
-            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            DOPRI5::interpolate(xi, yi, cont_slice, xold, h);
-        }
-    }
-
-    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        unsafe {
-            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            (cont_slice.to_vec(), xold, h)
         }
     }
 }

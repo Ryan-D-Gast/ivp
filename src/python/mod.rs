@@ -10,12 +10,14 @@
 //! - [`ivp_wrapper`]: IVP trait implementation for Python callables
 //! - [`solve`]: Main `solve_ivp` function
 //! - [`conversion`]: Type conversion utilities
+//! - [`sparsity`]: Sparse Jacobian utilities
 
 mod conversion;
 mod ivp_wrapper;
 mod result;
 mod solution;
 mod solve;
+pub mod sparsity;
 
 use pyo3::prelude::*;
 use solve::solve_ivp_py;

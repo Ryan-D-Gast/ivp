@@ -289,7 +289,7 @@ where
         Ok(sol) => {
             let (t, y, t_events, y_events, dense_raw) = default_solout.into_payload();
             let continuous_sol = if options.dense_output {
-                Some(ContinuousOutput::from_segments(options.method, dense_raw))
+                Some(ContinuousOutput::from_segments(options.method, n_states, dense_raw))
             } else {
                 None
             };

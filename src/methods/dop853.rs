@@ -20,8 +20,8 @@
 
 use crate::{
     Float,
+    dense::StepInterpolant,
     error::{Error, ConfigError},
-    interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ivp::IVP,
     solout::{ControlFlag, SolOut},
@@ -243,17 +243,9 @@ impl DOP853 {
             }
         };
 
-        // Interpolator for optional dense output to SolOut
-        let interpolator = &DenseOutput::new(
-            cont.as_ptr(),
-            cont.len(),
-            &xold as *const Float,
-            &h as *const Float,
-        );
-
         // Initial call to SolOut
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, &mut x, &mut y, None) {
+            match solout.solout(xold, &mut x, &mut y, None) {
                 ControlFlag::Interrupt => {
                     status = Status::UserInterrupt;
                     return Ok(IntegrationResult {
@@ -608,12 +600,12 @@ impl DOP853 {
                 // Call to SolOut
                 if let Some(solout) = solout.as_mut() {
                     // See if interpolation is provided
-                    let interpolation = if self.dense_output || event {
-                        Some(interpolator)
+                    let interpolant = if self.dense_output || event {
+                        Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {
                         None
                     };
-                    match solout.solout(xold, &mut x, &mut y, interpolation) {
+                    match solout.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
@@ -674,50 +666,6 @@ impl DOP853 {
             let contd8 = cont[i]
                 + s * (cont[n + i] + s1 * (cont[2 * n + i] + s * (cont[3 * n + i] + s1 * conpar)));
             yi[i] = contd8;
-        }
-    }
-}
-
-/// Dense output interpolator for DOP853
-struct DenseOutput {
-    cont_ptr: *const Float,
-    cont_len: usize,
-    xold_ptr: *const Float,
-    h_ptr: *const Float,
-}
-
-impl DenseOutput {
-    fn new(
-        cont_ptr: *const Float,
-        cont_len: usize,
-        xold_ptr: *const Float,
-        h_ptr: *const Float,
-    ) -> Self {
-        Self {
-            cont_ptr,
-            cont_len,
-            xold_ptr,
-            h_ptr,
-        }
-    }
-}
-
-impl<'a> Interpolate for DenseOutput {
-    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        unsafe {
-            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            DOP853::interpolate(xi, yi, cont_slice, xold, h);
-        }
-    }
-
-    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        unsafe {
-            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            (cont_slice.to_vec(), xold, h)
         }
     }
 }

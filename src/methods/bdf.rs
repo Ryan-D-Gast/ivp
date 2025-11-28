@@ -1,8 +1,8 @@
 //! BDF — variable order (1..5) Backward Differentiation Formula solver.
 
 use crate::{
+    dense::StepInterpolant,
     error::{Error, ConfigError},
-    interpolate::Interpolate,
     matrix::{lin_solve, lu_decomp, Matrix, MatrixStorage},
     methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
     ivp::IVP,
@@ -238,7 +238,7 @@ impl BDF {
         let mut cont = vec![0.0; n * CONT_BLOCK];
         // Initial callback
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseBdf15>(x, &mut x, &mut y, None) {
+            match sol.solout(x, &mut x, &mut y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -497,8 +497,8 @@ impl BDF {
 
             // Callback
             if let Some(sol) = solout.as_mut() {
-                let interp = DenseBdf15::new(cont.as_ptr(), cont.len(), x_start, h_signed);
-                match sol.solout::<DenseBdf15>(x - h_signed, &mut x, &mut y, Some(&interp)) {
+                let interpolant = StepInterpolant::new(&cont, x_start, h_signed, Self::interpolate);
+                match sol.solout(x - h_signed, &mut x, &mut y, Some(&interpolant)) {
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
@@ -529,7 +529,7 @@ impl BDF {
                 break;
             }
 
-            // Order/step-size adaptation when enough equal steps
+            // Order and step-size adaptation when sufficient equal steps observed
             if n_equal_steps >= order + 1 {
                 let mut err_m = Float::INFINITY;
                 let mut err_p = Float::INFINITY;
@@ -708,38 +708,4 @@ fn matmul(a: &[Vec<Float>], b: &[Vec<Float>]) -> Vec<Vec<Float>> {
         }
     }
     res
-}
-
-struct DenseBdf15 {
-    cont_ptr: *const Float,
-    cont_len: usize,
-    xold: Float,
-    h: Float,
-}
-
-impl DenseBdf15 {
-    fn new(cont_ptr: *const Float, cont_len: usize, xold: Float, h: Float) -> Self {
-        Self {
-            cont_ptr,
-            cont_len,
-            xold,
-            h,
-        }
-    }
-}
-
-impl Interpolate for DenseBdf15 {
-    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            BDF::interpolate(xi, yi, cont, self.xold, self.h);
-        }
-    }
-
-    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            (cont.to_vec(), self.xold, self.h)
-        }
-    }
 }

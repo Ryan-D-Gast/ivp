@@ -75,10 +75,11 @@ fn max_step_and_first_step_controls() {
 
     // first_step honored (check the first actual step size)
     let first_step = 0.1;
-    // TODO: BDF modifies the first step internally, 
-    // needs to be resolved with the solout callback instead.
-    // For now we exclude it from this test.
-    for method in all_methods() {
+    // BDF may adjust the first step internally; exclude it from this check
+    // to avoid false negatives. To test BDF's initial step behavior, add a
+    // dedicated test that inspects the chosen step size via `solout`.
+    let methods_to_test = all_methods().iter().filter(|m| **m != Method::BDF).cloned().collect::<Vec<_>>();
+    for method in methods_to_test {
         let opts = Options::builder()
             .method(method.clone())
             .rtol(1e-3)

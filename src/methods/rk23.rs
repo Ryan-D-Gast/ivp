@@ -2,8 +2,8 @@
 
 use crate::{
     Float,
+    dense::StepInterpolant,
     error::{Error, ConfigError},
-    interpolate::Interpolate,
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ivp::IVP,
     solout::{ControlFlag, SolOut},
@@ -162,17 +162,9 @@ impl RK23 {
                 )
             }
         };
-        // Prepare a persistent interpolator object (pointer-based)
-        let interpolator = &DenseOutput::new(
-            cont.as_ptr(),
-            cont.len(),
-            &xold as *const Float,
-            &h as *const Float,
-        );
-
         // Initial SolOut call (no interpolator yet; xold == x)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseOutput>(xold, &mut x, &mut y, None) {
+            match sol.solout(xold, &mut x, &mut y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -265,12 +257,12 @@ impl RK23 {
                 // Optional callback function
                 if let Some(sol) = solout.as_mut() {
                     let event = xout.map_or(false, |xo| xo <= x);
-                    let interpolation = if self.dense_output || event {
-                        Some(interpolator)
+                    let interpolant = if self.dense_output || event {
+                        Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {
                         None
                     };
-                    match sol.solout(xold, &mut x, &mut y, interpolation) {
+                    match sol.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
@@ -325,50 +317,6 @@ impl RK23 {
         let x3 = x2 * xc;
         for i in 0..n {
             yi[i] = cont[i] + h * (cont[n + i] * xc + cont[2 * n + i] * x2 + cont[3 * n + i] * x3);
-        }
-    }
-}
-
-// Dense output interpolator for RK23 (pointer-based like DOPRI style)
-struct DenseOutput {
-    cont_ptr: *const Float,
-    cont_len: usize,
-    xold_ptr: *const Float,
-    h_ptr: *const Float,
-}
-
-impl DenseOutput {
-    fn new(
-        cont_ptr: *const Float,
-        cont_len: usize,
-        xold_ptr: *const Float,
-        h_ptr: *const Float,
-    ) -> Self {
-        Self {
-            cont_ptr,
-            cont_len,
-            xold_ptr,
-            h_ptr,
-        }
-    }
-}
-
-impl Interpolate for DenseOutput {
-    fn interpolate(&self, ti: Float, yi: &mut [Float]) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            RK23::interpolate(ti, yi, cont, xold, h);
-        }
-    }
-
-    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            (cont.to_vec(), xold, h)
         }
     }
 }

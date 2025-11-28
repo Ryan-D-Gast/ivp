@@ -5,7 +5,7 @@
 
 use crate::{
     Float,
-    interpolate::Interpolate,
+    dense::StepInterpolant,
     ivp::IVP,
     solout::{ControlFlag, SolOut},
     solve::event::{Direction, EventConfig},
@@ -125,12 +125,12 @@ where
 }
 
 impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
-    fn solout<I: Interpolate>(
+    fn solout(
         &mut self,
         xold: Float,
         x: &mut Float,
         y: &mut [Float],
-        interpolator: Option<&I>,
+        interpolant: Option<&StepInterpolant<'_>>,
     ) -> ControlFlag {
         // ============================================================================
         // Dense Output Collection
@@ -138,10 +138,10 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         // Collect interpolation coefficients from each accepted step for later
         // continuous evaluation. Skip the initial callback and degenerate segments.
         
-        if self.collect_dense && *x != xold && interpolator.is_some() {
-            let (cont, cxold, h) = interpolator.unwrap().get_cont();
-            if h != 0.0 {
-                self.dense_segs.push((cont, cxold, h));
+        if self.collect_dense && *x != xold && interpolant.is_some() {
+            let seg = interpolant.unwrap().to_segment();
+            if seg.h != 0.0 {
+                self.dense_segs.push((seg.cont, seg.xold, seg.h));
             }
         }
 
@@ -185,49 +185,108 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                     let config = &self.event_config[i];
 
                     if crossed(g_prev, g_curr, &config.direction) {
-                        // Refine event location via bisection on [xold, x]
+                        // Refine event location using Brent's method (matches scipy's brentq)
+                        // Tolerances match scipy defaults: xtol=2e-12, rtol=machine_epsilon
+                        const XTOL: Float = 2e-12;
+                        const RTOL: Float = Float::EPSILON;
+                        const MAXITER: usize = 100;
+
                         let mut a = xold;
                         let mut b = *x;
-                        let mut g_left = g_prev;
-                        let mut g_right = g_curr;
+                        let mut fa = g_prev;
+                        let mut fb = g_curr;
 
-                        let (event_t, event_y) = if g_left.abs() <= self.tol {
+                        let (event_t, event_y) = if fa.abs() <= XTOL {
                             (a, self.yold.clone())
-                        } else if g_right.abs() <= self.tol {
+                        } else if fb.abs() <= XTOL {
                             (b, y.to_vec())
                         } else {
-                            // Bisection refinement using pre-allocated buffers
-                            for _ in 0..100 {
-                                if (b - a).abs() <= self.tol {
+                            // Brent's method
+                            let mut c = a;
+                            let mut fc = fa;
+                            let mut d = b - a;
+                            let mut e = d;
+
+                            for _ in 0..MAXITER {
+                                if fb * fc > 0.0 {
+                                    c = a;
+                                    fc = fa;
+                                    d = b - a;
+                                    e = d;
+                                }
+                                if fc.abs() < fb.abs() {
+                                    a = b;
+                                    b = c;
+                                    c = a;
+                                    fa = fb;
+                                    fb = fc;
+                                    fc = fa;
+                                }
+
+                                // Convergence check (scipy's termination condition)
+                                let tol1 = 2.0 * RTOL * b.abs() + 0.5 * XTOL;
+                                let xm = 0.5 * (c - b);
+                                
+                                if xm.abs() <= tol1 || fb == 0.0 {
                                     break;
                                 }
-                                let mid = 0.5 * (a + b);
-                                interpolator.unwrap().interpolate(mid, &mut self.y_mid_buf);
-                                self.ode.events(mid, &self.y_mid_buf, &mut self.g_mid_buf);
-                                let g_mid = self.g_mid_buf[i];
 
-                                let left_cross = crossed(g_left, g_mid, &config.direction);
-                                let right_cross = crossed(g_mid, g_right, &config.direction);
-
-                                if left_cross {
-                                    b = mid;
-                                    g_right = g_mid;
-                                } else if right_cross {
-                                    a = mid;
-                                    g_left = g_mid;
-                                } else {
-                                    if g_left.signum() * g_mid.signum() <= 0.0 {
-                                        b = mid;
-                                        g_right = g_mid;
+                                // Try inverse quadratic interpolation
+                                if e.abs() >= tol1 && fa.abs() > fb.abs() {
+                                    let s;
+                                    if a == c {
+                                        // Linear interpolation (secant)
+                                        s = fb / fa;
+                                        let p = 2.0 * xm * s;
+                                        let q = 1.0 - s;
+                                        let (p, q) = if q > 0.0 { (-p, q) } else { (p, -q) };
+                                        
+                                        if 2.0 * p < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs()) {
+                                            e = d;
+                                            d = p / q;
+                                        } else {
+                                            d = xm;
+                                            e = d;
+                                        }
                                     } else {
-                                        a = mid;
-                                        g_left = g_mid;
+                                        // Inverse quadratic interpolation
+                                        let q_val = fa / fc;
+                                        let r = fb / fc;
+                                        s = fb / fa;
+                                        let p = s * (2.0 * xm * q_val * (q_val - r) - (b - a) * (r - 1.0));
+                                        let q = (q_val - 1.0) * (r - 1.0) * (s - 1.0);
+                                        let (p, q) = if q > 0.0 { (-p, q) } else { (p, -q) };
+                                        
+                                        if 2.0 * p < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs()) {
+                                            e = d;
+                                            d = p / q;
+                                        } else {
+                                            d = xm;
+                                            e = d;
+                                        }
                                     }
+                                } else {
+                                    // Bisection
+                                    d = xm;
+                                    e = d;
                                 }
+
+                                a = b;
+                                fa = fb;
+
+                                if d.abs() > tol1 {
+                                    b += d;
+                                } else {
+                                    b += if xm > 0.0 { tol1 } else { -tol1 };
+                                }
+
+                                // Evaluate function at new point
+                                interpolant.unwrap().interpolate(b, &mut self.y_mid_buf);
+                                self.ode.events(b, &self.y_mid_buf, &mut self.g_mid_buf);
+                                fb = self.g_mid_buf[i];
                             }
 
-                            // Get final y at the refined event time
-                            interpolator.unwrap().interpolate(b, &mut self.y_mid_buf);
+                            interpolant.unwrap().interpolate(b, &mut self.y_mid_buf);
                             (b, self.y_mid_buf.clone())
                         };
 
@@ -305,7 +364,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                     while i < t_eval.len() && t_eval[i] <= *x + self.tol {
                         if t_eval[i] >= xold - self.tol {
                             let mut yi = vec![0.0; y.len()];
-                            interpolator.unwrap().interpolate(t_eval[i], &mut yi);
+                            interpolant.unwrap().interpolate(t_eval[i], &mut yi);
                             self.t.push(t_eval[i]);
                             self.y.push(yi);
                         }
@@ -316,7 +375,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                     while i < t_eval.len() && t_eval[i] >= *x - self.tol {
                         if t_eval[i] <= xold + self.tol {
                             let mut yi = vec![0.0; y.len()];
-                            interpolator.unwrap().interpolate(t_eval[i], &mut yi);
+                            interpolant.unwrap().interpolate(t_eval[i], &mut yi);
                             self.t.push(t_eval[i]);
                             self.y.push(yi);
                         }
@@ -328,18 +387,19 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         } else {
             // Mode 2: Solver-selected output times
             // Record accepted step endpoints. If first_step is set, enforce that the
-            // first output (after the initial condition) occurs at exactly x0 + first_step.
+            // first output (after the initial condition) occurs at exactly x0 +/- first_step.
             
             if let Some(h0) = self.first_step {
                 // First-step enforcement: skip intermediate outputs until we reach/pass
                 // the target, then interpolate to the exact point.
                 if !self.first_output_done && (xold - *x).abs() > self.tol {
-                    let target = self.x0 + h0;
                     let direction = (*x - xold).signum();
+                    // For backward integration (direction < 0), target is x0 - h0
+                    let target = self.x0 + direction * h0;
                     
                     if direction * (*x - target) >= -self.tol {
                         // We've reached or passed the target point
-                        if let Some(interp) = interpolator {
+                        if let Some(interp) = interpolant {
                             let mut yi = vec![0.0; y.len()];
                             interp.interpolate(target, &mut yi);
                             self.t.push(target);

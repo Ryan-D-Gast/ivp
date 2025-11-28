@@ -2,10 +2,15 @@
 
 use bon::Builder;
 
-use crate::{matrix::MatrixStorage, methods::Tolerance, Float};
+use crate::{
+    dense::InterpolateFn,
+    matrix::MatrixStorage,
+    methods::{Tolerance, BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
+    Float,
+};
 
 /// Numerical methods for solve_ivp
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Method {
     /// Bogacki–Shampine 3(2) adaptive RK
     RK23,
@@ -19,6 +24,38 @@ pub enum Method {
     RADAU,
     /// Variable-order (1-5) Backward Differentiation Formula method for stiff problems
     BDF,
+}
+
+impl Method {
+    /// Number of dense output coefficients per state variable.
+    ///
+    /// This determines the memory layout of the `cont` buffer used by each method.
+    #[inline]
+    pub const fn coeffs_per_state(self) -> usize {
+        match self {
+            Method::RK4 => 4,
+            Method::RK23 => 4,
+            Method::DOPRI5 => 5,
+            Method::DOP853 => 8,
+            Method::RADAU => 4,
+            Method::BDF => 7,
+        }
+    }
+
+    /// Get the interpolation function for this method.
+    ///
+    /// Returns a function pointer that can interpolate dense output for any step.
+    #[inline]
+    pub fn interpolate_fn(self) -> InterpolateFn {
+        match self {
+            Method::RK4 => RK4::interpolate,
+            Method::RK23 => RK23::interpolate,
+            Method::DOPRI5 => DOPRI5::interpolate,
+            Method::DOP853 => DOP853::interpolate,
+            Method::RADAU => RADAU::interpolate,
+            Method::BDF => BDF::interpolate,
+        }
+    }
 }
 
 impl From<&str> for Method {
