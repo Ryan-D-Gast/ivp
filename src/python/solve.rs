@@ -101,6 +101,10 @@ pub fn solve_ivp_py<'py>(
         .atol(atol)
         .build();
 
+    // Check if Jacobian is a constant matrix (not callable)
+    // For scipy compatibility: constant Jacobians should have njev=0
+    let is_constant_jac = jac.as_ref().map_or(false, |j| !j.is_callable());
+
     // Create IVP wrapper
     let python_ivp = PythonIVP::new(fun, event_funs, jac, sparsity_structure, args, event_configs, py);
 
@@ -108,7 +112,7 @@ pub fn solve_ivp_py<'py>(
     let result = solve_ivp(&python_ivp, t0, tf, &y0_vec, opts);
 
     match result {
-        Ok(sol) => build_result(py, sol, events.is_some()),
+        Ok(sol) => build_result(py, sol, events.is_some(), is_constant_jac),
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
             "Solver failed: {:?}",
             e
@@ -230,6 +234,7 @@ fn build_result<'py>(
     py: Python<'py>,
     sol: crate::solve::Solution,
     has_events: bool,
+    is_constant_jac: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     // Transpose y from (time, state) to (state, time) for SciPy compatibility
     let n_steps = sol.y.len();
@@ -302,7 +307,7 @@ fn build_result<'py>(
         t_events: t_events_list,
         y_events: y_events_list,
         nfev: sol.nfev,
-        njev: sol.njev,
+        njev: if is_constant_jac { 0 } else { sol.njev },
         nlu: sol.nlu,
         status: status_int,
         message: format!("{:?}", sol.status),

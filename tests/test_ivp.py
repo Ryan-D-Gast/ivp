@@ -7,17 +7,14 @@ https://github.com/scipy/scipy/blob/v1.16.2/scipy/integrate/_ivp/tests/test_ivp.
 MODIFICATIONS FROM SCIPY:
 =========================
 1. LSODA solver not implemented - all LSODA tests removed
-2. Jacobian evaluation counting: When a constant Jacobian matrix is provided,
-   scipy reports njev=0 (no function calls), but we report njev>0 (matrix usage count)
-   The Jacobian IS being used correctly - this is just a counting difference
-3. BDF Jacobian optimization: Implemented LU reuse strategy reducing njev from 479→9
+2. BDF Jacobian optimization: Implemented LU reuse strategy reducing njev from 479→9
    for Robertson problem (test_integration_stiff now asserts njev < 200)
-4. Dense output accuracy: BDF interpolation has lower accuracy than scipy/Radau
+3. Dense output accuracy: BDF interpolation has lower accuracy than scipy/Radau
    - test_integration_const_jac: Relaxed BDF tolerance from <15 to <60
-5. Event interpolation accuracy: Slightly lower precision at event times
+4. Event interpolation accuracy: Slightly lower precision at event times
    - test_args: Relaxed dense output tolerances from 1e-9/1e-12 to 1e-5/1e-6
    - test_args: Relaxed event value tolerances from 5e-14 to 1e-13 and from default to 1e-6
-6. Newton failure handling: BDF always refreshes Jacobian on Newton failure
+5. Newton failure handling: BDF always refreshes Jacobian on Newton failure
    (prevents StepSizeTooSmall at discontinuities in test_integration_sparse_difference)
 """
 from itertools import product
@@ -218,8 +215,8 @@ def test_integration():
             assert_equal(res.njev, 0)
             assert_equal(res.nlu, 0)
         else:
-            # Implicit methods compute Jacobians (even if constant jac provided)
-            # Scipy reports njev=0 for constant jac; we count usage
+            # Implicit methods compute Jacobians
+            # njev should be > 0 (jac is a function or uses finite differences)
             assert_(0 < res.njev)
             assert_(0 < res.nlu)
 
@@ -290,10 +287,9 @@ def test_integration_const_jac():
         assert_equal(res.status, 0)
 
         assert_(res.nfev < 100)
-        # MODIFICATION: scipy expects njev=0 for constant Jacobian matrix
-        # We count Jacobian usage, not function calls, so njev>0
-        # The provided Jacobian IS being used (not finite differences)
-        # Commented out scipy's assertion: assert_equal(res.njev, 0)
+        # Scipy expects njev=0 for constant Jacobian (no function calls)
+        # We now match this behavior
+        assert_equal(res.njev, 0)
         # MODIFICATION: scipy expects 0 < nlu < 15
         # Scipy expected: 0 < nlu < 15
         # Our implementation: nlu was either 0 or >= 15 (different Jacobian reuse pattern)
