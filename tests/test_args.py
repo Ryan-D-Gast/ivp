@@ -80,7 +80,6 @@ def test_args_single_value():
 
 
 @pytest.mark.timeout(10)
-@pytest.mark.skip(reason="Array-like rtol not yet supported in Python bindings")
 def test_array_rtol():
     """Test that array-like rtol works (gh-15482)."""
     def f(t, y):

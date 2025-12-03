@@ -26,8 +26,9 @@ def fun_rational(t, y):
 
 
 def fun_rational_vectorized(t, y):
-    return np.vstack((y[1] / t,
-                      y[1] * (y[0] + 2 * y[1] - 1) / (t * (y[0] - 1))))
+    y0, y1 = y[0], y[1]
+    return np.vstack((y1 / t,
+                      y1 * (y0 + 2 * y1 - 1) / (t * (y0 - 1))))
 
 
 def jac_rational(t, y):
