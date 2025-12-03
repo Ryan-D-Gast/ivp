@@ -152,6 +152,10 @@ impl BDF {
         let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
         f.jac(x, &y, &mut jac);
         evals.jac += 1;
+        
+        // Track when LU decomposition is current
+        let mut lu_is_current = false;
+        let mut current_c: Float = 0.0;
 
         // Precompute gamma, alpha, error_const arrays
         let mut gamma = [0.0; MAX_ORDER + 1];
@@ -263,6 +267,7 @@ impl BDF {
                     n_equal_steps = 0;
                     f.jac(x, &y, &mut jac);
                     evals.jac += 1;
+                    lu_is_current = false;
                 }
                 ControlFlag::XOut(_) => {}
             }
@@ -286,6 +291,7 @@ impl BDF {
                 h_try = hmax;
                 current_h = h_try;
                 n_equal_steps = 0;
+                lu_is_current = false;  // Step size changed
             }
             if h_try < hmin && hmin > 0.0 {
                 let factor = (hmin / h_try).max(1.0);
@@ -293,6 +299,7 @@ impl BDF {
                 h_try = hmin;
                 current_h = h_try;
                 n_equal_steps = 0;
+                lu_is_current = false;  // Step size changed
             }
 
             let mut h_signed = direction * h_try;
@@ -311,6 +318,7 @@ impl BDF {
                 h_signed = direction * h_try;
                 x_new = x + h_signed;
                 n_equal_steps = 0;
+                lu_is_current = false;  // Step size changed
             }
 
             // Step size guard against stagnation
@@ -345,24 +353,32 @@ impl BDF {
                 psi[i] = s / alpha[order];
             }
 
-            // Build and factor LU of (I - c*J)
+            // Build and factor LU of (I - c*J) only when needed
             let c = h_signed / alpha[order];
-            for r in 0..n {
-                for c_idx in 0..n {
-                    lu_matrix[(r, c_idx)] = -c * jac[(r, c_idx)];
+            
+            // Rebuild LU if: not current, or c coefficient changed significantly, or Jacobian was refreshed
+            if !lu_is_current || (c - current_c).abs() / c.abs().max(1.0) > 0.1 {
+                for r in 0..n {
+                    for c_idx in 0..n {
+                        lu_matrix[(r, c_idx)] = -c * jac[(r, c_idx)];
+                    }
+                    lu_matrix[(r, r)] += 1.0;
                 }
-                lu_matrix[(r, r)] += 1.0;
-            }
-            evals.lu += 1;
-            match lu_decomp(&mut lu_matrix, &mut pivot) {
-                Ok(()) => {}
-                Err(_) => {
-                    let factor = 0.5;
-                    change_d(&mut d, order, factor, &mut scratch_change);
-                    current_h *= factor;
-                    n_equal_steps = 0;
-                    steps.rejected += 1;
-                    continue 'main_loop;
+                evals.lu += 1;
+                match lu_decomp(&mut lu_matrix, &mut pivot) {
+                    Ok(()) => {
+                        lu_is_current = true;
+                        current_c = c;
+                    }
+                    Err(_) => {
+                        let factor = 0.5;
+                        change_d(&mut d, order, factor, &mut scratch_change);
+                        current_h *= factor;
+                        n_equal_steps = 0;
+                        lu_is_current = false;
+                        steps.rejected += 1;
+                        continue 'main_loop;
+                    }
                 }
             }
 
@@ -430,9 +446,11 @@ impl BDF {
                 iters += 1;
             }
             if !converged {
-                // Refresh Jacobian and retry step unless already tried
+                // Always refresh Jacobian on Newton failure to handle discontinuities
                 f.jac(x_new, &y_predict, &mut jac);
                 evals.jac += 1;
+                lu_is_current = false;
+                
                 change_d(&mut d, order, 0.5, &mut scratch_change);
                 current_h *= 0.5;
                 n_equal_steps = 0;
@@ -519,6 +537,7 @@ impl BDF {
                         n_equal_steps = 0;
                         f.jac(x, &y, &mut jac);
                         evals.jac += 1;
+                        lu_is_current = false;
                     }
                     ControlFlag::XOut(_) => {}
                 }
@@ -573,16 +592,18 @@ impl BDF {
                 // SciPy: factor = min(MAX_FACTOR, safety * max(factors))
                 let max_factor = factors.iter().cloned().fold(0.0, Float::max);
                 let step_factor = (safety * max_factor).min(MAX_FACTOR);
+                let old_order = order;  // Save before updating
                 change_d(&mut d, new_order, step_factor, &mut scratch_change);
                 current_h *= step_factor;
                 order = new_order;
                 n_equal_steps = 0;
-            } else {
+                lu_is_current = false;  // Order or step changed
+                
+                if new_order != old_order {
+                    f.jac(x, &y, &mut jac);
+                    evals.jac += 1;
+                }
             }
-
-            // Update Jacobian for next step
-            f.jac(x, &y, &mut jac);
-            evals.jac += 1;
         }
 
         Ok(IntegrationResult::new(
