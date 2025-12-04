@@ -184,7 +184,7 @@ where
         Method::RK4 => {
             let h = options.first_step.unwrap_or_else(|| (xend - x0) / 100.0);
             let solver = RK4::builder()
-                .max_steps(options.max_steps.unwrap_or(100_000))
+                .max_steps(options.max_steps.unwrap_or(usize::MAX))
                 .build();
             solver.solve(
                 f,
@@ -199,7 +199,7 @@ where
             let solver = RK23::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_first_step(options.first_step)
-                .max_steps(options.max_steps.unwrap_or(10_000))
+                .max_steps(options.max_steps.unwrap_or(usize::MAX))
                 .build();
             solver.solve(
                 f,
@@ -215,7 +215,7 @@ where
             let solver = DOPRI5::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_first_step(options.first_step)
-                .max_steps(options.max_steps.unwrap_or(100_000))
+                .max_steps(options.max_steps.unwrap_or(usize::MAX))
                 .build();
             solver.solve(
                 f,
@@ -231,7 +231,7 @@ where
             let solver = DOP853::builder()
                 .maybe_max_step(options.max_step)
                 .maybe_first_step(options.first_step)
-                .max_steps(options.max_steps.unwrap_or(100_000))
+                .max_steps(options.max_steps.unwrap_or(usize::MAX))
                 .build();
             solver.solve(
                 f,
@@ -248,7 +248,7 @@ where
                 .maybe_max_step(options.max_step)
                 .maybe_min_step(options.min_step)
                 .maybe_first_step(options.first_step)
-                .max_steps(options.max_steps.unwrap_or(100_000))
+                .max_steps(options.max_steps.unwrap_or(usize::MAX))
                 .maybe_nind1(options.nind1)
                 .maybe_nind2(options.nind2)
                 .maybe_nind3(options.nind3)
@@ -270,7 +270,7 @@ where
                 .maybe_max_step(options.max_step)
                 .maybe_min_step(options.min_step)
                 .maybe_first_step(options.first_step)
-                .max_steps(options.max_steps.unwrap_or(100_000))
+                .max_steps(options.max_steps.unwrap_or(usize::MAX))
                 .jac_storage(options.jac_storage)
                 .build();
             solver.solve(

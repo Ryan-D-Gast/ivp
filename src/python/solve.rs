@@ -123,6 +123,10 @@ use super::sparsity::SparsityStructure;
 ///     Initial step size. Default is determined automatically.
 /// max_step : float, optional
 ///     Maximum allowed step size. Default is inf.
+/// min_step : float, optional
+///     Minimum allowed step size for stiff solvers (Radau, BDF). Default is 0.
+/// max_steps : int, optional
+///     Maximum number of steps the solver can take. Default is unlimited.
 /// rtol : float, optional
 ///     Relative tolerance. Default is 1e-3.
 /// atol : float, optional
@@ -183,7 +187,7 @@ pub fn solve_ivp_py<'py>(
     };
 
     // Parse solver options
-    let (rtol, atol, max_step_opt, first_step_opt, max_steps_opt) = parse_options(&options)?;
+    let (rtol, atol, max_step_opt, min_step_opt, first_step_opt, max_steps_opt) = parse_options(&options)?;
 
     // Build solver options
     let opts = Options::builder()
@@ -191,6 +195,7 @@ pub fn solve_ivp_py<'py>(
         .dense_output(dense_output)
         .maybe_t_eval(t_eval_vec)
         .maybe_max_step(max_step_opt)
+        .maybe_min_step(min_step_opt)
         .maybe_first_step(first_step_opt)
         .maybe_max_steps(max_steps_opt)
         .rtol(rtol)
@@ -287,10 +292,11 @@ fn parse_events<'py>(
 /// Parse solver options from kwargs.
 fn parse_options(
     options: &Option<Bound<'_, PyDict>>,
-) -> PyResult<(Tolerance, Tolerance, Option<Float>, Option<Float>, Option<usize>)> {
+) -> PyResult<(Tolerance, Tolerance, Option<Float>, Option<Float>, Option<Float>, Option<usize>)> {
     let mut rtol: Tolerance = Tolerance::Scalar(1e-3);
     let mut atol: Tolerance = Tolerance::Scalar(1e-6);
     let mut max_step: Option<Float> = None;
+    let mut min_step: Option<Float> = None;
     let mut first_step: Option<Float> = None;
     let mut max_steps: Option<usize> = None;
 
@@ -316,6 +322,11 @@ fn parse_options(
                 max_step = Some(val);
             }
         }
+        if let Ok(Some(m)) = opts.get_item("min_step") {
+            if let Ok(val) = m.extract::<Float>() {
+                min_step = Some(val);
+            }
+        }
         if let Ok(Some(f)) = opts.get_item("first_step") {
             if let Ok(val) = f.extract::<Float>() {
                 first_step = Some(val);
@@ -328,7 +339,7 @@ fn parse_options(
         }
     }
 
-    Ok((rtol, atol, max_step, first_step, max_steps))
+    Ok((rtol, atol, max_step, min_step, first_step, max_steps))
 }
 
 /// Build the PyOdeResult from the Rust Solution.
