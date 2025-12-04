@@ -28,15 +28,28 @@ pub trait IVP {
     /// Compute the derivative dydx at (x, y).
     fn ode(&self, x: Float, y: &[Float], dydx: &mut [Float]);
 
-    /// Events to track during integration.
+    /// Compute event function values.
     ///
     /// This function is called after each successful step to check for events.
     /// The solver will find an accurate value of event(x, y) = 0 using root finding.
-    /// When the event is found it will be recorded in the solution. The user can make
-    /// events terminate, or the direction of zero crossing, configurable via `EventConfig`.
+    /// When the event is found it will be recorded in the solution.
+    ///
+    /// The `out` slice has length equal to `n_events()`.
+    #[inline]
     #[allow(unused_variables)]
-    fn event(&self, x: Float, y: &[Float], event: &mut EventConfig) -> Float {
-        1.0
+    fn events(&self, x: Float, y: &[Float], out: &mut [Float]) {}
+
+    /// Number of event functions.
+    #[inline]
+    fn n_events(&self) -> usize {
+        0
+    }
+
+    /// Configuration for a specific event.
+    #[inline]
+    #[allow(unused_variables)]
+    fn event_config(&self, event_index: usize) -> EventConfig {
+        EventConfig::default()
     }
 
     /// Jacobian matrix J = df/dy

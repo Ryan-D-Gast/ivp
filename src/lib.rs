@@ -85,13 +85,16 @@ pub(crate) type Float = f32;
 pub(crate) type Float = f64;
 
 // -- Core modules --
+pub mod dense;
 pub mod error;
-pub mod interpolate;
 pub mod matrix;
 pub mod ivp;
 pub mod solout;
 pub mod solve;
 pub mod status;
+
+#[cfg(feature = "python")]
+pub mod python;
 
 // -- Numerical methods --
 pub mod methods;

@@ -15,10 +15,26 @@ categories = ["science", "mathematics", "algorithms"]
 
 license = "Apache-2.0"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [features]
 default = ["f64"]
 f32 = []
 f64 = []
+python = ["dep:pyo3", "dep:numpy"]
 
 [dependencies]
 bon = "3.7.2"
+pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39", "generate-import-lib"], optional = true }
+numpy = { version = "0.27", optional = true }
+
+# Optimized release profile for maximum performance
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+strip = true
+
+[profile.release.build-override]
+opt-level = 3

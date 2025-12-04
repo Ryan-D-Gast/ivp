@@ -1,0 +1,35 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "ivp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.7",
+]
+
+[tool.maturin]
+features = ["python"]
+
+[dependency-groups]
+dev = [
+    "maturin>=1.10.2",
+    "numpy>=2.3.5",
+    "pytest>=9.0.1",
+    "scipy>=1.16.3",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "timeout: marks tests with a timeout (deselect with '-m \"not timeout\"')",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "thread_unsafe: marks tests that are not thread-safe",
+    "fail_slow: marks tests that should fail if they are too slow",
+]
+filterwarnings = [
+    "ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning",
+]

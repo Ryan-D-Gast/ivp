@@ -1,8 +1,8 @@
 //! BDF — variable order (1..5) Backward Differentiation Formula solver.
 
 use crate::{
-    error::Error,
-    interpolate::Interpolate,
+    dense::StepInterpolant,
+    error::{Error, ConfigError},
     matrix::{lin_solve, lu_decomp, Matrix, MatrixStorage},
     methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
     ivp::IVP,
@@ -10,9 +10,9 @@ use crate::{
     status::Status,
     Float,
 };
+use bon::Builder;
 
 const MAX_ORDER: usize = 5;
-const NEWTON_MAXITER_DEFAULT: usize = 4;
 const MIN_FACTOR: Float = 0.2;
 const MAX_FACTOR: Float = 10.0;
 const SAFETY_DEFAULT: Float = 0.9;
@@ -21,9 +21,41 @@ const BDF_COEFFS_PER_STATE: usize = MAX_ORDER + 2;
 // Fixed coefficients
 const KAPPA: [Float; MAX_ORDER + 1] = [0.0, -0.1850, -1.0 / 9.0, -0.0823, -0.0415, 0.0];
 
-/// BDF — variable order (1..5) Backward Differentiation Formula solver.
-#[derive(Clone, Copy, Debug)]
-pub struct BDF;
+/// BDF — variable order (1..5) Backward Differentiation Formula solver with configuration.
+#[derive(Builder, Clone, Debug)]
+pub struct BDF {
+    /// Maximum number of steps (default: 100_000)
+    #[builder(default = 100_000)]
+    pub max_steps: usize,
+    /// Maximum step size (default: None = |xend - x|)
+    pub max_step: Option<Float>,
+    /// Minimum step size (default: None = 0.0)
+    pub min_step: Option<Float>,
+    /// Maximum Newton iterations per step (default: 4)
+    #[builder(default = 4)]
+    pub newton_maxiter: usize,
+    /// Newton convergence tolerance (default: None = derived from tolerances)
+    pub newton_tol: Option<Float>,
+    /// Jacobian matrix storage (default: Full)
+    #[builder(default = MatrixStorage::Full)]
+    pub jac_storage: MatrixStorage,
+    /// Initial step size (default: None = automatic)
+    pub first_step: Option<Float>,
+}
+
+impl Default for BDF {
+    fn default() -> Self {
+        Self {
+            max_steps: 100_000,
+            max_step: None,
+            min_step: None,
+            newton_maxiter: 4,
+            newton_tol: None,
+            jac_storage: MatrixStorage::Full,
+            first_step: None,
+        }
+    }
+}
 
 impl BDF {
     /// Solve an initial value problem using the variable-order BDF(1-5) method.
@@ -37,10 +69,9 @@ impl BDF {
     ///
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing `IVP`.
-    /// - `x`: Initial independent variable value.
+    /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
-    /// - `y`: Mutable slice containing the initial state; on success contains the
-    ///   state at the final time.
+    /// - `y0`: Slice containing the initial state.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
     ///
     /// ## Output Control
@@ -48,102 +79,83 @@ impl BDF {
     ///   intermediate output. If provided, the callback may receive a dense
     ///   interpolant for efficient interpolation within accepted steps.
     ///
-    /// ## Optional Settings
-    ///
-    /// Below are optional parameters to customize the integrator's settings.
-    /// If `None` is provided the default value is used. The default values
-    /// should be suitable for most problems.
-    ///
-    /// - `nmax` (default 100_000): Maximum number of integration steps.
-    /// - `max_step` (default `|xend - x|`): Maximum step size.
-    /// - `min_step` (default `0.0`): Minimum step size.
-    /// - `newton_maxiter` (default `4`): Maximum Newton iterations per step.
-    /// - `newton_tol` (default derived from tolerances): Newton convergence tolerance.
-    /// - `jac_storage` (default `Full`): Matrix storage type for Jacobian.
-    /// - `h0` (default heuristic): Initial step size guess.
+    /// Solver settings are configured via the `BDF` struct fields.
     ///
     /// # Returns
-    /// A `Result` with `IntegrationResult` on success or a vector of `Error`
-    /// values describing input validation issues.
+    /// A `Result` with `IntegrationResult` on success or an `Error` if validation fails.
     pub fn solve<F, S>(
+        &self,
         f: &F,
-        mut x: Float,
+        x0: Float,
+        y0: &[Float],
         xend: Float,
-        y: &mut [Float],
-        mut rtol: Tolerance,
-        mut atol: Tolerance,
+        rtol: Tolerance,
+        atol: Tolerance,
         mut solout: Option<&mut S>,
-        nmax: Option<usize>,
-        max_step: Option<Float>,
-        min_step: Option<Float>,
-        newton_maxiter: Option<usize>,
-        newton_tol: Option<Float>,
-        jac_storage: Option<MatrixStorage>,
-        h0: Option<Float>,
-    ) -> Result<IntegrationResult, Vec<Error>>
+    ) -> Result<IntegrationResult, Error>
     where
         F: IVP,
         S: SolOut,
     {
+        let mut x = x0;
+        let mut y = y0.to_vec();
         let n = y.len();
         if n == 0 {
             return Ok(IntegrationResult::new(
-                xend,
                 0.0,
                 Status::Success,
                 Evals::new(),
                 Steps::new(),
             ));
         }
-
-        let mut errors = Vec::new();
-
+        
         // Convert tolerances to per-component vectors and validate non-negativity/length
         for i in 0..n {
             if rtol[i] < 0.0 {
-                errors.push(Error::NegativeTolerance {
+                return Err(Error::Config(ConfigError::NegativeTolerance {
                     kind: "relative",
                     index: i,
                     value: rtol[i],
-                });
-                rtol[i] = rtol[i].abs();
+                }));
             }
             if atol[i] < 0.0 {
-                errors.push(Error::NegativeTolerance {
+                return Err(Error::Config(ConfigError::NegativeTolerance {
                     kind: "absolute",
                     index: i,
                     value: atol[i],
-                });
-                atol[i] = atol[i].abs();
+                }));
             }
         }
 
-        let nmax = nmax.unwrap_or(100_000);
+        let nmax = self.max_steps;
         if nmax == 0 {
-            errors.push(Error::NMaxMustBePositive(0));
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "max_steps",
+                value: nmax,
+            }));
         }
 
         let diff = xend - x;
         let direction = diff.signum();
 
-        let hmax = max_step.unwrap_or_else(|| (xend - x).abs()).abs();
-        let hmin = min_step.unwrap_or(0.0).abs();
-
-        if !errors.is_empty() {
-            return Err(errors);
-        }
+        let hmax = self.max_step.unwrap_or_else(|| (xend - x).abs()).abs();
+        let hmin = self.min_step.unwrap_or(0.0).abs();
 
         let mut evals = Evals::new();
         let mut steps = Steps::new();
 
         // Workspace vectors
         let mut f0 = vec![0.0; n];
-        f.ode(x, y, &mut f0);
+        f.ode(x, &y, &mut f0);
         evals.ode += 1;
 
-        let mut jac = Matrix::from_storage(n, n, jac_storage.unwrap_or(MatrixStorage::Full));
-        f.jac(x, y, &mut jac);
+        let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
+        f.jac(x, &y, &mut jac);
         evals.jac += 1;
+        
+        // Track when LU decomposition is current
+        let mut lu_is_current = false;
+        let mut current_c: Float = 0.0;
 
         // Precompute gamma, alpha, error_const arrays
         let mut gamma = [0.0; MAX_ORDER + 1];
@@ -163,7 +175,7 @@ impl BDF {
             .iter(n)
             .fold(Float::INFINITY, Float::min)
             .max(Float::EPSILON);
-        let mut newton_tol_val = newton_tol.unwrap_or_else(|| {
+        let mut newton_tol_val = self.newton_tol.unwrap_or_else(|| {
             let eps_term = 10.0 * Float::EPSILON / rtol_min;
             let sqrt_term = rtol_min.sqrt().min(0.03);
             eps_term.max(sqrt_term)
@@ -171,19 +183,24 @@ impl BDF {
         if newton_tol_val <= 0.0 {
             newton_tol_val = 1e-9;
         }
-        let newton_maxiter_val = newton_maxiter.unwrap_or(NEWTON_MAXITER_DEFAULT).max(1);
+        let newton_maxiter_val = self.newton_maxiter.max(1);
 
         // Initial step size selection
-        let mut h_abs = if let Some(h) = h0 {
-            if h == 0.0 || h.signum() != direction {
-                errors.push(Error::InvalidStepSize(h));
+        let mut h_abs = if let Some(h) = self.first_step {
+            // Auto-correct the sign - just use absolute value
+            // since h_abs is always positive and direction is applied later
+            if h == 0.0 {
+                return Err(Error::Config(ConfigError::InvalidStepSize {
+                    value: h,
+                    expected_sign: direction,
+                }));
             }
             h.abs()
         } else {
             let mut f1 = vec![0.0; n];
             let mut y1 = vec![0.0; n];
             let guess = hinit(
-                f, x, y, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
+                f, x, &y, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
             );
             // Ensure x + h isn't larger than xend
             let diff = xend - x;
@@ -196,16 +213,12 @@ impl BDF {
             guess.abs()
         };
 
-        if !errors.is_empty() {
-            return Err(errors);
-        }
-
         h_abs = h_abs.min(hmax.max(Float::MIN_POSITIVE));
         let mut current_h = h_abs;
 
         // Difference arrays (order+3) x n
         let mut d = vec![vec![0.0; n]; MAX_ORDER + 3];
-        d[0].copy_from_slice(y);
+        d[0].copy_from_slice(&y);
         for i in 0..n {
             d[1][i] = f0[i] * current_h * direction;
         }
@@ -229,23 +242,21 @@ impl BDF {
         let mut cont = vec![0.0; n * CONT_BLOCK];
         // Initial callback
         if let Some(sol) = solout.as_mut() {
-            match sol.solout::<DenseBdf15>(x, x, y, None) {
+            match sol.solout(x, &mut x, &mut y, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
-                        x,
                         direction * current_h,
                         Status::UserInterrupt,
                         evals,
                         steps,
                     ));
                 }
-                ControlFlag::ModifiedSolution(nx, ny) => {
-                    x = nx;
-                    y.copy_from_slice(&ny);
-                    f.ode(x, y, &mut f0);
+                ControlFlag::ModifiedSolution => {
+                    // Update derivatives at new (x, y).
+                    f.ode(x, &y, &mut f0);
                     evals.ode += 1;
-                    d[0].copy_from_slice(y);
+                    d[0].copy_from_slice(&y);
                     for i in 0..n {
                         d[1][i] = f0[i] * current_h * direction;
                     }
@@ -254,8 +265,9 @@ impl BDF {
                     }
                     order = 1;
                     n_equal_steps = 0;
-                    f.jac(x, y, &mut jac);
+                    f.jac(x, &y, &mut jac);
                     evals.jac += 1;
+                    lu_is_current = false;
                 }
                 ControlFlag::XOut(_) => {}
             }
@@ -279,6 +291,7 @@ impl BDF {
                 h_try = hmax;
                 current_h = h_try;
                 n_equal_steps = 0;
+                lu_is_current = false;  // Step size changed
             }
             if h_try < hmin && hmin > 0.0 {
                 let factor = (hmin / h_try).max(1.0);
@@ -286,6 +299,7 @@ impl BDF {
                 h_try = hmin;
                 current_h = h_try;
                 n_equal_steps = 0;
+                lu_is_current = false;  // Step size changed
             }
 
             let mut h_signed = direction * h_try;
@@ -304,6 +318,7 @@ impl BDF {
                 h_signed = direction * h_try;
                 x_new = x + h_signed;
                 n_equal_steps = 0;
+                lu_is_current = false;  // Step size changed
             }
 
             // Step size guard against stagnation
@@ -338,24 +353,32 @@ impl BDF {
                 psi[i] = s / alpha[order];
             }
 
-            // Build and factor LU of (I - c*J)
+            // Build and factor LU of (I - c*J) only when needed
             let c = h_signed / alpha[order];
-            for r in 0..n {
-                for c_idx in 0..n {
-                    lu_matrix[(r, c_idx)] = -c * jac[(r, c_idx)];
+            
+            // Rebuild LU if: not current, or c coefficient changed significantly, or Jacobian was refreshed
+            if !lu_is_current || (c - current_c).abs() / c.abs().max(1.0) > 0.1 {
+                for r in 0..n {
+                    for c_idx in 0..n {
+                        lu_matrix[(r, c_idx)] = -c * jac[(r, c_idx)];
+                    }
+                    lu_matrix[(r, r)] += 1.0;
                 }
-                lu_matrix[(r, r)] += 1.0;
-            }
-            evals.lu += 1;
-            match lu_decomp(&mut lu_matrix, &mut pivot) {
-                Ok(()) => {}
-                Err(_) => {
-                    let factor = 0.5;
-                    change_d(&mut d, order, factor, &mut scratch_change);
-                    current_h *= factor;
-                    n_equal_steps = 0;
-                    steps.rejected += 1;
-                    continue 'main_loop;
+                evals.lu += 1;
+                match lu_decomp(&mut lu_matrix, &mut pivot) {
+                    Ok(()) => {
+                        lu_is_current = true;
+                        current_c = c;
+                    }
+                    Err(_) => {
+                        let factor = 0.5;
+                        change_d(&mut d, order, factor, &mut scratch_change);
+                        current_h *= factor;
+                        n_equal_steps = 0;
+                        lu_is_current = false;
+                        steps.rejected += 1;
+                        continue 'main_loop;
+                    }
                 }
             }
 
@@ -423,9 +446,11 @@ impl BDF {
                 iters += 1;
             }
             if !converged {
-                // Refresh Jacobian and retry step unless already tried
+                // Always refresh Jacobian on Newton failure to handle discontinuities
                 f.jac(x_new, &y_predict, &mut jac);
                 evals.jac += 1;
+                lu_is_current = false;
+                
                 change_d(&mut d, order, 0.5, &mut scratch_change);
                 current_h *= 0.5;
                 n_equal_steps = 0;
@@ -490,19 +515,18 @@ impl BDF {
 
             // Callback
             if let Some(sol) = solout.as_mut() {
-                let interp = DenseBdf15::new(cont.as_ptr(), cont.len(), x_start, h_signed);
-                match sol.solout::<DenseBdf15>(x - h_signed, x, y, Some(&interp)) {
+                let interpolant = StepInterpolant::new(&cont, x_start, h_signed, Self::interpolate);
+                match sol.solout(x - h_signed, &mut x, &mut y, Some(&interpolant)) {
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
                         break;
                     }
-                    ControlFlag::ModifiedSolution(nx, ny) => {
-                        x = nx;
-                        y.copy_from_slice(&ny);
-                        f.ode(x, y, &mut f0);
+                    ControlFlag::ModifiedSolution => {
+                        // Update derivatives at new (x, y).
+                        f.ode(x, &y, &mut f0);
                         evals.ode += 1;
-                        d[0].copy_from_slice(y);
+                        d[0].copy_from_slice(&y);
                         for i in 0..n {
                             d[1][i] = f0[i] * current_h * direction;
                         }
@@ -511,8 +535,9 @@ impl BDF {
                         }
                         order = 1;
                         n_equal_steps = 0;
-                        f.jac(x, y, &mut jac);
+                        f.jac(x, &y, &mut jac);
                         evals.jac += 1;
+                        lu_is_current = false;
                     }
                     ControlFlag::XOut(_) => {}
                 }
@@ -523,7 +548,7 @@ impl BDF {
                 break;
             }
 
-            // Order/step-size adaptation when enough equal steps
+            // Order and step-size adaptation when sufficient equal steps observed
             if n_equal_steps >= order + 1 {
                 let mut err_m = Float::INFINITY;
                 let mut err_p = Float::INFINITY;
@@ -540,20 +565,21 @@ impl BDF {
                     err_p = weighted_rms_scaled(&rhs, &scale);
                 }
 
+                // SciPy approach: compute factors = error_norms ** (-1 / (order + k))
+                // When error_norm is 0, this gives infinity, which gets capped by MAX_FACTOR
                 let errors = [err_m, error_norm, err_p];
                 let mut factors = [0.0; 3];
                 for (idx, err) in errors.iter().enumerate() {
                     let exponent = -1.0 / (order as Float + idx as Float);
-                    if err.is_finite() && *err > 0.0 {
-                        factors[idx] = err.powf(exponent);
-                    } else {
-                        factors[idx] = 0.0;
-                    }
+                    // 0.0.powf(negative) = inf in Rust, matching SciPy behavior
+                    factors[idx] = err.powf(exponent);
                 }
-                let (best_idx, best_factor) = factors
+                
+                // Find best order change: argmax(factors) - 1
+                let (best_idx, _) = factors
                     .iter()
                     .enumerate()
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or((1, &1.0));
 
                 let mut new_order = order;
@@ -563,22 +589,24 @@ impl BDF {
                     new_order += 1;
                 }
 
-                let mut step_factor = (*best_factor).max(1.0);
-                step_factor = (safety * step_factor).min(MAX_FACTOR);
+                // SciPy: factor = min(MAX_FACTOR, safety * max(factors))
+                let max_factor = factors.iter().cloned().fold(0.0, Float::max);
+                let step_factor = (safety * max_factor).min(MAX_FACTOR);
+                let old_order = order;  // Save before updating
                 change_d(&mut d, new_order, step_factor, &mut scratch_change);
                 current_h *= step_factor;
                 order = new_order;
                 n_equal_steps = 0;
-            } else {
+                lu_is_current = false;  // Order or step changed
+                
+                if new_order != old_order {
+                    f.jac(x, &y, &mut jac);
+                    evals.jac += 1;
+                }
             }
-
-            // Update Jacobian for next step
-            f.jac(x, y, &mut jac);
-            evals.jac += 1;
         }
 
         Ok(IntegrationResult::new(
-            x,
             direction * current_h,
             status,
             evals,
@@ -593,6 +621,12 @@ impl BDF {
         }
         const BLOCK: usize = BDF_COEFFS_PER_STATE;
         let n = yi.len();
+        
+        // Handle empty state vector case
+        if n == 0 {
+            return;
+        }
+        
         debug_assert_eq!(cont.len(), n * BLOCK);
 
         let order = cont[BLOCK - 1].round().clamp(1.0, MAX_ORDER as Float) as usize;
@@ -695,38 +729,4 @@ fn matmul(a: &[Vec<Float>], b: &[Vec<Float>]) -> Vec<Vec<Float>> {
         }
     }
     res
-}
-
-struct DenseBdf15 {
-    cont_ptr: *const Float,
-    cont_len: usize,
-    xold: Float,
-    h: Float,
-}
-
-impl DenseBdf15 {
-    fn new(cont_ptr: *const Float, cont_len: usize, xold: Float, h: Float) -> Self {
-        Self {
-            cont_ptr,
-            cont_len,
-            xold,
-            h,
-        }
-    }
-}
-
-impl Interpolate for DenseBdf15 {
-    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            BDF::interpolate(xi, yi, cont, self.xold, self.h);
-        }
-    }
-
-    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        unsafe {
-            let cont = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            (cont.to_vec(), self.xold, self.h)
-        }
-    }
 }

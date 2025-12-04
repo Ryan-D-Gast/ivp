@@ -1,6 +1,7 @@
 //! Event Configuration and Handling
 
 /// Configuration for event function evaluation.
+#[derive(Clone, Copy, Debug)]
 pub struct EventConfig {
     /// Direction filter for zero crossings.
     pub direction: Direction,
@@ -54,6 +55,7 @@ impl EventConfig {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     /// Detect all zero crossings.
     All,

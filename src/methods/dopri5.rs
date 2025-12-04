@@ -20,35 +20,90 @@
 
 use crate::{
     Float,
-    error::Error,
-    interpolate::Interpolate,
+    dense::StepInterpolant,
+    error::{Error, ConfigError},
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
+use bon::Builder;
 
-/// DOPRI5 - Dormand–Prince 5(4) explicit Runge–Kutta integrator.
-#[derive(Clone, Copy, Debug)]
-pub struct DOPRI5;
+/// DOPRI5 - Dormand–Prince 5(4) explicit Runge–Kutta integrator with configuration.
+#[derive(Builder, Clone, Debug)]
+pub struct DOPRI5 {
+    /// Machine rounding unit (default: 2.3e-16 for f64)
+    #[builder(default = 2.3e-16)]
+    pub uround: Float,
+    
+    /// Safety factor for step size control (default: 0.9)
+    #[builder(default = 0.9)]
+    pub safety_factor: Float,
+    
+    /// Minimum step scaling factor (default: 0.2)
+    #[builder(default = 0.2)]
+    pub scale_min: Float,
+    
+    /// Maximum step scaling factor (default: 10.0)
+    #[builder(default = 10.0)]
+    pub scale_max: Float,
+    
+    /// Stabilization parameter for step control (default: 0.04)
+    #[builder(default = 0.04)]
+    pub beta: Float,
+    
+    /// Maximum step size (default: None = |xend - x|)
+    pub max_step: Option<Float>,
+    
+    /// Initial step size (default: None = automatic)
+    pub first_step: Option<Float>,
+    
+    /// Maximum number of steps (default: 100_000)
+    #[builder(default = 100_000)]
+    pub max_steps: usize,
+    
+    /// Interval for stiffness detection (default: 1000 steps)
+    #[builder(default = 1000)]
+    pub stiff_test: usize,
+    
+    /// Enable dense output (default: true)
+    #[builder(default = true)]
+    pub dense_output: bool,
+}
+
+impl Default for DOPRI5 {
+    fn default() -> Self {
+        Self {
+            uround: 2.3e-16,
+            safety_factor: 0.9,
+            scale_min: 0.2,
+            scale_max: 10.0,
+            beta: 0.04,
+            max_step: None,
+            first_step: None,
+            max_steps: 100_000,
+            stiff_test: 1000,
+            dense_output: true,
+        }
+    }
+}
 
 impl DOPRI5 {
     /// Dormand–Prince DOPRI5 — explicit embedded Runge–Kutta 5(4) solver with
     /// adaptive step-size control and optional dense output.
     ///
-    /// This function integrates the autonomous system `y' = f(x, y)` from `x` to
-    /// `xend`, advancing the provided state buffer `y` in-place. It performs
-    /// classical error control (embedded estimates) and, optionally, computes
-    /// dense-output coefficients for continuous interpolation inside each step.
+    /// This function integrates the autonomous system `y' = f(x, y)` from `x0` to
+    /// `xend`. It performs classical error control (embedded estimates) and,
+    /// optionally, computes dense-output coefficients for continuous interpolation
+    /// inside each step.
     ///
     /// # Arguments
     ///
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing `IVP`.
-    /// - `x`: Initial independent variable value.
+    /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
-    /// - `y`: Mutable slice containing the initial state; on success contains the
-    ///   state at the final time.
+    /// - `y0`: Slice containing the initial state.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
     ///
     /// ## Output Control
@@ -58,124 +113,88 @@ impl DOPRI5 {
     /// - `dense_output`: If `true`, dense‑output coefficients are computed every
     ///   accepted step to enable fast interpolation via the provided interpolant.
     ///
-    /// ## Optional Settings
-    ///
-    /// Below are optional parameters to customize the integrator's settings.
-    /// If `None` is provided the default value is used. The default values
-    /// should be suitable for most problems.
-    ///
-    /// - `uround` (default `2.3e-16`)
-    /// - `safety_factor` (default `0.9`)
-    /// - `scale_min` (default sets `facc1 = 5`)
-    /// - `scale_max` (default sets `facc2 = 1/10`)
-    /// - `beta` (default `0.04` — stabilization parameter)
-    /// - `h_max` (default `|xend - x|`)
-    /// - `h0` (initial step; heuristic if `None`)
-    /// - `max_steps` (default `100_000`)
-    /// - `stiff_test` (steps between stiffness tests, default `1000`)
+    /// Solver settings (`uround`, `safety_factor`, `scale_min`, `scale_max`, `beta`, 
+    /// `max_step`, `first_step`, `max_steps`, `stiff_test`) are configured via the 
+    /// `DOPRI5` struct fields.
     ///
     /// # Returns
-    /// A `Result` with `IntegrationResult` on success or a vector of `Error`
-    /// values describing input validation issues.
+    /// A `Result` with `IntegrationResult` on success or an `Error` if validation fails.
     pub fn solve<F, S>(
+        &self,
         f: &F,
-        mut x: Float,
+        x0: Float,
+        y0: &[Float],
         xend: Float,
-        y: &mut [Float],
         rtol: Tolerance,
         atol: Tolerance,
         mut solout: Option<&mut S>,
-        dense_output: bool,
-        uround: Option<Float>,
-        safety_factor: Option<Float>,
-        scale_min: Option<Float>,
-        scale_max: Option<Float>,
-        beta: Option<Float>,
-        h_max: Option<Float>,
-        h0: Option<Float>,
-        max_steps: Option<usize>,
-        stiff_test: Option<usize>,
-    ) -> Result<IntegrationResult, Vec<Error>>
+    ) -> Result<IntegrationResult, Error>
     where
         F: IVP,
         S: SolOut,
     {
+        // Create mutable copies for the solver to mutate
+        let mut x = x0;
+        let mut y = y0.to_vec();
+
         // --- Input Validation ---
-        let mut errors: Vec<Error> = Vec::new();
 
         // Rounding Unit
-        let uround = match uround {
-            Some(u) => {
-                if u <= 1e-35 || u >= 1.0 {
-                    errors.push(Error::URoundOutOfRange(u));
-                }
-                u
-            }
-            None => 2.3e-16,
-        };
+        let uround = self.uround;
+        if uround <= 1e-35 || uround >= 1.0 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "uround",
+                value: uround,
+                min: 1e-35,
+                max: 1.0,
+            }));
+        }
 
         // Safety Factor
-        let safety_factor = match safety_factor {
-            Some(f) => {
-                if f >= 1.0 || f <= 1e-4 {
-                    errors.push(Error::SafetyFactorOutOfRange(f));
-                }
-                f
-            }
-            None => 0.9,
-        };
+        let safety_factor = self.safety_factor;
+        if safety_factor >= 1.0 || safety_factor <= 1e-4 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "safety_factor",
+                value: safety_factor,
+                min: 1e-4,
+                max: 1.0,
+            }));
+        }
 
         // Parameters for step size selection
-        let facc1 = match scale_min {
-            Some(f) => 1.0 / f,
-            None => 5.0,
-        };
-        let facc2 = match scale_max {
-            Some(f) => 1.0 / f,
-            None => 1.0 / 10.0,
-        };
+        let facc1 = 1.0 / self.scale_min;
+        let facc2 = 1.0 / self.scale_max;
 
         // Beta for step control stabilization
-        let beta = match beta {
-            Some(b) => {
-                if b > 0.2 {
-                    errors.push(Error::BetaTooLarge(b));
-                }
-                b
-            }
-            None => 0.04,
-        };
+        let beta = self.beta;
+        if beta > 0.2 {
+            return Err(Error::Config(ConfigError::OutOfRange {
+                parameter: "beta",
+                value: beta,
+                min: 0.0,
+                max: 0.2,
+            }));
+        }
 
         // Maximum step size
-        let h_max = match h_max {
-            Some(h) => h.abs(),
-            None => (xend - x).abs(),
-        };
+        let h_max = self.max_step.unwrap_or((xend - x).abs());
 
         // Maximum Number of Steps
-        let nmax = match max_steps {
-            Some(n) => {
-                if n <= 0 {
-                    errors.push(Error::NMaxMustBePositive(n));
-                }
-                n
-            }
-            None => 100_000,
-        };
+        let nmax = self.max_steps;
+        if nmax == 0 {
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "max_steps",
+                value: nmax,
+            }));
+        }
 
         // Number of steps before performing a stiffness test
-        let nstiff = match stiff_test {
-            Some(n) => {
-                if n <= 0 {
-                    errors.push(Error::NStiffMustBePositive(n));
-                }
-                n
-            }
-            None => 1000,
-        };
-
-        if !errors.is_empty() {
-            return Err(errors);
+        let nstiff = self.stiff_test;
+        if nstiff == 0 {
+            return Err(Error::Config(ConfigError::MustBePositive {
+                parameter: "stiff_test",
+                value: nstiff,
+            }));
         }
 
         // --- Declarations ---
@@ -210,39 +229,29 @@ impl DOPRI5 {
         // --- Initializations ---
         f.ode(x, &y, &mut k1);
         evals.ode += 1;
-        let mut h = match h0 {
+        let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, x, &y, posneg, &k1, &mut k2, &mut y1, 5, h_max, &atol, &rtol,
+                    f, x, &y, posneg, &k1, &mut k2, &mut k3, 5, h_max, &atol, &rtol,
                 )
             }
         };
 
-        // Interpolator for optional dense output to SolOut
-        let interpolator = &DenseOutput::new(
-            cont.as_ptr(),
-            cont.len(),
-            &xold as *const Float,
-            &h as *const Float,
-        );
-
         // Initial SolOut call
         if let Some(solout) = solout.as_mut() {
-            match solout.solout::<DenseOutput>(xold, x, &y, None) {
+            match solout.solout(xold, &mut x, &mut y, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
-                        x,
                         h,
                         status: Status::UserInterrupt,
                         evals,
                         steps,
                     });
                 }
-                ControlFlag::ModifiedSolution(xm, ym) => {
-                    x = xm;
-                    y.copy_from_slice(&ym);
+                ControlFlag::ModifiedSolution => {
+                    // Recompute k1 at new (x, y).
                     f.ode(x, &y, &mut k1);
                     evals.ode += 1;
                 }
@@ -317,7 +326,7 @@ impl DOPRI5 {
 
             // Prepare last segment of dense output before recalculating k4
             event = xout.map_or(false, |xo| xo <= xph);
-            if dense_output || event {
+            if self.dense_output || event {
                 for i in 0..n {
                     cont[4 * n + i] = h
                         * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
@@ -382,7 +391,7 @@ impl DOPRI5 {
                 }
 
                 // Prepare dense output
-                if dense_output || event {
+                if self.dense_output || event {
                     for i in 0..n {
                         let ydiff = y1[i] - y[i];
                         let bspl = h * k1[i] - ydiff;
@@ -400,20 +409,19 @@ impl DOPRI5 {
                 x = xph;
 
                 if let Some(solout) = solout.as_mut() {
-                    let interpolation = if dense_output || event {
-                        Some(interpolator)
+                    let interpolant = if self.dense_output || event {
+                        Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {
                         None
                     };
-                    match solout.solout(xold, x, &y, interpolation) {
+                    match solout.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
-                        ControlFlag::ModifiedSolution(xm, ym) => {
-                            x = xm;
-                            y.copy_from_slice(&ym);
-                            f.ode(x, &y, &mut k2);
+                        ControlFlag::ModifiedSolution => {
+                            // Update derivatives at new (x, y).
+                            f.ode(x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
@@ -452,7 +460,7 @@ impl DOPRI5 {
             h = hnew;
         }
 
-        Ok(IntegrationResult::new(x, h, status, evals, steps))
+        Ok(IntegrationResult::new(h, status, evals, steps))
     }
 
     /// Continuous output function for DOPRI5
@@ -466,50 +474,6 @@ impl DOPRI5 {
                     * (cont[n + i]
                         + theta1
                             * (cont[2 * n + i] + theta * (cont[3 * n + i] + theta1 * cont[4 * n + i])));
-        }
-    }
-}
-
-/// Dense output interpolator for DOPRI5
-struct DenseOutput {
-    cont_ptr: *const Float,
-    cont_len: usize,
-    xold_ptr: *const Float,
-    h_ptr: *const Float,
-}
-
-impl DenseOutput {
-    fn new(
-        cont_ptr: *const Float,
-        cont_len: usize,
-        xold_ptr: *const Float,
-        h_ptr: *const Float,
-    ) -> Self {
-        Self {
-            cont_ptr,
-            cont_len,
-            xold_ptr,
-            h_ptr,
-        }
-    }
-}
-
-impl Interpolate for DenseOutput {
-    fn interpolate(&self, xi: Float, yi: &mut [Float]) {
-        unsafe {
-            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            DOPRI5::interpolate(xi, yi, cont_slice, xold, h);
-        }
-    }
-
-    fn get_cont(&self) -> (Vec<Float>, Float, Float) {
-        unsafe {
-            let cont_slice = std::slice::from_raw_parts(self.cont_ptr, self.cont_len);
-            let xold = *self.xold_ptr;
-            let h = *self.h_ptr;
-            (cont_slice.to_vec(), xold, h)
         }
     }
 }

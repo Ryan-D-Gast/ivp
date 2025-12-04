@@ -1,6 +1,6 @@
 //! User defined callback hook executed after each accepted step.
 
-use crate::{Float, interpolate::Interpolate};
+use crate::{dense::StepInterpolant, Float};
 
 /// Callback hook executed after each accepted step.
 ///
@@ -8,16 +8,15 @@ use crate::{Float, interpolate::Interpolate};
 /// solution as the integrator progresses. The callback is invoked once before
 /// the main loop (with `nstep == 1`) and after every accepted step. The
 /// arguments are:
-/// - `nstep`: number of accepted steps so far (starts at 1 for the initial call),
 /// - `xold`: the previous abscissa (left end of the last accepted step),
 /// - `x`: the new abscissa after the accepted step (xold + h),
 /// - `y`: the integrator's current solution at `x`,
-/// - `interpolator`: an object that can interpolate the solution between xold and x,
-/// - `h`: the step size used for the accepted step.
+/// - `interpolant`: an optional interpolator for evaluating the solution at
+///   any point within the step interval [xold, x].
 ///
 /// Typical uses:
 /// - print or log the solution at equidistant output points by using the
-///   `interpolator` to interpolate inside [xold, x];
+///   `interpolant` to interpolate inside [xold, x];
 /// - detect events; or modify the solution in-place and return
 ///   `ControlFlag::ModifiedSolution` to ask the integrator to re-evaluate
 ///   derivatives at the changed state.
@@ -36,14 +35,17 @@ use crate::{Float, interpolate::Interpolate};
 ///     dx: f64,
 /// }
 /// impl SolOut for Printer {
-///     fn solout(&mut self, xold, x, y, interpolator) -> ControlFlag {
-///         if xold == x {
+///     fn solout(&mut self, xold, x, y, interpolant) -> ControlFlag {
+///         if xold == *x {
 ///             println!("x = {}, y = {:?}", xold, y);
 ///             self.xout = xold + self.dx;
 ///         }
-///         while self.xout <= x {
-///             let yi = interpolator.interpolate(self.xout);
-///             println!("x = {}, y = {:?}", self.xout, yi);
+///         while self.xout <= *x {
+///             if let Some(interp) = interpolant {
+///                 let mut yi = vec![0.0; y.len()];
+///                 interp.interpolate(self.xout, &mut yi);
+///                 println!("x = {}, y = {:?}", self.xout, yi);
+///             }
 ///             self.xout += self.dx;
 ///         }
 ///         ControlFlag::Continue
@@ -51,12 +53,12 @@ use crate::{Float, interpolate::Interpolate};
 /// }
 /// ```
 pub trait SolOut {
-    fn solout<I: Interpolate>(
+    fn solout(
         &mut self,
         xold: Float,
-        x: Float,
-        y: &[Float],
-        interpolator: Option<&I>,
+        x: &mut Float,
+        y: &mut [Float],
+        interpolant: Option<&StepInterpolant<'_>>,
     ) -> ControlFlag;
 }
 
@@ -72,5 +74,5 @@ pub enum ControlFlag {
     Continue,
     Interrupt,
     XOut(Float),
-    ModifiedSolution(Float, Vec<Float>),
+    ModifiedSolution,
 }

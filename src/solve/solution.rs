@@ -1,14 +1,14 @@
 //! Rich solution type for solve_ivp: sampled data, stats, and dense evaluation helpers.
 
-use crate::{Float, error::Error, solve::cont::ContinuousOutput, status::Status};
+use crate::{Float, error::{Error, InterpolationError}, solve::cont::ContinuousOutput, status::Status};
 
 /// Rich solution of solve_ivp: sampled data plus basic stats
 #[derive(Debug, Clone)]
 pub struct Solution {
     pub t: Vec<Float>,
     pub y: Vec<Vec<Float>>,
-    pub t_events: Vec<Float>,
-    pub y_events: Vec<Vec<Float>>,
+    pub t_events: Vec<Vec<Float>>,
+    pub y_events: Vec<Vec<Vec<Float>>>,
     pub nfev: usize,
     pub njev: usize,
     pub nlu: usize,
@@ -26,13 +26,21 @@ impl Solution {
         let dense = self
             .continuous_sol
             .as_ref()
-            .ok_or(Error::DenseOutputDisabled)?;
-        let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
+            .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
+        let (start, end) = dense.t_span().ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
         let (lo, hi) = (start.min(end), start.max(end));
         if t < lo || t > hi {
-            return Err(Error::EvaluationOutOfRange(t));
+            return Err(Error::Interpolation(InterpolationError::OutOfRange {
+                t,
+                t_start: start,
+                t_end: end,
+            }));
         }
-        dense.evaluate(t).ok_or(Error::EvaluationOutOfRange(t))
+        dense.evaluate(t).ok_or(Error::Interpolation(InterpolationError::OutOfRange {
+            t,
+            t_start: start,
+            t_end: end,
+        }))
     }
 
     /// Evaluate the continuous solution at many time points.
@@ -41,12 +49,16 @@ impl Solution {
         let dense = self
             .continuous_sol
             .as_ref()
-            .ok_or(Error::DenseOutputDisabled)?;
-        let (start, end) = dense.t_span().ok_or(Error::DenseOutputDisabled)?;
+            .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
+        let (start, end) = dense.t_span().ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
         let (lo, hi) = (start.min(end), start.max(end));
         for &t in ts {
             if t < lo || t > hi {
-                return Err(Error::EvaluationOutOfRange(t));
+                return Err(Error::Interpolation(InterpolationError::OutOfRange {
+                    t,
+                    t_start: start,
+                    t_end: end,
+                }));
             }
         }
         let results = dense.evaluate_many(ts);
@@ -63,14 +75,6 @@ impl Solution {
         SolutionIter {
             t_iter: self.t.iter(),
             y_iter: self.y.iter(),
-        }
-    }
-
-    /// Iterate over stored event pairs (t_event, y_event).
-    pub fn events(&self) -> SolutionIter<'_> {
-        SolutionIter {
-            t_iter: self.t_events.iter(),
-            y_iter: self.y_events.iter(),
         }
     }
 }

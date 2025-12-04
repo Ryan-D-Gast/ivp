@@ -26,7 +26,7 @@ fn backward_integration_works() {
             assert!((y_mid[0] - y_ref0).abs() < 1e-6);
             assert!((y_mid[1] - y_ref1).abs() < 1e-6);
         } else {
-            panic!("no dense span");
+            panic!("expected a dense solution span for method {:?}, but none was returned", method);
         }
     }
 }
