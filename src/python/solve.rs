@@ -183,7 +183,7 @@ pub fn solve_ivp_py<'py>(
     };
 
     // Parse solver options
-    let (rtol, atol, max_step_opt, first_step_opt) = parse_options(&options)?;
+    let (rtol, atol, max_step_opt, first_step_opt, max_steps_opt) = parse_options(&options)?;
 
     // Build solver options
     let opts = Options::builder()
@@ -192,6 +192,7 @@ pub fn solve_ivp_py<'py>(
         .maybe_t_eval(t_eval_vec)
         .maybe_max_step(max_step_opt)
         .maybe_first_step(first_step_opt)
+        .maybe_max_steps(max_steps_opt)
         .rtol(rtol)
         .atol(atol)
         .build();
@@ -286,11 +287,12 @@ fn parse_events<'py>(
 /// Parse solver options from kwargs.
 fn parse_options(
     options: &Option<Bound<'_, PyDict>>,
-) -> PyResult<(Tolerance, Tolerance, Option<Float>, Option<Float>)> {
+) -> PyResult<(Tolerance, Tolerance, Option<Float>, Option<Float>, Option<usize>)> {
     let mut rtol: Tolerance = Tolerance::Scalar(1e-3);
     let mut atol: Tolerance = Tolerance::Scalar(1e-6);
     let mut max_step: Option<Float> = None;
     let mut first_step: Option<Float> = None;
+    let mut max_steps: Option<usize> = None;
 
     if let Some(opts) = options {
         if let Ok(Some(r)) = opts.get_item("rtol") {
@@ -319,9 +321,14 @@ fn parse_options(
                 first_step = Some(val);
             }
         }
+        if let Ok(Some(ms)) = opts.get_item("max_steps") {
+            if let Ok(val) = ms.extract::<usize>() {
+                max_steps = Some(val);
+            }
+        }
     }
 
-    Ok((rtol, atol, max_step, first_step))
+    Ok((rtol, atol, max_step, first_step, max_steps))
 }
 
 /// Build the PyOdeResult from the Rust Solution.
