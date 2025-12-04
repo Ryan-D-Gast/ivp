@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "ivp"
+name = "ivp-rs"
 version = "0.1.0"
 description = "A Rust library for solving initial value problems (IVPs) for ordinary differential equations (ODEs)."
 readme = "README.md"
