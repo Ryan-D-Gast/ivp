@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "ivp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "bon",
  "numpy",
