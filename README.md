@@ -6,6 +6,9 @@
     <a href="https://crates.io/crates/ivp">
         <img src="https://img.shields.io/crates/v/ivp.svg?style=flat-square" alt="crates.io">
     </a>
+    <a href="https://pypi.org/project/ivp-rs/">
+        <img src="https://img.shields.io/pypi/v/ivp-rs.svg?style=flat-square" alt="PyPI">
+    </a>
     <a href="https://docs.rs/ivp">
         <img src="https://docs.rs/ivp/badge.svg" alt="docs.rs">
     </a>
@@ -19,7 +22,8 @@
         <a href="https://docs.rs/ivp/latest/ivp/">Documentation</a> |
         <a href="./examples/">Examples</a> |
         <a href="https://github.com/Ryan-D-Gast/ivp">GitHub</a> |
-        <a href="https://crates.io/crates/ivp">Crates.io</a>
+        <a href="https://crates.io/crates/ivp">Crates.io</a> |
+        <a href="https://pypi.org/project/ivp-rs/">PyPI</a>
     </strong>
 </p>
 
@@ -27,12 +31,14 @@
 
 <p align="center">
 <b>A library of numerical methods for solving initial value problems (IVPs)</b><br>
-<i>for the Rust programming language.</i>
+<i>for Rust and Python.</i>
 </p>
 
 -----
 
-This library provides a pure rust implementation of SciPy's `solve_ivp` function with slight modifications to the API to better fit Rust's design patterns.
+This library provides a pure Rust implementation of SciPy's `solve_ivp` function with slight modifications to the API to better fit Rust's design patterns. It is also available as a Python package with a SciPy-compatible API.
+
+## Features
 
 Currently implemented solvers:
 -   **DOP853**: An 8th order Dormand-Prince method with step-size control and dense output.
@@ -42,4 +48,32 @@ Currently implemented solvers:
 -   **Radau**: A 5th order implicit Runge-Kutta method of Radau IIA type with step-size control and dense output.
 -   **BDF**: A variable-order (1 to 5) Backward Differentiation Formula method for stiff ODEs with adaptive step-size control and dense output.
 
-> Note: This crate uses dynamically sized arrays (`Vec`) internally to provide flexibility and to simplify Python bindings. For workloads that require maximal performance with statically sized arrays (compile-time sizes), consider the `differential-equations` project, which provides additional solvers and features (SDEs, DDEs, DAEs). This crate targets users seeking a Rust implementation of SciPy's `solve_ivp` with a familiar API.
+## Installation
+
+### Rust
+
+```bash
+cargo add ivp
+```
+
+### Python
+
+```bash
+pip install ivp-rs
+```
+
+## Example Usage (Python)
+
+```python
+from ivp import solve_ivp
+import numpy as np
+
+def exponential_decay(t, y):
+    return -0.5 * y
+
+# Solve the ODE
+sol = solve_ivp(exponential_decay, (0, 10), [1.0], method='RK45', rtol=1e-6, atol=1e-9)
+
+print(f"Final time: {sol.t[-1]}")
+print(f"Final state: {sol.y[:, -1]}")
+```
