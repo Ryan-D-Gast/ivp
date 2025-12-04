@@ -5,12 +5,35 @@ build-backend = "maturin"
 [project]
 name = "ivp"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Rust library for solving initial value problems (IVPs) for ordinary differential equations (ODEs)."
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "matplotlib>=3.10.7",
+license = "Apache-2.0"
+authors = [
+    { name = "Ryan D. Gast", email = "ryan.d.gast@gmail.com" }
 ]
+keywords = ["differential", "equations", "solve_ivp", "ode", "ivp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+]
+
+[project.urls]
+Homepage = "https://github.com/Ryan-D-Gast/ivp"
+Repository = "https://github.com/Ryan-D-Gast/ivp"
+Documentation = "https://docs.rs/ivp"
 
 [tool.maturin]
 features = ["python"]
