@@ -1,56 +1,83 @@
 """
-Example of solving the Circular Restricted Three-Body Problem (CR3BP).
-Demonstrates:
-- Solving a system of 6 equations
-- Using high-order explicit methods (DOP853)
-- Event detection (crossing the y-axis)
-- High precision tolerances
+Arenstorf orbit in the Circular Restricted Three-Body Problem (CR3BP).
+This is a famous periodic orbit discovered by Richard Arenstorf, used as a
+benchmark problem in numerical ODE literature (Hairer, Norsett & Wanner).
 """
 import ivp
 import numpy as np
 import matplotlib.pyplot as plt
 
-def cr3bp(t, sv, mu):
-    x, y, z, vx, vy, vz = sv
+
+def cr3bp(t, state, mu):
+    """CR3BP equations of motion in the rotating frame."""
+    x, y, z, vx, vy, vz = state
+    r1 = np.sqrt((x + mu)**2 + y**2 + z**2)
+    r2 = np.sqrt((x - 1 + mu)**2 + y**2 + z**2)
     
-    r13 = np.sqrt((x + mu)**2 + y**2 + z**2)
-    r23 = np.sqrt((x - 1.0 + mu)**2 + y**2 + z**2)
+    ax = x + 2*vy - (1-mu)*(x + mu)/r1**3 - mu*(x - 1 + mu)/r2**3
+    ay = y - 2*vx - (1-mu)*y/r1**3 - mu*y/r2**3
+    az = -(1-mu)*z/r1**3 - mu*z/r2**3
     
-    dx = vx
-    dy = vy
-    dz = vz
-    dvx = x + 2.0 * vy - (1.0 - mu) * (x + mu) / r13**3 - mu * (x - 1.0 + mu) / r23**3
-    dvy = y - 2.0 * vx - (1.0 - mu) * y / r13**3 - mu * y / r23**3
-    dvz = -(1.0 - mu) * vz / r13**3 - mu * vz / r23**3
-    
-    return [dx, dy, dz, dvx, dvy, dvz]
+    return [vx, vy, vz, ax, ay, az]
 
-def event_y_cross(t, sv, mu):
-    return sv[1]
 
-event_y_cross.terminal = True
-event_y_cross.direction = 1
+def jacobi_constant(state, mu):
+    """Calculate Jacobi constant (should be conserved)."""
+    x, y, z, vx, vy, vz = state
+    r1 = np.sqrt((x + mu)**2 + y**2 + z**2)
+    r2 = np.sqrt((x - 1 + mu)**2 + y**2 + z**2)
+    U = 0.5*(x**2 + y**2) + (1-mu)/r1 + mu/r2
+    return 2*U - (vx**2 + vy**2 + vz**2)
 
-mu = 0.1
-t_span = (0, 10.0)
-y0 = [0.5, 0.1, 0.0, 0.0, 1.2, 0.0]
-t_eval = np.linspace(0, 10, 11)
 
-sol = ivp.solve_ivp(cr3bp, t_span, y0, method='DOP853', t_eval=t_eval, args=(mu,), events=event_y_cross, rtol=1e-6, atol=1e-9)
+# Earth-Moon mass ratio
+mu = 0.012277471
 
-print("Status:", sol.message)
-print("nfev:", sol.nfev)
+# Arenstorf orbit initial conditions (periodic orbit, period T ~ 17.0652)
+# From Hairer, Norsett & Wanner "Solving ODEs I"
+x0 = 0.994
+vy0 = -2.00158510637908252240537862224
+state0 = [x0, 0, 0, 0, vy0, 0]
+period = 17.0652165601579625588917206249
 
-if len(sol.t_events) > 0 and len(sol.t_events[0]) > 0:
-    print("Event detected at t =", sol.t_events[0][0])
-    print("State at event:", sol.y_events[0][0])
+print("Arenstorf Orbit (Earth-Moon CR3BP)")
+print("=" * 40)
 
-# Plotting
-plt.figure()
-plt.plot(sol.y[0], sol.y[1])
-plt.xlabel('x')
-plt.ylabel('y')
-plt.title('CR3BP Trajectory')
-plt.grid(True)
-plt.axis('equal')
+sol = ivp.solve_ivp(
+    cr3bp, (0, period), state0,
+    method='DOP853', args=(mu,),
+    rtol=1e-12, atol=1e-14,
+    dense_output=True
+)
+
+C_initial = jacobi_constant(state0, mu)
+C_final = jacobi_constant([sol.y[i][-1] for i in range(6)], mu)
+final_state = [sol.y[i][-1] for i in range(6)]
+
+print(f"Status: {sol.message}")
+print(f"nfev: {sol.nfev}, steps: {len(sol.t)}")
+print(f"Jacobi constant error: {abs(C_final - C_initial):.2e}")
+print(f"Position error at T: dx={abs(final_state[0] - state0[0]):.2e}, dy={abs(final_state[1] - state0[1]):.2e}")
+
+# Plot the periodic orbit
+fig, ax = plt.subplots(figsize=(10, 8))
+
+# Plot trajectory
+t_plot = np.linspace(0, period, 1000)
+traj = sol.sol(t_plot)
+ax.plot(traj[0], traj[1], 'b-', linewidth=1.5, label='Arenstorf orbit')
+
+# Mark Earth and Moon
+ax.plot(-mu, 0, 'go', markersize=15, label='Earth')
+ax.plot(1-mu, 0, 'ko', markersize=8, label='Moon')
+
+# Mark start position
+ax.plot(state0[0], state0[1], 'r*', markersize=12, label='Start')
+
+ax.set_xlabel('x (normalized)')
+ax.set_ylabel('y (normalized)')
+ax.set_title('Arenstorf Periodic Orbit (Earth-Moon System)')
+ax.legend()
+ax.set_aspect('equal')
+ax.grid(True, alpha=0.3)
 plt.show()

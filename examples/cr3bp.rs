@@ -1,100 +1,84 @@
-//! # Example: Circular Restricted Three-Body Problem (CR3BP)
-//!
-//! Solve the circular restricted three-body problem (CR3BP) as a first-order system.
-//!
-//! Equations:
-//! dx/dt = vx
-//! dy/dt = vy
-//! dz/dt = vz
-//! dvx/dt = x + 2*vy - (1-mu)*(x+mu)/r13^3 - mu*(x-1+mu)/r23^3
-//! dvy/dt = y - 2*vx - (1-mu)*y/r13^3 - mu*y/r23^3
-//! dvz/dt = -(1-mu)*z/r13^3 - mu*z/r23^3
-//! where r13 and r23 are distances to the primary and secondary bodies.
-//!
-//! Initial conditions:
-//! Mass ratio: mu = 0.1
-//! x(0) = 0.5, y(0) = 0, z(0) = 0
-//! vx(0) = 0, vy(0) = 1.2, vz(0) = 0
-//! t0 = 0, t_end = 10
-//!
+//! Arenstorf orbit in the Circular Restricted Three-Body Problem (CR3BP).
+//! 
+//! This is a famous periodic orbit discovered by Richard Arenstorf, used as a
+//! benchmark problem in numerical ODE literature (Hairer, Norsett & Wanner).
+//! The orbit represents a spacecraft's path in the Earth-Moon system.
 
 use ivp::prelude::*;
 
 struct CR3BP {
-    mu: f64, // Mass ratio
+    mu: f64,
+}
+
+impl CR3BP {
+    fn jacobi_constant(&self, state: &[f64]) -> f64 {
+        let (x, y, z, vx, vy, vz) = (state[0], state[1], state[2], state[3], state[4], state[5]);
+        let r1 = ((x + self.mu).powi(2) + y.powi(2) + z.powi(2)).sqrt();
+        let r2 = ((x - 1.0 + self.mu).powi(2) + y.powi(2) + z.powi(2)).sqrt();
+        let u = 0.5 * (x.powi(2) + y.powi(2)) + (1.0 - self.mu) / r1 + self.mu / r2;
+        2.0 * u - (vx.powi(2) + vy.powi(2) + vz.powi(2))
+    }
 }
 
 impl IVP for CR3BP {
     fn ode(&self, _t: f64, sv: &[f64], dsdt: &mut [f64]) {
-        // Components
-        let (x, y, _z, vx, vy, vz) = (sv[0], sv[1], sv[2], sv[3], sv[4], sv[5]);
-
-        // Distances to the primary and secondary bodies
-        let r13 = ((x + self.mu).powi(2) + y.powi(2) + _z.powi(2)).sqrt();
-        let r23 = ((x - 1.0 + self.mu).powi(2) + y.powi(2) + _z.powi(2)).sqrt();
+        let (x, y, z, vx, vy, vz) = (sv[0], sv[1], sv[2], sv[3], sv[4], sv[5]);
+        let r1 = ((x + self.mu).powi(2) + y.powi(2) + z.powi(2)).sqrt();
+        let r2 = ((x - 1.0 + self.mu).powi(2) + y.powi(2) + z.powi(2)).sqrt();
 
         dsdt[0] = vx;
         dsdt[1] = vy;
         dsdt[2] = vz;
-        dsdt[3] = x + 2.0 * vy
-            - (1.0 - self.mu) * (x + self.mu) / r13.powi(3)
-            - self.mu * (x - 1.0 + self.mu) / r23.powi(3);
-        dsdt[4] = y - 2.0 * vx - (1.0 - self.mu) * y / r13.powi(3) - self.mu * y / r23.powi(3);
-        dsdt[5] = -(1.0 - self.mu) * vz / r13.powi(3) - self.mu * vz / r23.powi(3);
-    }
-
-    fn events(&self, _x: f64, sv: &[f64], out: &mut [f64]) {
-        // Example event: crossing the x-axis (sv=0)
-        out[0] = sv[1];
-    }
-
-    fn n_events(&self) -> usize {
-        1
-    }
-
-    fn event_config(&self, _index: usize) -> EventConfig {
-        let mut event = EventConfig::default();
-        // Terminate after 1 occurrence of the event
-        event.terminal();
-        event.positive(); // Only detect positive-going zero crossings
-        event
+        dsdt[3] = x + 2.0 * vy - (1.0 - self.mu) * (x + self.mu) / r1.powi(3) - self.mu * (x - 1.0 + self.mu) / r2.powi(3);
+        dsdt[4] = y - 2.0 * vx - (1.0 - self.mu) * y / r1.powi(3) - self.mu * y / r2.powi(3);
+        dsdt[5] = -(1.0 - self.mu) * z / r1.powi(3) - self.mu * z / r2.powi(3);
     }
 }
 
 fn main() {
-    let mu = 0.1; // Mass ratio
+    // Earth-Moon mass ratio
+    let mu = 0.012277471;
     let cr3bp = CR3BP { mu };
-    let t0 = 0.0;
-    let y0 = [0.5, 0.1, 0.0, 0.0, 1.2, 0.0]; // Initial state vector
-    let tf = 10.0; // Integrate over 10 time units
-    let t_eval = (0..10).map(|i| i as f64 * 1.0).collect();
+
+    // Arenstorf orbit initial conditions (periodic orbit, period T ~ 17.0652)
+    // From Hairer, Norsett & Wanner "Solving ODEs I"
+    let y0 = [
+        0.994,       // x
+        0.0,         // y
+        0.0,         // z
+        0.0,         // vx
+        -2.00158510637908252240537862224, // vy
+        0.0,         // vz
+    ];
+    let period = 17.0652165601579625588917206249;
+    let c_initial = cr3bp.jacobi_constant(&y0);
+
+    let t_eval: Vec<f64> = (0..=100).map(|i| i as f64 * period / 100.0).collect();
     let options = Options::builder()
         .method(Method::DOP853)
-        .rtol(1e-6)
-        .atol(1e-9)
+        .rtol(1e-12)
+        .atol(1e-14)
         .t_eval(t_eval)
         .build();
 
-    match solve_ivp(&cr3bp, t0, tf, &y0, options) {
+    match solve_ivp(&cr3bp, 0.0, period, &y0, options) {
         Ok(sol) => {
-            println!("Final status: {:?}", sol.status);
-            println!("Number of function evaluations: {}", sol.nfev);
-            println!("Number of steps taken: {}", sol.nstep);
-            println!("Number of accepted steps: {}", sol.naccpt);
-            println!("Number of rejected steps: {}", sol.nrejct);
+            println!("Arenstorf Orbit (periodic, T={:.4})", period);
+            println!("Status: {:?}, nfev: {}, steps: {}", sol.status, sol.nfev, sol.nstep);
 
-            println!("t and y at t_eval:");
-            for (ti, yi) in sol.iter() {
-                println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
+            if let (Some(y_final), Some(&t_final)) = (sol.y.last(), sol.t.last()) {
+                let c_final = cr3bp.jacobi_constant(y_final);
+                println!("Jacobi constant error: {:.2e}", (c_final - c_initial).abs());
+                println!("Position error at T: dx={:.2e}, dy={:.2e}", 
+                    (y_final[0] - y0[0]).abs(), (y_final[1] - y0[1]).abs());
+                println!("Final t: {:.10}", t_final);
             }
 
-            println!("t and y at events:");
-            if !sol.t_events.is_empty() && !sol.t_events[0].is_empty() {
-                for (ti, yi) in sol.t_events[0].iter().zip(sol.y_events[0].iter()) {
-                    println!("t = {:>8.5}, y = {:>8.5?}", ti, yi);
-                }
+            println!("\nTrajectory (x, y):");
+            for (t, y) in sol.iter().step_by(10) {
+                println!("t={:6.2}: ({:>9.5}, {:>9.5})", t, y[0], y[1]);
             }
         }
-        Err(err) => eprintln!("Integration failed: {:?}", err),
+        Err(e) => eprintln!("Error: {:?}", e),
     }
 }
