@@ -37,6 +37,7 @@ Documentation = "https://docs.rs/ivp"
 
 [tool.maturin]
 features = ["python"]
+module-name = "ivp"
 
 [dependency-groups]
 dev = [
