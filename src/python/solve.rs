@@ -21,33 +21,128 @@ use super::sparsity::SparsityStructure;
 /// Solve an initial value problem for a system of ODEs.
 ///
 /// This function numerically integrates a system of ordinary differential
-/// equations given an initial value:
+/// equations given an initial value::
 ///
 ///     dy / dt = f(t, y)
 ///     y(t0) = y0
 ///
-/// # Parameters
+/// Here t is a 1-D independent variable (time), y(t) is an N-D vector-valued
+/// function (state), and an N-D vector-valued function f(t, y) determines the
+/// differential equations.
 ///
-/// * `fun` - Right-hand side of the system. Signature: `fun(t, y) -> array_like`
-/// * `t_span` - Integration interval `(t0, tf)`
-/// * `y0` - Initial state vector
-/// * `method` - Integration method: "RK45", "RK23", "DOP853", "Radau", "BDF", "RK4"
-/// * `t_eval` - Times at which to store the solution
-/// * `dense_output` - Whether to compute continuous solution
-/// * `events` - Event functions to track
-/// * `vectorized` - Whether `fun` can be called in vectorized fashion (ignored)
-/// * `args` - Additional arguments to pass to `fun` and event functions
-/// * `**options` - Additional options: `rtol`, `atol`, `first_step`, `max_step`
+/// Parameters
+/// ----------
+/// fun : callable
+///     Right-hand side of the system: the time derivative of the state ``y``
+///     at time ``t``. The calling signature is ``fun(t, y)``, where ``t`` is a
+///     scalar and ``y`` is an ndarray with shape (n,). ``fun`` must return an
+///     array of the same shape as ``y``.
+/// t_span : 2-member sequence
+///     Interval of integration (t0, tf). The solver starts with t=t0 and
+///     integrates until it reaches t=tf. Both t0 and tf must be floats.
+/// y0 : array_like, shape (n,)
+///     Initial state.
+/// method : str, optional
+///     Integration method to use:
 ///
-/// # Returns
+///     * 'RK45' or 'DOPRI5' (default): Explicit Runge-Kutta method of order 5(4).
+///       The error is controlled assuming accuracy of the fourth-order method,
+///       but steps are taken using the fifth-order accurate formula.
+///     * 'RK23': Explicit Runge-Kutta method of order 3(2).
+///     * 'DOP853': Explicit Runge-Kutta method of order 8.
+///     * 'Radau': Implicit Runge-Kutta method of the Radau IIA family of order 5.
+///       Suitable for stiff problems.
+///     * 'BDF': Implicit multi-step variable-order (1 to 5) method based on a
+///       backward differentiation formula. Suitable for stiff problems.
+///     * 'RK4': Classic explicit Runge-Kutta method of order 4 with fixed step size.
 ///
-/// An `OdeResult` object containing:
-/// * `t` - Time points
-/// * `y` - Solution values (shape: n_states × n_points)
-/// * `t_events`, `y_events` - Event times and states
-/// * `sol` - Dense output object (if requested)
-/// * `nfev`, `njev`, `nlu` - Evaluation counts
-/// * `status`, `message`, `success` - Termination info
+/// t_eval : array_like or None, optional
+///     Times at which to store the computed solution, must be sorted and lie
+///     within t_span. If None (default), use points selected by the solver.
+/// dense_output : bool, optional
+///     Whether to compute a continuous solution. Default is False.
+/// events : callable, or list of callables, optional
+///     Events to track. Each event function has the signature ``event(t, y)``
+///     and returns a float. A zero crossing of this function is detected.
+///     Event functions can have the following attributes:
+///
+///     * terminal: bool, whether to terminate integration when this event occurs.
+///     * direction: float, direction of a zero crossing. +1 for increasing,
+///       -1 for decreasing, 0 for both directions.
+///
+/// vectorized : bool, optional
+///     This argument is provided for scipy compatibility and is currently ignored.
+/// args : tuple, optional
+///     Additional arguments to pass to the user-defined functions (fun, events, jac).
+/// jac : array_like, callable or None, optional
+///     Jacobian matrix of the right-hand side with respect to y, required for
+///     stiff solvers (Radau, BDF). The Jacobian matrix has shape (n, n) and
+///     element (i, j) is ``d f_i / d y_j``.
+///     If callable, the signature is ``jac(t, y)``.
+///     If array_like, the Jacobian is assumed to be constant.
+/// jac_sparsity : array_like, sparse matrix, or None, optional
+///     Defines the sparsity structure of the Jacobian matrix for BDF method.
+///
+/// Returns
+/// -------
+/// Bunch object with the following fields:
+///
+/// t : ndarray, shape (n_points,)
+///     Time points.
+/// y : ndarray, shape (n, n_points)
+///     Values of the solution at t.
+/// sol : OdeSolution or None
+///     Found solution as OdeSolution instance; None if dense_output was False.
+/// t_events : list of ndarray or None
+///     Contains for each event type a list of arrays at which an event of
+///     that type was detected. None if events was None.
+/// y_events : list of ndarray or None
+///     For each event type, a list of arrays with the state at each event time.
+///     None if events was None.
+/// nfev : int
+///     Number of evaluations of the right-hand side.
+/// njev : int
+///     Number of evaluations of the Jacobian.
+/// nlu : int
+///     Number of LU decompositions.
+/// status : int
+///     Reason for algorithm termination:
+///
+///     * -1: Integration step failed.
+///     *  0: The solver successfully reached the end of t_span.
+///     *  1: A termination event occurred.
+///
+/// message : str
+///     Human-readable description of the termination reason.
+/// success : bool
+///     True if the solver reached the end of t_span or a termination event occurred.
+///
+/// Other Parameters
+/// ----------------
+/// first_step : float, optional
+///     Initial step size. Default is determined automatically.
+/// max_step : float, optional
+///     Maximum allowed step size. Default is inf.
+/// rtol : float, optional
+///     Relative tolerance. Default is 1e-3.
+/// atol : float, optional
+///     Absolute tolerance. Default is 1e-6.
+///
+/// Examples
+/// --------
+/// Solve an exponential decay ODE::
+///
+///     >>> from ivp import solve_ivp
+///     >>> import numpy as np
+///     >>> def exponential_decay(t, y):
+///     ...     return -0.5 * y
+///     >>> sol = solve_ivp(exponential_decay, (0, 10), [2, 4, 8])
+///     >>> print(sol.t)
+///     >>> print(sol.y)
+///
+/// See Also
+/// --------
+/// scipy.integrate.solve_ivp : SciPy's equivalent function
 #[pyfunction]
 #[pyo3(name = "solve_ivp")]
 #[pyo3(signature = (fun, t_span, y0, method=None, t_eval=None, dense_output=false, events=None, vectorized=false, args=None, jac=None, jac_sparsity=None, **options))]
