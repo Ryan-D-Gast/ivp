@@ -62,11 +62,10 @@ cargo add ivp
 pip install ivp-rs
 ```
 
-## Example Usage (Python)
+## Example Usage
 
 ```python
 from ivp import solve_ivp
-import numpy as np
 
 def exponential_decay(t, y):
     return -0.5 * y
@@ -76,4 +75,32 @@ sol = solve_ivp(exponential_decay, (0, 10), [1.0], method='RK45', rtol=1e-6, ato
 
 print(f"Final time: {sol.t[-1]}")
 print(f"Final state: {sol.y[:, -1]}")
+```
+
+```rust
+use ivp::prelude::*;
+
+struct ExponentialDecay;
+
+impl IVP for ExponentialDecay {
+    fn ode(&self, _t: f64, y: &[f64], dydt: &mut [f64]) {
+        dydt[0] = -0.5 * y[0];
+    }
+}
+
+fn main() {
+    let decay = ExponentialDecay;
+    let y0 = [1.0];
+
+    let options = Options::builder()
+        .method(Method::DOPRI5)
+        .rtol(1e-6)
+        .atol(1e-9)
+        .build();
+
+    let sol = solve_ivp(&decay, 0.0, 10.0, &y0, options).unwrap();
+    
+    println!("Final time: {}", sol.t.last().unwrap());
+    println!("Final state: {:?}", sol.y.last().unwrap());
+}
 ```
