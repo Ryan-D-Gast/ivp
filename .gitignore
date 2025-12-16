@@ -66,3 +66,6 @@ htmlcov/
 
 # Ruff
 .ruff_cache/
+
+# Agent instructions
+AGENTS.md
