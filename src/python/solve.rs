@@ -9,10 +9,7 @@ use pyo3::types::{PyDict, PyList, PyTuple};
 
 use crate::methods::{SymplecticMethod, Tolerance};
 use crate::solve::event::{Direction, EventConfig};
-use crate::solve::{
-    solve_first_order_ivp, solve_hamiltonian_ivp, solve_second_order_ivp, Method, Options,
-    SymplecticOptions,
-};
+use crate::solve::{Ivp, Method};
 use crate::Float;
 
 use super::conversion::{extract_float_array, parse_t_span};
@@ -211,18 +208,6 @@ pub fn solve_ivp_py<'py>(
 
     let result = match parsed_method {
         ParsedMethod::Standard(method_enum) => {
-            let opts = Options::builder()
-                .method(method_enum)
-                .dense_output(dense_output)
-                .maybe_t_eval(t_eval_vec)
-                .maybe_max_step(parsed_options.max_step)
-                .maybe_min_step(parsed_options.min_step)
-                .maybe_first_step(parsed_options.first_step)
-                .maybe_max_steps(parsed_options.max_steps)
-                .rtol(parsed_options.rtol)
-                .atol(parsed_options.atol)
-                .build();
-
             let is_constant_jac = jac.as_ref().is_some_and(|j| !j.is_callable());
             let python_ivp = PythonIVP::new(
                 fun,
@@ -233,22 +218,21 @@ pub fn solve_ivp_py<'py>(
                 event_configs,
                 py,
             );
-            solve_first_order_ivp(&python_ivp, t0, tf, &y0_vec, opts)
+            Ivp::first_order(&python_ivp, t0, tf, &y0_vec)
+                .method(method_enum)
+                .dense_output(dense_output)
+                .maybe_t_eval(t_eval_vec)
+                .maybe_max_step(parsed_options.max_step)
+                .maybe_min_step(parsed_options.min_step)
+                .maybe_first_step(parsed_options.first_step)
+                .maybe_max_steps(parsed_options.max_steps)
+                .rtol(parsed_options.rtol)
+                .atol(parsed_options.atol)
+                .solve()
                 .and_then(|sol| Ok((sol, events.is_some(), is_constant_jac)))
         }
         ParsedMethod::Symplectic(method_enum) => {
-            let step_size = parsed_options
-                .step_size
-                .or(parsed_options.first_step)
-                .unwrap_or_else(|| (tf - t0) / 100.0);
-
-            let opts = SymplecticOptions::builder()
-                .method(method_enum)
-                .step_size(step_size)
-                .dense_output(dense_output)
-                .maybe_t_eval(t_eval_vec)
-                .maybe_max_steps(parsed_options.max_steps)
-                .build();
+            let step_size = parsed_options.step_size.or(parsed_options.first_step);
 
             let (q0, p0) = split_symplectic_state(&y0_vec)?;
 
@@ -263,7 +247,13 @@ pub fn solve_ivp_py<'py>(
                 }
                 let problem =
                     PythonHamiltonianIVP::new(position_derivative, momentum_derivative, args, py);
-                solve_hamiltonian_ivp(&problem, t0, tf, q0, p0, opts)
+                Ivp::hamiltonian(&problem, t0, tf, q0, p0)
+                    .method(method_enum)
+                    .maybe_step_size(step_size)
+                    .dense_output(dense_output)
+                    .maybe_t_eval(t_eval_vec.clone())
+                    .maybe_max_steps(parsed_options.max_steps)
+                    .solve()
             } else if let (Ok(drift), Ok(kick)) = (fun.getattr("drift"), fun.getattr("kick")) {
                 if !drift.is_callable() || !kick.is_callable() {
                     return Err(pyo3::exceptions::PyTypeError::new_err(
@@ -271,7 +261,13 @@ pub fn solve_ivp_py<'py>(
                     ));
                 }
                 let problem = PythonHamiltonianIVP::new(drift, kick, args, py);
-                solve_hamiltonian_ivp(&problem, t0, tf, q0, p0, opts)
+                Ivp::hamiltonian(&problem, t0, tf, q0, p0)
+                    .method(method_enum)
+                    .maybe_step_size(step_size)
+                    .dense_output(dense_output)
+                    .maybe_t_eval(t_eval_vec.clone())
+                    .maybe_max_steps(parsed_options.max_steps)
+                    .solve()
             } else if let Ok(acceleration) = fun.getattr("acceleration") {
                 if !acceleration.is_callable() {
                     return Err(pyo3::exceptions::PyTypeError::new_err(
@@ -279,7 +275,13 @@ pub fn solve_ivp_py<'py>(
                     ));
                 }
                 let problem = PythonSecondOrderIVP::new(acceleration, args, py);
-                solve_second_order_ivp(&problem, t0, tf, q0, p0, opts)
+                Ivp::second_order(&problem, t0, tf, q0, p0)
+                    .method(method_enum)
+                    .maybe_step_size(step_size)
+                    .dense_output(dense_output)
+                    .maybe_t_eval(t_eval_vec)
+                    .maybe_max_steps(parsed_options.max_steps)
+                    .solve()
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "symplectic methods require `fun.acceleration(t, q)` or both `fun.position_derivative(t, p)` and `fun.momentum_derivative(t, q)`; legacy `fun.drift`/`fun.kick` are also accepted",

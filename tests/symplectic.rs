@@ -41,13 +41,11 @@ fn all_methods_reach_end_time() {
     let p0 = [0.0];
 
     for method in symplectic_methods() {
-        let opts = SymplecticOptions::builder()
+        let sol = Ivp::hamiltonian(&HarmonicHamiltonian, 0.0, 2.0, &q0, &p0)
             .method(method)
             .step_size(0.05)
-            .build();
-
-        let sol = solve_hamiltonian_ivp(&HarmonicHamiltonian, 0.0, 2.0, &q0, &p0, opts)
-            .expect("solve_hamiltonian_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
 
         assert_eq!(sol.status, Status::Success, "{:?}", method);
         assert!((sol.t.last().copied().unwrap() - 2.0).abs() <= 1e-12);
@@ -59,13 +57,11 @@ fn all_methods_reach_end_time() {
 fn velocity_verlet_second_order_keeps_energy_bounded() {
     let q0 = [1.0];
     let v0 = [0.0];
-    let opts = SymplecticOptions::builder()
+    let sol = Ivp::second_order(&HarmonicSecondOrder, 0.0, 200.0, &q0, &v0)
         .method(SymplecticMethod::VelocityVerlet)
         .step_size(0.05)
-        .build();
-
-    let sol = solve_second_order_ivp(&HarmonicSecondOrder, 0.0, 200.0, &q0, &v0, opts)
-        .expect("solve_second_order_ivp failed");
+        .solve()
+        .expect("Ivp::solve failed");
 
     assert_eq!(sol.status, Status::Success);
     let e0 = energy(&sol.y[0]);
@@ -93,14 +89,12 @@ fn t_eval_is_sampled_exactly() {
     let q0 = [1.0];
     let p0 = [0.0];
     let t_eval = vec![0.0, 0.13, 0.77, 1.01, 1.73, 2.0];
-    let opts = SymplecticOptions::builder()
+    let sol = Ivp::hamiltonian(&HarmonicHamiltonian, 0.0, 2.0, &q0, &p0)
         .method(SymplecticMethod::Yoshida4)
         .step_size(0.2)
         .t_eval(t_eval.clone())
-        .build();
-
-    let sol = solve_hamiltonian_ivp(&HarmonicHamiltonian, 0.0, 2.0, &q0, &p0, opts)
-        .expect("solve_hamiltonian_ivp failed");
+        .solve()
+        .expect("Ivp::solve failed");
 
     assert_eq!(sol.status, Status::Success);
     assert_eq!(sol.t.len(), t_eval.len());
@@ -113,20 +107,17 @@ fn t_eval_is_sampled_exactly() {
 fn backward_integration_returns_to_initial_state() {
     let q0 = [1.0];
     let v0 = [0.0];
-    let opts = SymplecticOptions::builder()
-        .method(SymplecticMethod::VelocityVerlet)
-        .step_size(-0.01)
-        .build();
-
-    let sol = solve_second_order_ivp(
+    let sol = Ivp::second_order(
         &HarmonicSecondOrder,
         0.0,
         -2.0 * std::f64::consts::PI,
         &q0,
         &v0,
-        opts,
     )
-    .expect("solve_second_order_ivp failed");
+    .method(SymplecticMethod::VelocityVerlet)
+    .step_size(-0.01)
+    .solve()
+    .expect("Ivp::solve failed");
 
     assert_eq!(sol.status, Status::Success);
     let y_end = sol.y.last().unwrap();
@@ -138,14 +129,12 @@ fn backward_integration_returns_to_initial_state() {
 fn dense_output_matches_step_endpoints() {
     let q0 = [1.0];
     let p0 = [0.0];
-    let opts = SymplecticOptions::builder()
+    let sol = Ivp::hamiltonian(&HarmonicHamiltonian, 0.0, 2.0, &q0, &p0)
         .method(SymplecticMethod::Yoshida4)
         .step_size(0.1)
         .dense_output(true)
-        .build();
-
-    let sol = solve_hamiltonian_ivp(&HarmonicHamiltonian, 0.0, 2.0, &q0, &p0, opts)
-        .expect("solve_hamiltonian_ivp failed");
+        .solve()
+        .expect("Ivp::solve failed");
 
     let ys_dense = sol.sol_many(&sol.t).expect("dense evaluation failed");
     assert_eq!(ys_dense.len(), sol.y.len());
@@ -160,14 +149,12 @@ fn dense_output_matches_step_endpoints() {
 fn dense_output_interpolates_midpoint_reasonably() {
     let q0 = [1.0];
     let p0 = [0.0];
-    let opts = SymplecticOptions::builder()
+    let sol = Ivp::hamiltonian(&HarmonicHamiltonian, 0.0, 1.0, &q0, &p0)
         .method(SymplecticMethod::VelocityVerlet)
         .step_size(0.05)
         .dense_output(true)
-        .build();
-
-    let sol = solve_hamiltonian_ivp(&HarmonicHamiltonian, 0.0, 1.0, &q0, &p0, opts)
-        .expect("solve_hamiltonian_ivp failed");
+        .solve()
+        .expect("Ivp::solve failed");
 
     let y_mid = sol.sol(0.5).expect("dense midpoint evaluation failed");
     assert!((y_mid[0] - 0.5f64.cos()).abs() < 2e-3, "q_mid={}", y_mid[0]);
@@ -178,14 +165,12 @@ fn dense_output_interpolates_midpoint_reasonably() {
 fn max_steps_returns_partial_solution() {
     let q0 = [1.0];
     let p0 = [0.0];
-    let opts = SymplecticOptions::builder()
+    let sol = Ivp::hamiltonian(&HarmonicHamiltonian, 0.0, 1.0, &q0, &p0)
         .method(SymplecticMethod::VelocityVerlet)
         .step_size(0.1)
         .max_steps(3usize)
-        .build();
-
-    let sol = solve_hamiltonian_ivp(&HarmonicHamiltonian, 0.0, 1.0, &q0, &p0, opts)
-        .expect("solve_hamiltonian_ivp failed");
+        .solve()
+        .expect("Ivp::solve failed");
 
     assert_eq!(sol.status, Status::NeedLargerNMax);
     assert_eq!(sol.nstep, 3);
@@ -196,12 +181,10 @@ fn max_steps_returns_partial_solution() {
 fn mismatched_dimensions_error() {
     let q0 = [1.0, 2.0];
     let p0 = [0.0];
-    let opts = SymplecticOptions::builder()
+    let err = Ivp::hamiltonian(&HarmonicHamiltonian, 0.0, 1.0, &q0, &p0)
         .method(SymplecticMethod::VelocityVerlet)
         .step_size(0.1)
-        .build();
-
-    let err = solve_hamiltonian_ivp(&HarmonicHamiltonian, 0.0, 1.0, &q0, &p0, opts)
+        .solve()
         .expect_err("expected dimension mismatch");
 
     match err {

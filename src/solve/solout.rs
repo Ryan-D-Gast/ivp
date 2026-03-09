@@ -2,7 +2,7 @@
 //!
 //! This module provides `DefaultSolOut`, an internal implementation of the `SolOut` trait
 //! that handles output sampling, event detection, and dense output collection for
-//! `solve_first_order_ivp`.
+//! first-order solving.
 
 use crate::{
     dense::StepInterpolant,
@@ -12,7 +12,7 @@ use crate::{
     Float,
 };
 
-/// Internal output handler for `solve_first_order_ivp`.
+/// Internal output handler for first-order solving.
 pub(crate) struct DefaultSolOut<'a, F>
 where
     F: FirstOrderSystem,

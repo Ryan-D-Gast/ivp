@@ -10,7 +10,7 @@
 //! - Sampling: internal accepted steps by default, or exact `t_eval` times
 //! - Dense output: `sol(t)`, `sol_many(&ts)`, `sol_span()` on the returned `Solution`
 //! - Iteration: iterate stored samples via `solution.iter()`
-//! - Structured symplectic API: `solve_hamiltonian_ivp` and `solve_second_order_ivp`
+//! - Typed Rust API: `Ivp::first_order`, `Ivp::second_order`, and `Ivp::hamiltonian`
 //!
 //! Quick start
 //! ```
@@ -26,18 +26,17 @@
 //! }
 //!
 //! fn main() {
-//!     let opts = Options::builder()
-//!         .method(Method::DOP853)
-//!         .rtol(1e-9).atol(1e-9)
-//!         .dense_output(true)
-//!         .build();
-//!
 //!     let f = SHO;
 //!     let x0 = 0.0;
 //!     let xend = 2.0 * PI; // one period
 //!     let y0 = [1.0, 0.0];
 //!
-//!     let sol = solve_first_order_ivp(&f, x0, xend, &y0, opts).unwrap();
+//!     let sol = Ivp::first_order(&f, x0, xend, &y0)
+//!         .method(Method::DOP853)
+//!         .rtol(1e-9).atol(1e-9)
+//!         .dense_output(true)
+//!         .solve()
+//!         .unwrap();
 //!
 //!     // Discrete samples
 //!     println!("Discrete output at accepted steps:");
@@ -68,12 +67,11 @@
 //!     }
 //! }
 //!
-//! let opts = SymplecticOptions::builder()
+//! let sol = Ivp::second_order(&HarmonicOscillator, 0.0, 1.0, &[1.0], &[0.0])
 //!     .method(SymplecticMethod::VelocityVerlet)
 //!     .step_size(0.05)
-//!     .build();
-//!
-//! let sol = solve_second_order_ivp(&HarmonicOscillator, 0.0, 1.0, &[1.0], &[0.0], opts).unwrap();
+//!     .solve()
+//!     .unwrap();
 //! assert_eq!(sol.y.last().unwrap().len(), 2);
 //! ```
 //!
@@ -122,3 +120,6 @@ pub mod methods;
 
 // -- User convenience / re-exports --
 pub mod prelude;
+
+pub use methods::SymplecticMethod;
+pub use solve::{FirstOrderIvp, HamiltonianIvp, Ivp, Method, SecondOrderIvp, Solution};

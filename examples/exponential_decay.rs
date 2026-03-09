@@ -18,14 +18,13 @@ fn main() {
     let y0 = [10.0];
     let t_eval: Vec<f64> = (0..=10).map(|i| i as f64).collect();
 
-    let options = Options::builder()
+    match Ivp::first_order(&decay, 0.0, 10.0, &y0)
         .method(Method::DOPRI5)
         .rtol(1e-8)
         .atol(1e-10)
         .t_eval(t_eval)
-        .build();
-
-    match solve_first_order_ivp(&decay, 0.0, 10.0, &y0, options) {
+        .solve()
+    {
         Ok(sol) => {
             println!("Status: {:?}", sol.status);
             println!("nfev: {}, steps: {}\n", sol.nfev, sol.nstep);

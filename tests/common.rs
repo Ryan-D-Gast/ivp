@@ -9,20 +9,36 @@ impl FirstOrderSystem for SHO {
 }
 
 #[allow(dead_code)]
-pub fn default_opts_dense(method: Method) -> Options {
-    Options::builder()
+pub fn default_ivp_dense<'a, F>(
+    system: &'a F,
+    x0: f64,
+    xend: f64,
+    y0: &'a [f64],
+    method: Method,
+) -> ivp::solve::FirstOrderIvp<'a, F>
+where
+    F: FirstOrderSystem,
+{
+    Ivp::first_order(system, x0, xend, y0)
         .method(method)
         .rtol(1e-9)
         .atol(1e-9)
         .dense_output(true)
-        .build()
 }
 
 #[allow(dead_code)]
-pub fn default_opts(method: Method) -> Options {
-    Options::builder()
+pub fn default_ivp<'a, F>(
+    system: &'a F,
+    x0: f64,
+    xend: f64,
+    y0: &'a [f64],
+    method: Method,
+) -> ivp::solve::FirstOrderIvp<'a, F>
+where
+    F: FirstOrderSystem,
+{
+    Ivp::first_order(system, x0, xend, y0)
         .method(method)
         .rtol(1e-9)
         .atol(1e-9)
-        .build()
 }

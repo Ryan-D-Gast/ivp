@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{default_opts, default_opts_dense, SHO};
+use common::{default_ivp, default_ivp_dense, SHO};
 
 fn all_methods() -> Vec<Method> {
     vec![
@@ -39,14 +39,13 @@ fn integration_zero_rhs_all_methods() {
         .cloned()
         .collect::<Vec<_>>();
     for method in all_but_bdf {
-        let opts = Options::builder()
+        let sol = Ivp::first_order(&f, x0, xend, &y0)
             .method(method.clone())
             .rtol(1e-9)
             .atol(1e-12)
             .t_eval(t_eval.clone())
-            .build();
-        let sol =
-            solve_first_order_ivp(&f, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         assert_eq!(sol.t, t_eval);
         for yi in sol.y {
             for &v in &yi {
@@ -65,14 +64,13 @@ fn max_step_and_first_step_controls() {
     // max_step respected
     let max_step = 0.05;
     for method in all_methods() {
-        let opts = Options::builder()
+        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
             .method(method.clone())
             .rtol(1e-6)
             .atol(1e-9)
             .max_step(max_step)
-            .build();
-        let sol =
-            solve_first_order_ivp(&SHO, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         for w in sol.t.windows(2) {
             let dt = (w[1] - w[0]).abs();
             assert!(
@@ -96,14 +94,13 @@ fn max_step_and_first_step_controls() {
         .cloned()
         .collect::<Vec<_>>();
     for method in methods_to_test {
-        let opts = Options::builder()
+        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
             .method(method.clone())
             .rtol(1e-3)
             .atol(1e-6)
             .first_step(first_step)
-            .build();
-        let sol =
-            solve_first_order_ivp(&SHO, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         assert!(
             sol.t.len() >= 2,
             "expected at least two time points for {:?}",
@@ -126,14 +123,13 @@ fn dense_output_matches_discrete_samples() {
     let xend = 2.0;
     let y0 = [1.0, 0.0];
     for method in [Method::RK23, Method::DOPRI5, Method::DOP853, Method::RADAU] {
-        let opts = Options::builder()
+        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
             .method(method.clone())
             .rtol(1e-8)
             .atol(1e-10)
             .dense_output(true)
-            .build();
-        let sol =
-            solve_first_order_ivp(&SHO, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         // Ensure span exists
         assert!(sol.sol_span().is_some());
         // Evaluate dense output at stored times and compare
@@ -158,8 +154,9 @@ fn dense_output_out_of_range_errors() {
     let x0 = 0.0;
     let xend = 1.0;
     let y0 = [1.0, 0.0];
-    let sol =
-        solve_first_order_ivp(&SHO, x0, xend, &y0, default_opts_dense(Method::DOPRI5)).unwrap();
+    let sol = default_ivp_dense(&SHO, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let (t0, t1) = sol.sol_span().unwrap();
     let before = t0 - 0.1;
     let after = t1 + 0.1;
@@ -246,8 +243,9 @@ fn event_detection_all_and_directional() {
 
     // All crossings, stop after 2 -> expect near pi/2 and 3pi/2, terminates at latter
     let f_all = ShoZeroEventAll;
-    let sol_all =
-        solve_first_order_ivp(&f_all, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol_all = default_ivp(&f_all, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let zeros = find_near_zero_times(&sol_all.t_events[0], &sol_all.y_events[0], 1e-8);
     // Expect at least two event samples recorded
     assert!(
@@ -271,8 +269,9 @@ fn event_detection_all_and_directional() {
 
     // Positive-going only -> expect ~3pi/2
     let f_pos = ShoZeroEventPositive;
-    let sol_pos =
-        solve_first_order_ivp(&f_pos, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol_pos = default_ivp(&f_pos, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let zeros_pos = find_near_zero_times(&sol_pos.t_events[0], &sol_pos.y_events[0], 1e-8);
     assert!(!zeros_pos.is_empty());
     let z = zeros_pos[0];
@@ -284,8 +283,9 @@ fn event_detection_all_and_directional() {
 
     // Negative-going only -> expect ~pi/2
     let f_neg = ShoZeroEventNegative;
-    let sol_neg =
-        solve_first_order_ivp(&f_neg, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol_neg = default_ivp(&f_neg, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let zeros_neg = find_near_zero_times(&sol_neg.t_events[0], &sol_neg.y_events[0], 1e-8);
     assert!(!zeros_neg.is_empty());
     let z = zeros_neg[0];
@@ -302,7 +302,7 @@ fn zero_interval_returns_initial_state() {
     let xend = 1.23;
     let y0 = [2.0, 3.0];
     for method in all_methods() {
-        let sol = solve_first_order_ivp(&SHO, x0, xend, &y0, default_opts(method)).unwrap();
+        let sol = default_ivp(&SHO, x0, xend, &y0, method).solve().unwrap();
         assert!(!sol.t.is_empty());
         let y_last = sol.y.last().unwrap();
         assert!((y_last[0] - y0[0]).abs() <= 1e-12);
@@ -327,19 +327,18 @@ fn vector_rtol_componentwise_control() {
     let y0 = [1.0, 1.0];
 
     // looser vs tighter rtol on second component
-    let opts_loose = Options::builder()
+    let sol_loose = Ivp::first_order(&f, x0, xend, &y0)
         .method(Method::DOPRI5)
         .rtol([1e-2, 1e-2])
         .atol(1e-10)
-        .build();
-    let opts_tight_second = Options::builder()
+        .solve()
+        .unwrap();
+    let sol_tight = Ivp::first_order(&f, x0, xend, &y0)
         .method(Method::DOPRI5)
         .rtol([1e-2, 1e-10])
         .atol(1e-10)
-        .build();
-
-    let sol_loose = solve_first_order_ivp(&f, x0, xend, &y0, opts_loose).unwrap();
-    let sol_tight = solve_first_order_ivp(&f, x0, xend, &y0, opts_tight_second).unwrap();
+        .solve()
+        .unwrap();
     let y_end_loose = sol_loose.y.last().unwrap();
     let y_end_tight = sol_tight.y.last().unwrap();
     let exact = std::f64::consts::E;

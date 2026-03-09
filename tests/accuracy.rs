@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{default_opts, SHO};
+use common::{default_ivp, SHO};
 
 fn methods() -> Vec<Method> {
     vec![
@@ -22,18 +22,17 @@ fn harmonic_accuracy_end_state() {
 
     for method in methods() {
         let method_dbg = format!("{:?}", method);
-        let opts = if let Method::RK4 = method {
+        let sol = if let Method::RK4 = method {
             // fixed step RK4: choose step to land on period
             let h = (xend - x0) / 2000.0;
-            Options::builder()
+            Ivp::first_order(&SHO, x0, xend, &y0)
                 .method(method.clone())
                 .first_step(h)
-                .build()
+                .solve()
         } else {
-            default_opts(method.clone())
+            default_ivp(&SHO, x0, xend, &y0, method.clone()).solve()
         };
-        let sol =
-            solve_first_order_ivp(&SHO, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
+        let sol = sol.expect("Ivp::solve failed");
         let y_end = sol.y.last().unwrap().clone();
         assert!(
             (y_end[0] - 1.0).abs() < 1e-5,
@@ -57,14 +56,13 @@ fn t_eval_sampling_exact_times() {
 
     for method in methods() {
         let method_dbg = format!("{:?}", method);
-        let opts = Options::builder()
+        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
             .method(method)
             .rtol(1e-9)
             .atol(1e-9)
             .t_eval(t_eval.clone())
-            .build();
-        let sol =
-            solve_first_order_ivp(&SHO, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         let tol = 1e-9;
         for &te in &t_eval {
             assert!(
@@ -83,7 +81,9 @@ fn iterate_samples() {
     let x0 = 0.0;
     let xend = 1.0;
     let y0 = [1.0, 0.0];
-    let sol = solve_first_order_ivp(&SHO, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol = default_ivp(&SHO, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     for (t, y) in sol.iter() {
         assert!(t >= x0 && t <= xend);
         assert_eq!(y.len(), y0.len());

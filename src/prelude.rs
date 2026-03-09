@@ -20,14 +20,13 @@
 //!     let xend = 2.0;
 //!     let y0 = [2.0, 0.0];
 //!     let t_eval = (0..=20).map(|i| i as f64 * 0.1).collect();
-//!     let options = Options::builder()
+//!     let sol = Ivp::first_order(&vdp, x0, xend, &y0)
 //!         .method(Method::DOP853)
 //!         .rtol(1e-6)
 //!         .atol(1e-11)
 //!         .t_eval(t_eval)
-//!         .build();
-//!
-//!     let sol = solve_first_order_ivp(&vdp, x0, xend, &y0, options).unwrap();
+//!         .solve()
+//!         .unwrap();
 //!     println!("Finished with status: {:?}", sol.status);
 //! }
 //! ```
@@ -39,9 +38,6 @@ pub use crate::{
     methods::SymplecticMethod,
     solout::ControlFlag,
     solve::event::{Direction, EventConfig},
-    solve::{
-        solve_first_order_ivp, solve_hamiltonian_ivp, solve_second_order_ivp, Method, Options,
-        Solution, SymplecticOptions,
-    },
+    solve::{FirstOrderIvp, HamiltonianIvp, Ivp, Method, SecondOrderIvp, Solution},
     status::Status,
 };

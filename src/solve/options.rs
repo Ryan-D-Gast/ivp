@@ -1,6 +1,4 @@
-//! Options for `solve_first_order_ivp`.
-
-use bon::Builder;
+//! Internal configuration for first-order solving.
 
 use crate::{
     dense::InterpolateFn,
@@ -9,7 +7,7 @@ use crate::{
     Float,
 };
 
-/// Numerical methods for `solve_first_order_ivp`.
+/// Numerical methods for first-order IVPs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Method {
     /// Bogacki–Shampine 3(2) adaptive RK
@@ -72,20 +70,16 @@ impl From<&str> for Method {
     }
 }
 
-#[derive(Builder)]
-/// Options for `solve_first_order_ivp`.
-pub struct Options {
+/// Internal options for first-order solving.
+pub(crate) struct FirstOrderConfig {
     /// Integration method. Choose an explicit RK (RK23/DOPRI5/DOP853/RK4) for non‑stiff
     /// problems or an implicit RK (RADAU) for stiff/DAE systems. Default: DOPRI5 (aka RK45).
-    #[builder(default = Method::DOPRI5, into)]
     pub method: Method,
     /// Relative tolerance for local error control. Accepts scalar or per‑component array/vector
     /// via [`Tolerance`]. The effective scaling for component i is `atol[i] + rtol[i]*|y[i]|`.
-    #[builder(default = 1e-3, into)]
     pub rtol: Tolerance,
     /// Absolute tolerance for local error control. Accepts scalar or per‑component array/vector.
     /// Used together with `rtol` to build the error scale `atol + rtol*|y|`.
-    #[builder(default = 1e-6, into)]
     pub atol: Tolerance,
     /// Maximum number of solver steps.
     pub max_steps: Option<usize>,
@@ -99,16 +93,13 @@ pub struct Options {
     pub min_step: Option<Float>,
     /// Store per‑step interpolants for cheap post‑run evaluation via `Solution::sol`/`sol_many`.
     /// Increases memory usage; recommended if you need values at times other than internal steps.
-    #[builder(default = false)]
     pub dense_output: bool,
     /// Preferred storage for the Jacobian `J = ∂f/∂y`. Default: `Full` (dense, writable).
     /// Solvers that don’t use a Jacobian ignore this. For banded storage you must provide
     /// an analytical Jacobian consistent with the chosen layout.
-    #[builder(default = MatrixStorage::Full)]
     pub jac_storage: MatrixStorage,
     /// Preferred storage for the mass matrix `M` in `M y' = f(t,y)`. Default: `Identity`
     /// (implicit I, no allocation). Set to `Full`/`Banded` to provide a non‑trivial mass matrix.
-    #[builder(default = MatrixStorage::Identity)]
     pub mass_storage: MatrixStorage,
     /// DAE partition: number of index‑1 (differential) variables at the start of the state.
     /// If `nind2`/`nind3` are set and `nind1` is omitted, it is inferred as `n − nind2 − nind3`.

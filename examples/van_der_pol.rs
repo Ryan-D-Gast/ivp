@@ -19,14 +19,13 @@ fn main() {
     let y0 = [2.0, 0.0];
     let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * 0.1).collect();
 
-    let options = Options::builder()
+    match Ivp::first_order(&vdp, 0.0, 2.0, &y0)
         .method(Method::BDF)
         .rtol(1e-6)
         .atol(1e-8)
         .t_eval(t_eval)
-        .build();
-
-    match solve_first_order_ivp(&vdp, 0.0, 2.0, &y0, options) {
+        .solve()
+    {
         Ok(sol) => {
             println!("Status: {:?}", sol.status);
             println!("nfev: {}, njev: {}, nlu: {}", sol.nfev, sol.njev, sol.nlu);

@@ -56,14 +56,13 @@ fn main() {
     let c_initial = cr3bp.jacobi_constant(&y0);
 
     let t_eval: Vec<f64> = (0..=100).map(|i| i as f64 * period / 100.0).collect();
-    let options = Options::builder()
+    match Ivp::first_order(&cr3bp, 0.0, period, &y0)
         .method(Method::DOP853)
         .rtol(1e-12)
         .atol(1e-14)
         .t_eval(t_eval)
-        .build();
-
-    match solve_first_order_ivp(&cr3bp, 0.0, period, &y0, options) {
+        .solve()
+    {
         Ok(sol) => {
             println!("Arenstorf Orbit (periodic, T={:.4})", period);
             println!(

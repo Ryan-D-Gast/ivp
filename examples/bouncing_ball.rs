@@ -37,13 +37,12 @@ fn main() {
     };
     let y0 = [10.0, 5.0]; // [height, velocity]
 
-    let options = Options::builder()
+    match Ivp::first_order(&ball, 0.0, 10.0, &y0)
         .method(Method::DOPRI5)
         .rtol(1e-8)
         .atol(1e-10)
-        .build();
-
-    match solve_first_order_ivp(&ball, 0.0, 10.0, &y0, options) {
+        .solve()
+    {
         Ok(sol) => {
             println!("Status: {:?}", sol.status);
 

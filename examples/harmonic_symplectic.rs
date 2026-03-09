@@ -19,13 +19,12 @@ fn main() {
     let v0 = [0.0];
     let t_eval: Vec<f64> = (0..=20).map(|i| i as f64).collect();
 
-    let options = SymplecticOptions::builder()
+    match Ivp::second_order(&HarmonicOscillator, 0.0, 20.0, &q0, &v0)
         .method(SymplecticMethod::VelocityVerlet)
         .step_size(0.05)
         .t_eval(t_eval)
-        .build();
-
-    match solve_second_order_ivp(&HarmonicOscillator, 0.0, 20.0, &q0, &v0, options) {
+        .solve()
+    {
         Ok(sol) => {
             println!("Status: {:?}", sol.status);
             println!("nfev: {}, steps: {}\n", sol.nfev, sol.nstep);

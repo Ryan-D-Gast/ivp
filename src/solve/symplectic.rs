@@ -1,6 +1,4 @@
-//! High-level fixed-step symplectic solving for structured problems.
-
-use bon::Builder;
+//! Internal fixed-step symplectic solve implementations.
 
 use crate::{
     dense::DenseSegment,
@@ -17,11 +15,10 @@ use crate::{
 
 use super::solution::Solution;
 
-#[derive(Builder, Clone, Debug)]
-/// Options for fixed-step symplectic integration.
-pub struct SymplecticOptions {
+#[derive(Clone, Debug)]
+/// Internal fixed-step symplectic configuration.
+pub(crate) struct SymplecticConfig {
     /// Symplectic method to use. Default: `VelocityVerlet`.
-    #[builder(default = SymplecticMethod::VelocityVerlet)]
     pub method: SymplecticMethod,
     /// Fixed step size. Must be non-zero and its sign must match `tf - t0`.
     pub step_size: Float,
@@ -31,7 +28,6 @@ pub struct SymplecticOptions {
     /// endpoints are stored.
     pub t_eval: Option<Vec<Float>>,
     /// Store per-step dense interpolants for cheap post-run evaluation.
-    #[builder(default = false)]
     pub dense_output: bool,
 }
 
@@ -59,36 +55,36 @@ where
 }
 
 /// Solve a separable Hamiltonian system using a fixed-step symplectic method.
-pub fn solve_hamiltonian_ivp<F>(
+pub(crate) fn solve_hamiltonian_impl<F>(
     f: &F,
     t0: Float,
     tf: Float,
     q0: &[Float],
     p0: &[Float],
-    options: SymplecticOptions,
+    config: SymplecticConfig,
 ) -> Result<Solution, Error>
 where
     F: SeparableHamiltonianSystem,
 {
     validate_dimensions(q0, p0)?;
-    solve_separable_impl(f, t0, tf, q0, p0, options)
+    solve_separable_impl(f, t0, tf, q0, p0, config)
 }
 
 /// Solve a second-order system `q'' = a(t, q)` using a fixed-step symplectic method.
-pub fn solve_second_order_ivp<F>(
+pub(crate) fn solve_second_order_impl<F>(
     f: &F,
     t0: Float,
     tf: Float,
     q0: &[Float],
     v0: &[Float],
-    options: SymplecticOptions,
+    config: SymplecticConfig,
 ) -> Result<Solution, Error>
 where
     F: SecondOrderSystem,
 {
     validate_dimensions(q0, v0)?;
     let adapter = SecondOrderAdapter::new(f);
-    solve_separable_impl(&adapter, t0, tf, q0, v0, options)
+    solve_separable_impl(&adapter, t0, tf, q0, v0, config)
 }
 
 fn solve_separable_impl<F>(
@@ -97,7 +93,7 @@ fn solve_separable_impl<F>(
     tf: Float,
     q0: &[Float],
     p0: &[Float],
-    options: SymplecticOptions,
+    config: SymplecticConfig,
 ) -> Result<Solution, Error>
 where
     F: SeparableHamiltonianSystem,
@@ -107,13 +103,13 @@ where
             t0,
             q0,
             p0,
-            options.t_eval.as_deref(),
-            options.dense_output,
+            config.t_eval.as_deref(),
+            config.dense_output,
         ));
     }
 
     let direction = (tf - t0).signum();
-    let max_steps = options.max_steps.unwrap_or(usize::MAX);
+    let max_steps = config.max_steps.unwrap_or(usize::MAX);
     if max_steps == 0 {
         return Err(Error::Config(ConfigError::MustBePositive {
             parameter: "max_steps",
@@ -121,14 +117,14 @@ where
         }));
     }
 
-    if options.step_size == 0.0 || options.step_size.signum() != direction {
+    if config.step_size == 0.0 || config.step_size.signum() != direction {
         return Err(Error::Config(ConfigError::InvalidStepSize {
-            value: options.step_size,
+            value: config.step_size,
             expected_sign: direction,
         }));
     }
 
-    if let Some(ts) = options.t_eval.as_deref() {
+    if let Some(ts) = config.t_eval.as_deref() {
         validate_t_eval(ts, t0, tf)?;
     }
 
@@ -144,33 +140,24 @@ where
     let mut nfev = 0usize;
     let mut nstep = 0usize;
     let mut status = Status::Success;
-    let mut dense_segments = options.dense_output.then_some(Vec::<DenseSegment>::new());
-    let mut start_derivative = if options.dense_output {
+    let mut dense_segments = config.dense_output.then_some(Vec::<DenseSegment>::new());
+    let mut start_derivative = if config.dense_output {
         Some(compute_flat_derivative(f, t, &q, &p, &mut work, &mut nfev))
     } else {
         None
     };
 
-    if options.t_eval.is_none() {
+    if config.t_eval.is_none() {
         push_state(&mut t_out, &mut y_out, t, &q, &p);
         while !nearly_equal(t, tf) {
             if nstep >= max_steps {
                 status = Status::NeedLargerNMax;
                 break;
             }
-            let h = bounded_step(t, tf, options.step_size);
+            let h = bounded_step(t, tf, config.step_size);
             let q_old = q.clone();
             let p_old = p.clone();
-            step_once(
-                options.method,
-                f,
-                t,
-                h,
-                &mut q,
-                &mut p,
-                &mut work,
-                &mut nfev,
-            );
+            step_once(config.method, f, t, h, &mut q, &mut p, &mut work, &mut nfev);
             let t_next = t + h;
             if let (Some(segs), Some((dq0, dp0))) =
                 (dense_segments.as_mut(), start_derivative.as_ref())
@@ -189,7 +176,7 @@ where
             push_state(&mut t_out, &mut y_out, t, &q, &p);
         }
     } else {
-        let outputs = options.t_eval.as_ref().unwrap();
+        let outputs = config.t_eval.as_ref().unwrap();
         let mut next_output = 0usize;
         while next_output < outputs.len() || !nearly_equal(t, tf) {
             let target = if next_output < outputs.len() {
@@ -203,19 +190,10 @@ where
                     status = Status::NeedLargerNMax;
                     break;
                 }
-                let h = bounded_step(t, target, options.step_size);
+                let h = bounded_step(t, target, config.step_size);
                 let q_old = q.clone();
                 let p_old = p.clone();
-                step_once(
-                    options.method,
-                    f,
-                    t,
-                    h,
-                    &mut q,
-                    &mut p,
-                    &mut work,
-                    &mut nfev,
-                );
+                step_once(config.method, f, t, h, &mut q, &mut p, &mut work, &mut nfev);
                 let t_next = t + h;
                 if let (Some(segs), Some((dq0, dp0))) =
                     (dense_segments.as_mut(), start_derivative.as_ref())

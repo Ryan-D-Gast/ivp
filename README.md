@@ -36,7 +36,7 @@
 
 -----
 
-This library provides a pure Rust implementation of SciPy's `solve_ivp` functionality with Rust-oriented APIs for first-order, second-order, and Hamiltonian systems. It is also available as a Python package with a SciPy-compatible `solve_ivp` interface.
+This library provides a pure Rust implementation of SciPy's `solve_ivp` functionality with a typed builder API for first-order, second-order, and Hamiltonian systems. It is also available as a Python package with a SciPy-compatible `solve_ivp` interface.
 
 ## Features
 
@@ -93,13 +93,12 @@ fn main() {
     let decay = ExponentialDecay;
     let y0 = [1.0];
 
-    let options = Options::builder()
+    let sol = Ivp::first_order(&decay, 0.0, 10.0, &y0)
         .method(Method::DOPRI5)
         .rtol(1e-6)
         .atol(1e-9)
-        .build();
-
-    let sol = solve_first_order_ivp(&decay, 0.0, 10.0, &y0, options).unwrap();
+        .solve()
+        .unwrap();
     
     println!("Final time: {}", sol.t.last().unwrap());
     println!("Final state: {:?}", sol.y.last().unwrap());
@@ -108,8 +107,8 @@ fn main() {
 
 ## Symplectic Usage
 
-For structured mechanics problems, use the dedicated symplectic API instead of
-the Rust first-order `solve_first_order_ivp` path.
+For structured mechanics problems, use the dedicated second-order or Hamiltonian
+builders instead of the Rust first-order `Ivp::first_order(...)` path.
 
 ```rust
 use ivp::prelude::*;
@@ -126,12 +125,11 @@ fn main() {
     let q0 = [1.0];
     let v0 = [0.0];
 
-    let options = SymplecticOptions::builder()
+    let sol = Ivp::second_order(&HarmonicOscillator, 0.0, 20.0, &q0, &v0)
         .method(SymplecticMethod::VelocityVerlet)
         .step_size(0.05)
-        .build();
-
-    let sol = solve_second_order_ivp(&HarmonicOscillator, 0.0, 20.0, &q0, &v0, options).unwrap();
+        .solve()
+        .unwrap();
 
     println!("Final state: {:?}", sol.y.last().unwrap());
 }
