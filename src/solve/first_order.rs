@@ -1,9 +1,9 @@
-//! Solve an initial value problem for a system of ODEs.
+//! Solve an initial value problem for a first-order system of ODEs.
 
 use crate::{
     error::Error,
+    ivp::FirstOrderSystem,
     methods::{BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
-    ivp::IVP,
     Float,
 };
 
@@ -14,14 +14,14 @@ use super::{
     solution::Solution,
 };
 
-/// Solve an initial value problem (IVP) for a system of first‑order ODEs: y' = f(x, y).
+/// Solve an initial value problem for a first-order system: `y' = f(x, y)`.
 ///
 /// This integrates from `x0` to `xend` starting at state `y0` using the method and
 /// tolerances specified in `options`. The result contains the discrete samples, solver
 /// statistics, and (optionally) a continuous interpolant for dense evaluation.
 ///
 /// Arguments:
-/// - `f`: System right‑hand side implementing `IVP`.
+/// - `f`: System right‑hand side implementing [`FirstOrderSystem`].
 /// - `x0`: Initial independent variable (time) value.
 /// - `xend`: Final independent variable value. Can be less than `x0` to integrate backward.
 /// - `y0`: Initial state vector at `x0`.
@@ -58,8 +58,8 @@ use super::{
 /// use ivp::prelude::*;
 ///
 /// struct SHO;
-/// impl IVP for SHO {
-///     fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
+/// impl FirstOrderSystem for SHO {
+///     fn derivative(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
 ///         dydx[0] = y[1];
 ///         dydx[1] = -y[0];
 ///     }
@@ -77,7 +77,7 @@ use super::{
 ///     let xend = 2.0 * std::f64::consts::PI; // one period
 ///     let y0 = [1.0, 0.0];
 ///
-///     let sol = solve_ivp(&f, x0, xend, &y0, opts).unwrap();
+///     let sol = solve_first_order_ivp(&f, x0, xend, &y0, opts).unwrap();
 ///
 ///     // Discrete samples
 ///     println!("Discrete output at accepted steps:");
@@ -96,7 +96,7 @@ use super::{
 ///     }
 /// }
 /// ```
-pub fn solve_ivp<F>(
+pub fn solve_first_order_ivp<F>(
     f: &F,
     x0: Float,
     xend: Float,
@@ -104,13 +104,14 @@ pub fn solve_ivp<F>(
     options: Options,
 ) -> Result<Solution, Error>
 where
-    F: IVP,
+    F: FirstOrderSystem,
 {
     // Handle zero-interval case: when x0 == xend, return immediately with initial state
     if (xend - x0).abs() < 1e-15 {
         // If t_eval is provided, return all t_eval points that match x0
         let (t, y) = if let Some(ref t_eval) = options.t_eval {
-            let matching: Vec<_> = t_eval.iter()
+            let matching: Vec<_> = t_eval
+                .iter()
                 .filter(|&&t| (t - x0).abs() < 1e-12)
                 .copied()
                 .collect();
@@ -119,7 +120,7 @@ where
         } else {
             (vec![x0], vec![y0.to_vec()])
         };
-        
+
         // Create a "constant" ContinuousOutput if dense_output is requested
         // This allows sol(t) to return y0 for any t (with extrapolation)
         let continuous_sol = if options.dense_output {
@@ -127,7 +128,7 @@ where
         } else {
             None
         };
-        
+
         return Ok(Solution {
             t,
             y,
@@ -143,7 +144,7 @@ where
             continuous_sol,
         });
     }
-    
+
     // Handle empty state vector case: nothing to integrate
     if y0.is_empty() {
         let t = if let Some(ref t_eval) = options.t_eval {
@@ -152,13 +153,13 @@ where
             vec![x0, xend]
         };
         let y: Vec<Vec<Float>> = t.iter().map(|_| Vec::new()).collect();
-        
+
         let continuous_sol = if options.dense_output {
             Some(ContinuousOutput::constant(options.method, x0, y0))
         } else {
             None
         };
-        
+
         return Ok(Solution {
             t,
             y,
@@ -177,7 +178,14 @@ where
 
     // Prepare the default SolOut (wrapping user callback if provided)
     let n_states = y0.len();
-    let mut default_solout = DefaultSolOut::new(f, options.t_eval.clone(), options.dense_output, options.first_step, x0, n_states);
+    let mut default_solout = DefaultSolOut::new(
+        f,
+        options.t_eval.clone(),
+        options.dense_output,
+        options.first_step,
+        x0,
+        n_states,
+    );
 
     // Dispatch by method
     let result = match options.method {
@@ -186,14 +194,7 @@ where
             let solver = RK4::builder()
                 .max_steps(options.max_steps.unwrap_or(usize::MAX))
                 .build();
-            solver.solve(
-                f,
-                x0,
-                y0,
-                xend,
-                h,
-                Some(&mut default_solout),
-            )
+            solver.solve(f, x0, y0, xend, h, Some(&mut default_solout))
         }
         Method::RK23 => {
             let solver = RK23::builder()
@@ -289,7 +290,11 @@ where
         Ok(sol) => {
             let (t, y, t_events, y_events, dense_raw) = default_solout.into_payload();
             let continuous_sol = if options.dense_output {
-                Some(ContinuousOutput::from_segments(options.method, n_states, dense_raw))
+                Some(ContinuousOutput::from_segments(
+                    options.method,
+                    n_states,
+                    dense_raw,
+                ))
             } else {
                 None
             };

@@ -1,15 +1,16 @@
 //! ivp: Initial value problem solvers for ODEs.
 //!
-//! This crate provides explicit Runge–Kutta methods (RK4, RK23, DOPRI5, DOP853) with
-//! adaptive step size control, optional dense output (continuous interpolation),
-//! and a convenient solution type with both discrete samples and interpolation helpers.
+//! This crate provides explicit Runge–Kutta methods (RK4, RK23, DOPRI5, DOP853),
+//! implicit methods (Radau, BDF), and structured fixed-step symplectic solvers
+//! for separable Hamiltonian and second-order systems.
 //!
 //! Highlights
-//! - Methods: RK4 (fixed step), RK23, DOPRI5, DOP853 (adaptive)
+//! - Methods: RK4, RK23, DOPRI5, DOP853, Radau, BDF
 //! - Controls: `rtol`, `atol`, `first_step`, `min_step`, `max_step`, `nmax`
 //! - Sampling: internal accepted steps by default, or exact `t_eval` times
 //! - Dense output: `sol(t)`, `sol_many(&ts)`, `sol_span()` on the returned `Solution`
 //! - Iteration: iterate stored samples via `solution.iter()`
+//! - Structured symplectic API: `solve_hamiltonian_ivp` and `solve_second_order_ivp`
 //!
 //! Quick start
 //! ```
@@ -17,8 +18,8 @@
 //! use std::f64::consts::PI;
 //!
 //! struct SHO;
-//! impl IVP for SHO {
-//!     fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
+//! impl FirstOrderSystem for SHO {
+//!     fn derivative(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
 //!         dydx[0] = y[1];
 //!         dydx[1] = -y[0];
 //!     }
@@ -36,7 +37,7 @@
 //!     let xend = 2.0 * PI; // one period
 //!     let y0 = [1.0, 0.0];
 //!
-//!     let sol = solve_ivp(&f, x0, xend, &y0, opts).unwrap();
+//!     let sol = solve_first_order_ivp(&f, x0, xend, &y0, opts).unwrap();
 //!
 //!     // Discrete samples
 //!     println!("Discrete output at accepted steps:");
@@ -54,6 +55,26 @@
 //!         }
 //!     }
 //! }
+//! ```
+//!
+//! Structured symplectic example
+//! ```
+//! use ivp::prelude::*;
+//!
+//! struct HarmonicOscillator;
+//! impl SecondOrderSystem for HarmonicOscillator {
+//!     fn acceleration(&self, _t: f64, q: &[f64], a: &mut [f64]) {
+//!         a[0] = -q[0];
+//!     }
+//! }
+//!
+//! let opts = SymplecticOptions::builder()
+//!     .method(SymplecticMethod::VelocityVerlet)
+//!     .step_size(0.05)
+//!     .build();
+//!
+//! let sol = solve_second_order_ivp(&HarmonicOscillator, 0.0, 1.0, &[1.0], &[0.0], opts).unwrap();
+//! assert_eq!(sol.y.last().unwrap().len(), 2);
 //! ```
 //!
 //! ## License
@@ -87,8 +108,8 @@ pub(crate) type Float = f64;
 // -- Core modules --
 pub mod dense;
 pub mod error;
-pub mod matrix;
 pub mod ivp;
+pub mod matrix;
 pub mod solout;
 pub mod solve;
 pub mod status;

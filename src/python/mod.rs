@@ -7,7 +7,7 @@
 //!
 //! - [`solution`]: Dense output wrapper (`OdeSolution`)
 //! - [`result`]: Result object (`OdeResult`)
-//! - [`ivp_wrapper`]: IVP trait implementation for Python callables
+//! - [`ivp_wrapper`]: System-trait implementations for Python callables
 //! - [`solve`]: Main `solve_ivp` function
 //! - [`conversion`]: Type conversion utilities
 //! - [`sparsity`]: Sparse Jacobian utilities
@@ -36,11 +36,15 @@ pub fn ivp(m: &Bound<'_, PyModule>) -> PyResult<()> {
          Supported methods:\n\
          - RK45, RK23, DOP853 (Explicit Runge-Kutta)\n\
          - Radau, BDF (Implicit methods for stiff problems)\n\
-         - RK4 (Classic Runge-Kutta)\n\n\
+         - RK4 (Classic Runge-Kutta)\n\
+         - VelocityVerlet, Ruth3, Yoshida4, SymplecticEuler* (structured symplectic methods)\n\n\
          Features:\n\
          - Dense output (continuous solution)\n\
          - Event detection (terminal and direction)\n\
          - Vectorized evaluation (optional)\n\
+         - Structured symplectic integration through `solve_ivp` when `fun` exposes\n\
+           `acceleration(t, q)` or `position_derivative(t, p)`/`momentum_derivative(t, q)`\n\
+           (legacy `drift`/`kick` names are also accepted)\n\
          - Argument passing to ODE functions",
     )?;
 

@@ -32,7 +32,8 @@ fn harmonic_accuracy_end_state() {
         } else {
             default_opts(method.clone())
         };
-        let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");
+        let sol =
+            solve_first_order_ivp(&SHO, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
         let y_end = sol.y.last().unwrap().clone();
         assert!(
             (y_end[0] - 1.0).abs() < 1e-5,
@@ -62,7 +63,8 @@ fn t_eval_sampling_exact_times() {
             .atol(1e-9)
             .t_eval(t_eval.clone())
             .build();
-        let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");
+        let sol =
+            solve_first_order_ivp(&SHO, x0, xend, &y0, opts).expect("solve_first_order_ivp failed");
         let tol = 1e-9;
         for &te in &t_eval {
             assert!(
@@ -81,7 +83,7 @@ fn iterate_samples() {
     let x0 = 0.0;
     let xend = 1.0;
     let y0 = [1.0, 0.0];
-    let sol = solve_ivp(&SHO, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol = solve_first_order_ivp(&SHO, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
     for (t, y) in sol.iter() {
         assert!(t >= x0 && t <= xend);
         assert_eq!(y.len(), y0.len());

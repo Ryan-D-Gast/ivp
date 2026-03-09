@@ -1,15 +1,15 @@
-//! User-supplied Initial Value Problem.
+//! User-supplied dynamical system definitions.
 
 use crate::{
-    Float,
     matrix::{Matrix, MatrixStorage},
     solve::event::EventConfig,
+    Float,
 };
 
-/// User-supplied IVP system.
+/// User-supplied first-order system.
 ///
 /// Implement this trait for your problem to provide the right-hand side
-/// function y' = f(x, y). The integrator repeatedly calls `ode` with the
+/// function y' = f(x, y). The integrator repeatedly calls `derivative` with the
 /// current abscissa `x` and state `y` and expects you to fill `dydx` with the
 /// derivative values.
 ///
@@ -17,16 +17,16 @@ use crate::{
 ///
 /// ```ignore
 /// struct VanDerPol { eps: f64 }
-/// impl IVP for VanDerPol {
-///     fn ode(&self, x: f64, y: &[f64], dydx: &mut [f64]) {
+/// impl FirstOrderSystem for VanDerPol {
+///     fn derivative(&self, x: f64, y: &[f64], dydx: &mut [f64]) {
 ///         dydx[0] = y[1];
 ///         dydx[1] = ((1.0 - y[0]*y[0])*y[1] - y[0]) / self.eps;
 ///     }
 /// }
 /// ```
-pub trait IVP {
+pub trait FirstOrderSystem {
     /// Compute the derivative dydx at (x, y).
-    fn ode(&self, x: Float, y: &[Float], dydx: &mut [Float]);
+    fn derivative(&self, x: Float, y: &[Float], dydx: &mut [Float]);
 
     /// Compute event function values.
     ///
@@ -77,7 +77,7 @@ pub trait IVP {
         let mut f_origin = vec![0.0; dim];
 
         // Compute the unperturbed derivative
-        self.ode(x, y, &mut f_origin);
+        self.derivative(x, y, &mut f_origin);
 
         // Use sqrt of machine epsilon for finite differences
         let eps = Float::EPSILON.sqrt();
@@ -94,7 +94,7 @@ pub trait IVP {
             y_perturbed[col] = y_original_j + perturbation;
 
             // Evaluate function with perturbed value
-            self.ode(x, &y_perturbed, &mut f_perturbed);
+            self.derivative(x, &y_perturbed, &mut f_perturbed);
 
             // Restore original value
             y_perturbed[col] = y_original_j;
@@ -118,4 +118,24 @@ pub trait IVP {
     fn mass(&self, m: &mut Matrix) {
         Matrix::identity(m.nrows());
     }
+}
+
+/// Separable Hamiltonian system in canonical form.
+///
+/// The state is represented as `(q, p)` with split dynamics
+/// `q' = dT/dp(p)` and `p' = -dV/dq(q)`.
+pub trait SeparableHamiltonianSystem {
+    /// Evaluate the position derivative `q' = dT/dp(p)`.
+    fn position_derivative(&self, t: Float, p: &[Float], dqdt: &mut [Float]);
+
+    /// Evaluate the momentum derivative `p' = -dV/dq(q)`.
+    fn momentum_derivative(&self, t: Float, q: &[Float], dpdt: &mut [Float]);
+}
+
+/// Second-order system `q'' = a(t, q)`.
+///
+/// This is a convenience problem definition for structured symplectic methods.
+pub trait SecondOrderSystem {
+    /// Evaluate the acceleration `q'' = a(t, q)`.
+    fn acceleration(&self, t: Float, q: &[Float], a: &mut [Float]);
 }

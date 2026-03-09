@@ -36,7 +36,7 @@
 
 -----
 
-This library provides a pure Rust implementation of SciPy's `solve_ivp` function with slight modifications to the API to better fit Rust's design patterns. It is also available as a Python package with a SciPy-compatible API.
+This library provides a pure Rust implementation of SciPy's `solve_ivp` functionality with Rust-oriented APIs for first-order, second-order, and Hamiltonian systems. It is also available as a Python package with a SciPy-compatible `solve_ivp` interface.
 
 ## Features
 
@@ -47,6 +47,7 @@ Currently implemented solvers:
 -   **RK23**: A 3rd order Runge-Kutta method with 2nd order error estimate for step-size control.
 -   **Radau**: A 5th order implicit Runge-Kutta method of Radau IIA type with step-size control and dense output.
 -   **BDF**: A variable-order (1 to 5) Backward Differentiation Formula method for stiff ODEs with adaptive step-size control and dense output.
+-   **Symplectic methods**: Fixed-step structured solvers for separable Hamiltonian and second-order systems, including Symplectic Euler, Velocity Verlet, Ruth 3, and Yoshida 4.
 
 ## Installation
 
@@ -82,8 +83,8 @@ use ivp::prelude::*;
 
 struct ExponentialDecay;
 
-impl IVP for ExponentialDecay {
-    fn ode(&self, _t: f64, y: &[f64], dydt: &mut [f64]) {
+impl FirstOrderSystem for ExponentialDecay {
+    fn derivative(&self, _t: f64, y: &[f64], dydt: &mut [f64]) {
         dydt[0] = -0.5 * y[0];
     }
 }
@@ -98,9 +99,65 @@ fn main() {
         .atol(1e-9)
         .build();
 
-    let sol = solve_ivp(&decay, 0.0, 10.0, &y0, options).unwrap();
+    let sol = solve_first_order_ivp(&decay, 0.0, 10.0, &y0, options).unwrap();
     
     println!("Final time: {}", sol.t.last().unwrap());
     println!("Final state: {:?}", sol.y.last().unwrap());
 }
 ```
+
+## Symplectic Usage
+
+For structured mechanics problems, use the dedicated symplectic API instead of
+the Rust first-order `solve_first_order_ivp` path.
+
+```rust
+use ivp::prelude::*;
+
+struct HarmonicOscillator;
+
+impl SecondOrderSystem for HarmonicOscillator {
+    fn acceleration(&self, _t: f64, q: &[f64], a: &mut [f64]) {
+        a[0] = -q[0];
+    }
+}
+
+fn main() {
+    let q0 = [1.0];
+    let v0 = [0.0];
+
+    let options = SymplecticOptions::builder()
+        .method(SymplecticMethod::VelocityVerlet)
+        .step_size(0.05)
+        .build();
+
+    let sol = solve_second_order_ivp(&HarmonicOscillator, 0.0, 20.0, &q0, &v0, options).unwrap();
+
+    println!("Final state: {:?}", sol.y.last().unwrap());
+}
+```
+
+Python can also route these methods through `solve_ivp`, but `fun` must expose
+structure, not just a generic first-order RHS:
+
+```python
+import numpy as np
+from ivp import solve_ivp
+
+class HarmonicOscillator:
+    def acceleration(self, t, q):
+        return np.array([-q[0]])
+
+sol = solve_ivp(
+    HarmonicOscillator(),
+    (0.0, 20.0),
+    [1.0, 0.0],
+    method="VelocityVerlet",
+    step_size=0.05,
+    dense_output=True,
+)
+
+print(sol.sol(0.5))
+```
+
+Current limitation: event handling is not yet supported for symplectic methods.

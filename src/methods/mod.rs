@@ -1,21 +1,33 @@
 // Numerical methods
 
 // --- ODE Solvers ---
+mod bdf;
 mod dop853;
 mod dopri5;
 mod radau;
-mod rk4;
 mod rk23;
-mod bdf;
+mod rk4;
+mod ruth3;
+mod symplectic;
+mod symplectic_euler;
+mod velocity_verlet;
+mod yoshida4;
 
 pub use bdf::BDF;
 pub use dop853::DOP853;
 pub use dopri5::DOPRI5;
 pub use radau::RADAU;
-pub use rk4::RK4;
 pub use rk23::RK23;
+pub use rk4::RK4;
+pub use symplectic::SymplecticMethod;
 
-use crate::{Float, ivp::IVP, status::Status};
+pub(crate) use ruth3::step as ruth3_step;
+pub(crate) use symplectic::SymplecticWork;
+pub(crate) use symplectic_euler::{drift_kick_step, kick_drift_step};
+pub(crate) use velocity_verlet::step as velocity_verlet_step;
+pub(crate) use yoshida4::step as yoshida4_step;
+
+use crate::{ivp::FirstOrderSystem, status::Status, Float};
 
 use std::{
     iter::{ExactSizeIterator, FusedIterator},
@@ -228,7 +240,7 @@ pub fn hinit<F>(
     rtol: &Tolerance,
 ) -> Float
 where
-    F: IVP,
+    F: FirstOrderSystem,
 {
     let n = y.len();
     let mut dnf: Float = 0.0;
@@ -257,7 +269,7 @@ where
         y1[i] = y[i] + h * f0[i];
     }
     // Evaluate f at x+h
-    f.ode(x + h, y1, f1);
+    f.derivative(x + h, y1, f1);
 
     // Estimate second derivative
     let mut der2: Float = 0.0;

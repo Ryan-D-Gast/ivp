@@ -7,8 +7,8 @@ struct BouncingBall {
     drag: f64,
 }
 
-impl IVP for BouncingBall {
-    fn ode(&self, _t: f64, state: &[f64], dsdt: &mut [f64]) {
+impl FirstOrderSystem for BouncingBall {
+    fn derivative(&self, _t: f64, state: &[f64], dsdt: &mut [f64]) {
         let vy = state[1];
         dsdt[0] = vy;
         dsdt[1] = -self.gravity - self.drag * vy * vy.abs();
@@ -31,7 +31,10 @@ impl IVP for BouncingBall {
 }
 
 fn main() {
-    let ball = BouncingBall { gravity: 9.81, drag: 0.02 };
+    let ball = BouncingBall {
+        gravity: 9.81,
+        drag: 0.02,
+    };
     let y0 = [10.0, 5.0]; // [height, velocity]
 
     let options = Options::builder()
@@ -40,13 +43,16 @@ fn main() {
         .atol(1e-10)
         .build();
 
-    match solve_ivp(&ball, 0.0, 10.0, &y0, options) {
+    match solve_first_order_ivp(&ball, 0.0, 10.0, &y0, options) {
         Ok(sol) => {
             println!("Status: {:?}", sol.status);
 
             if let Some(t_impact) = sol.t_events.get(0).and_then(|e| e.first()) {
                 let v_impact = sol.y_events[0][0][1].abs();
-                println!("Ground impact at t={:.4}s, velocity={:.4} m/s", t_impact, v_impact);
+                println!(
+                    "Ground impact at t={:.4}s, velocity={:.4} m/s",
+                    t_impact, v_impact
+                );
             }
 
             println!("\nTrajectory:");

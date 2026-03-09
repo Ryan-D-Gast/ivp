@@ -1,20 +1,21 @@
 //! Default output handler for ODE solvers.
 //!
 //! This module provides `DefaultSolOut`, an internal implementation of the `SolOut` trait
-//! that handles output sampling, event detection, and dense output collection for `solve_ivp`.
+//! that handles output sampling, event detection, and dense output collection for
+//! `solve_first_order_ivp`.
 
 use crate::{
-    Float,
     dense::StepInterpolant,
-    ivp::IVP,
+    ivp::FirstOrderSystem,
     solout::{ControlFlag, SolOut},
     solve::event::{Direction, EventConfig},
+    Float,
 };
 
-/// Internal output handler for `solve_ivp`.
+/// Internal output handler for `solve_first_order_ivp`.
 pub(crate) struct DefaultSolOut<'a, F>
 where
-    F: IVP,
+    F: FirstOrderSystem,
 {
     /// Reference to the ODE system
     ode: &'a F,
@@ -62,7 +63,7 @@ where
 
 impl<'a, F> DefaultSolOut<'a, F>
 where
-    F: IVP,
+    F: FirstOrderSystem,
 {
     /// Constructs a new output handler.
     pub fn new(
@@ -124,7 +125,7 @@ where
     }
 }
 
-impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
+impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
     fn solout(
         &mut self,
         xold: Float,
@@ -137,7 +138,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         // ============================================================================
         // Collect interpolation coefficients from each accepted step for later
         // continuous evaluation. Skip the initial callback and degenerate segments.
-        
+
         if self.collect_dense && *x != xold && interpolant.is_some() {
             let seg = interpolant.unwrap().to_segment();
             if seg.h != 0.0 {
@@ -150,11 +151,11 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         // ============================================================================
         // Monitor the user-defined event function for zero-crossings. Uses bisection
         // to refine the event location when a sign change is detected.
-        // 
+        //
         // Important: When multiple events occur in the same step, we must process them
         // in chronological order. If a terminal event occurs, any events after it
         // in time should not be recorded.
-        
+
         let n_events = self.ode.n_events();
         if n_events > 0 {
             self.ode.events(*x, y, &mut self.g_curr_buf);
@@ -178,7 +179,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                 // First pass: find all events in this step and their refined times
                 // Store as (time, event_index, y_at_event)
                 let mut detected_events: Vec<(Float, usize, Vec<Float>)> = Vec::new();
-                
+
                 for i in 0..n_events {
                     let g_prev = self.prev_event[i];
                     let g_curr = self.g_curr_buf[i];
@@ -226,7 +227,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                                 // Convergence check (scipy's termination condition)
                                 let tol1 = 2.0 * RTOL * b.abs() + 0.5 * XTOL;
                                 let xm = 0.5 * (c - b);
-                                
+
                                 if xm.abs() <= tol1 || fb == 0.0 {
                                     break;
                                 }
@@ -240,8 +241,10 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                                         let p = 2.0 * xm * s;
                                         let q = 1.0 - s;
                                         let (p, q) = if q > 0.0 { (-p, q) } else { (p, -q) };
-                                        
-                                        if 2.0 * p < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs()) {
+
+                                        if 2.0 * p
+                                            < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs())
+                                        {
                                             e = d;
                                             d = p / q;
                                         } else {
@@ -253,11 +256,15 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                                         let q_val = fa / fc;
                                         let r = fb / fc;
                                         s = fb / fa;
-                                        let p = s * (2.0 * xm * q_val * (q_val - r) - (b - a) * (r - 1.0));
+                                        let p = s
+                                            * (2.0 * xm * q_val * (q_val - r)
+                                                - (b - a) * (r - 1.0));
                                         let q = (q_val - 1.0) * (r - 1.0) * (s - 1.0);
                                         let (p, q) = if q > 0.0 { (-p, q) } else { (p, -q) };
-                                        
-                                        if 2.0 * p < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs()) {
+
+                                        if 2.0 * p
+                                            < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs())
+                                        {
                                             e = d;
                                             d = p / q;
                                         } else {
@@ -305,7 +312,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                 // Process events in chronological order
                 for (event_t, i, event_y) in detected_events {
                     let config = &self.event_config[i];
-                    
+
                     // Record the event
                     self.t_events[i].push(event_t);
                     self.y_events[i].push(event_y.clone());
@@ -317,14 +324,14 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                             // Add the terminal event point to the output
                             self.t.push(event_t);
                             self.y.push(event_y);
-                            
+
                             // Update prev_event before returning
                             self.prev_event.copy_from_slice(&self.g_curr_buf);
                             return ControlFlag::Interrupt;
                         }
                     }
                 }
-                
+
                 // Update prev_event for all events
                 self.prev_event.copy_from_slice(&self.g_curr_buf);
             }
@@ -340,13 +347,13 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
         // ============================================================================
         // Output Sampling
         // ============================================================================
-        
+
         if let Some(t_eval) = self.t_eval.as_ref() {
             // Mode 1: User-specified output times
             // Interpolate solution at each requested time within the current step interval.
-            
+
             let mut i = self.next_idx;
-            
+
             if (xold - *x).abs() <= self.tol {
                 // Initial callback (xold == x): output at matching t_eval points
                 while i < t_eval.len() && (t_eval[i] - *x).abs() <= self.tol {
@@ -358,7 +365,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                 // Regular accepted step: interpolate at all t_eval[i] within [xold, x] or [x, xold]
                 // Handle both forward (x > xold) and backward (x < xold) integration
                 let forward = *x > xold;
-                
+
                 if forward {
                     // Forward integration: t_eval[i] in (xold, x]
                     while i < t_eval.len() && t_eval[i] <= *x + self.tol {
@@ -388,7 +395,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
             // Mode 2: Solver-selected output times
             // Record accepted step endpoints. If first_step is set, enforce that the
             // first output (after the initial condition) occurs at exactly x0 +/- first_step.
-            
+
             if let Some(h0) = self.first_step {
                 // First-step enforcement: skip intermediate outputs until we reach/pass
                 // the target, then interpolate to the exact point.
@@ -396,7 +403,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                     let direction = (*x - xold).signum();
                     // For backward integration (direction < 0), target is x0 - h0
                     let target = self.x0 + direction * h0;
-                    
+
                     if direction * (*x - target) >= -self.tol {
                         // We've reached or passed the target point
                         if let Some(interp) = interpolant {
@@ -406,7 +413,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                             self.y.push(yi);
                             self.first_output_done = true;
                         }
-                        
+
                         // Also output current endpoint if distinct from target
                         if (*x - target).abs() > self.tol {
                             self.t.push(*x);
@@ -419,7 +426,7 @@ impl<'a, F: IVP> SolOut for DefaultSolOut<'a, F> {
                     }
                 }
             }
-            
+
             // Normal output: record endpoint (avoid duplicates)
             if self.t.is_empty() || (self.t.last().unwrap() - *x).abs() > self.tol {
                 self.t.push(*x);

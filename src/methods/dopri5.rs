@@ -19,13 +19,13 @@
 //!
 
 use crate::{
-    Float,
     dense::StepInterpolant,
-    error::{Error, ConfigError},
-    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
-    ivp::IVP,
+    error::{ConfigError, Error},
+    ivp::FirstOrderSystem,
+    methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
     solout::{ControlFlag, SolOut},
     status::Status,
+    Float,
 };
 use bon::Builder;
 
@@ -35,37 +35,37 @@ pub struct DOPRI5 {
     /// Machine rounding unit (default: 2.3e-16 for f64)
     #[builder(default = 2.3e-16)]
     pub uround: Float,
-    
+
     /// Safety factor for step size control (default: 0.9)
     #[builder(default = 0.9)]
     pub safety_factor: Float,
-    
+
     /// Minimum step scaling factor (default: 0.2)
     #[builder(default = 0.2)]
     pub scale_min: Float,
-    
+
     /// Maximum step scaling factor (default: 10.0)
     #[builder(default = 10.0)]
     pub scale_max: Float,
-    
+
     /// Stabilization parameter for step control (default: 0.04)
     #[builder(default = 0.04)]
     pub beta: Float,
-    
+
     /// Maximum step size (default: None = |xend - x|)
     pub max_step: Option<Float>,
-    
+
     /// Initial step size (default: None = automatic)
     pub first_step: Option<Float>,
-    
+
     /// Maximum number of steps (default: 100_000)
     #[builder(default = 100_000)]
     pub max_steps: usize,
-    
+
     /// Interval for stiffness detection (default: 1000 steps)
     #[builder(default = 1000)]
     pub stiff_test: usize,
-    
+
     /// Enable dense output (default: true)
     #[builder(default = true)]
     pub dense_output: bool,
@@ -100,7 +100,7 @@ impl DOPRI5 {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `IVP`.
+    /// - `f`: Right‑hand side implementing [`FirstOrderSystem`].
     /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y0`: Slice containing the initial state.
@@ -113,8 +113,8 @@ impl DOPRI5 {
     /// - `dense_output`: If `true`, dense‑output coefficients are computed every
     ///   accepted step to enable fast interpolation via the provided interpolant.
     ///
-    /// Solver settings (`uround`, `safety_factor`, `scale_min`, `scale_max`, `beta`, 
-    /// `max_step`, `first_step`, `max_steps`, `stiff_test`) are configured via the 
+    /// Solver settings (`uround`, `safety_factor`, `scale_min`, `scale_max`, `beta`,
+    /// `max_step`, `first_step`, `max_steps`, `stiff_test`) are configured via the
     /// `DOPRI5` struct fields.
     ///
     /// # Returns
@@ -130,7 +130,7 @@ impl DOPRI5 {
         mut solout: Option<&mut S>,
     ) -> Result<IntegrationResult, Error>
     where
-        F: IVP,
+        F: FirstOrderSystem,
         S: SolOut,
     {
         // Create mutable copies for the solver to mutate
@@ -227,7 +227,7 @@ impl DOPRI5 {
         let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.ode(x, &y, &mut k1);
+        f.derivative(x, &y, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
@@ -252,7 +252,7 @@ impl DOPRI5 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Recompute k1 at new (x, y).
-                    f.ode(x, &y, &mut k1);
+                    f.derivative(x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -288,40 +288,40 @@ impl DOPRI5 {
             for i in 0..n {
                 y1[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(x + C2 * h, &y1, &mut k2);
+            f.derivative(x + C2 * h, &y1, &mut k2);
 
             // Stage 3
             for i in 0..n {
                 y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
             }
-            f.ode(x + C3 * h, &y1, &mut k3);
+            f.derivative(x + C3 * h, &y1, &mut k3);
 
             // Stage 4
             for i in 0..n {
                 y1[i] = y[i] + h * (A41 * k1[i] + A42 * k2[i] + A43 * k3[i]);
             }
-            f.ode(x + C4 * h, &y1, &mut k4);
+            f.derivative(x + C4 * h, &y1, &mut k4);
 
             // Stage 5
             for i in 0..n {
                 y1[i] = y[i] + h * (A51 * k1[i] + A52 * k2[i] + A53 * k3[i] + A54 * k4[i]);
             }
-            f.ode(x + C5 * h, &y1, &mut k5);
+            f.derivative(x + C5 * h, &y1, &mut k5);
 
             // Stage 6 (ysti)
             for i in 0..n {
-                y1[i] =
-                    y[i] + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
+                y1[i] = y[i]
+                    + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
             }
             xph = x + h;
-            f.ode(xph, &y1, &mut k6);
+            f.derivative(xph, &y1, &mut k6);
 
             // Final stage
             for i in 0..n {
-                y1[i] =
-                    y[i] + h * (A71 * k1[i] + A73 * k3[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
+                y1[i] = y[i]
+                    + h * (A71 * k1[i] + A73 * k3[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
             }
-            f.ode(xph, &y1, &mut k2);
+            f.derivative(xph, &y1, &mut k2);
             evals.ode += 6;
 
             // Prepare last segment of dense output before recalculating k4
@@ -329,14 +329,20 @@ impl DOPRI5 {
             if self.dense_output || event {
                 for i in 0..n {
                     cont[4 * n + i] = h
-                        * (D1 * k1[i] + D3 * k3[i] + D4 * k4[i] + D5 * k5[i] + D6 * k6[i] + D7 * k2[i]);
+                        * (D1 * k1[i]
+                            + D3 * k3[i]
+                            + D4 * k4[i]
+                            + D5 * k5[i]
+                            + D6 * k6[i]
+                            + D7 * k2[i]);
                 }
             }
 
             // K4 scaled for error estimate
             for i in 0..n {
                 k4[i] =
-                    (E1 * k1[i] + E3 * k3[i] + E4 * k4[i] + E5 * k5[i] + E6 * k6[i] + E7 * k2[i]) * h;
+                    (E1 * k1[i] + E3 * k3[i] + E4 * k4[i] + E5 * k5[i] + E6 * k6[i] + E7 * k2[i])
+                        * h;
             }
 
             // Error estimation
@@ -367,7 +373,11 @@ impl DOPRI5 {
                     for i in 0..n {
                         let d1 = k2[i] - k6[i];
                         let ysti = y[i]
-                            + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
+                            + h * (A61 * k1[i]
+                                + A62 * k2[i]
+                                + A63 * k3[i]
+                                + A64 * k4[i]
+                                + A65 * k5[i]);
                         let d2 = y1[i] - ysti;
                         stnum += d1 * d1;
                         stden += d2 * d2;
@@ -421,7 +431,7 @@ impl DOPRI5 {
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.ode(x, &y, &mut k1);
+                            f.derivative(x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
@@ -473,7 +483,8 @@ impl DOPRI5 {
                 + theta
                     * (cont[n + i]
                         + theta1
-                            * (cont[2 * n + i] + theta * (cont[3 * n + i] + theta1 * cont[4 * n + i])));
+                            * (cont[2 * n + i]
+                                + theta * (cont[3 * n + i] + theta1 * cont[4 * n + i])));
         }
     }
 }

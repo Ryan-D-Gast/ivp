@@ -1,13 +1,13 @@
 //! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator
 
 use crate::{
-    Float,
     dense::StepInterpolant,
-    error::{Error, ConfigError},
-    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
-    ivp::IVP,
+    error::{ConfigError, Error},
+    ivp::FirstOrderSystem,
+    methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
     solout::{ControlFlag, SolOut},
     status::Status,
+    Float,
 };
 use bon::Builder;
 
@@ -60,19 +60,19 @@ impl RK23 {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `IVP`.
+    /// - `f`: Right‑hand side implementing [`FirstOrderSystem`].
     /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y0`: Slice containing the initial state.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
-    /// 
+    ///
     /// ## Output Control
     /// - `solout`: Optional mutable reference to a `SolOut` callback used for
     ///   intermediate output. If `dense_output` is `true` the callback may receive
     ///   a dense interpolant.
     /// - `dense_output`: If `true`, dense‑output coefficients are computed every
     ///   accepted step to enable fast interpolation via the provided interpolant.
-    /// 
+    ///
     /// Solver settings (`safety_factor`, `scale_min`, `scale_max`, `max_step`, `first_step`, `max_steps`)
     /// are configured via the `RK23` struct fields.
     ///
@@ -89,7 +89,7 @@ impl RK23 {
         mut solout: Option<&mut S>,
     ) -> Result<IntegrationResult, Error>
     where
-        F: IVP,
+        F: FirstOrderSystem,
         S: SolOut,
     {
         // Create mutable copies for the solver to mutate
@@ -97,7 +97,7 @@ impl RK23 {
         let mut y = y0.to_vec();
 
         // --- Input Validation ---
-        
+
         // Maximum Number of Steps
         let nmax = self.max_steps;
         if nmax == 0 {
@@ -151,7 +151,7 @@ impl RK23 {
         let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.ode(x, &y, &mut k1);
+        f.derivative(x, &y, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
@@ -175,7 +175,7 @@ impl RK23 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Recompute k1 at new (x, y).
-                    f.ode(x, &y, &mut k1);
+                    f.derivative(x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -202,13 +202,13 @@ impl RK23 {
             for i in 0..n {
                 yt[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(x + C2 * h, &yt, &mut k2);
+            f.derivative(x + C2 * h, &yt, &mut k2);
 
             // Stage 3
             for i in 0..n {
                 yt[i] = y[i] + h * A32 * k2[i];
             }
-            f.ode(x + C3 * h, &yt, &mut k3);
+            f.derivative(x + C3 * h, &yt, &mut k3);
 
             // Compute solution and error estimate
             for i in 0..n {
@@ -216,7 +216,7 @@ impl RK23 {
             }
 
             // Stage 4/1: derivative at new point, also used as k1 if accepted.
-            f.ode(x + h, &yt, &mut k4);
+            f.derivative(x + h, &yt, &mut k4);
 
             evals.ode += 3;
 
@@ -270,7 +270,7 @@ impl RK23 {
                         ControlFlag::ModifiedSolution => {
                             // Update with modified solution
                             // Recompute k1 at new (x, y).
-                            f.ode(x, &y, &mut k1);
+                            f.derivative(x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
@@ -345,4 +345,3 @@ const D31: Float = 5.0 / 9.0;
 const D32: Float = -2.0 / 3.0;
 const D33: Float = -8.0 / 9.0;
 const D34: Float = 1.0;
-

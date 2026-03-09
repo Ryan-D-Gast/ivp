@@ -2,7 +2,7 @@
 
 use crate::Float;
 
-/// Top-level error type for IVP solver operations
+/// Top-level error type for solver operations
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Configuration validation failed with one or more issues
@@ -40,16 +40,18 @@ pub enum ConfigError {
         expected: usize,
         actual: usize,
     },
+    /// A sequence must be monotone in the integration direction
+    NonMonotonicSequence { parameter: &'static str },
+    /// Two dimensions that should match do not
+    DimensionMismatch {
+        parameter: &'static str,
+        expected: usize,
+        actual: usize,
+    },
     /// Step size is invalid (zero or wrong sign)
-    InvalidStepSize {
-        value: Float,
-        expected_sign: Float,
-    },
+    InvalidStepSize { value: Float, expected_sign: Float },
     /// Step scaling factors are invalid
-    InvalidScaleFactors {
-        min: Float,
-        max: Float,
-    },
+    InvalidScaleFactors { min: Float, max: Float },
     /// DAE index partition is invalid
     InvalidDAEPartition {
         n: usize,
@@ -76,7 +78,11 @@ pub enum InterpolationError {
     /// Dense output was not enabled in solver options
     NotEnabled,
     /// Evaluation point is outside the solution span
-    OutOfRange { t: Float, t_start: Float, t_end: Float },
+    OutOfRange {
+        t: Float,
+        t_start: Float,
+        t_end: Float,
+    },
 }
 
 impl std::fmt::Display for ConfigError {
@@ -89,7 +95,12 @@ impl std::fmt::Display for ConfigError {
                     parameter, value
                 )
             }
-            ConfigError::OutOfRange { parameter, value, min, max } => {
+            ConfigError::OutOfRange {
+                parameter,
+                value,
+                min,
+                max,
+            } => {
                 write!(
                     f,
                     "invalid {}: {:.3e} (must be in ({:.3e}, {:.3e}))",
@@ -103,18 +114,44 @@ impl std::fmt::Display for ConfigError {
                     kind, index, value
                 )
             }
-            ConfigError::ToleranceSizeMismatch { kind, expected, actual } => {
+            ConfigError::ToleranceSizeMismatch {
+                kind,
+                expected,
+                actual,
+            } => {
                 write!(
                     f,
                     "{} tolerance length mismatch: expected {} (state dimension), got {}",
                     kind, expected, actual
                 )
             }
-            ConfigError::InvalidStepSize { value, expected_sign } => {
+            ConfigError::NonMonotonicSequence { parameter } => {
+                write!(
+                    f,
+                    "{} must be monotone in the integration direction",
+                    parameter
+                )
+            }
+            ConfigError::DimensionMismatch {
+                parameter,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "{} dimension mismatch: expected {}, got {}",
+                    parameter, expected, actual
+                )
+            }
+            ConfigError::InvalidStepSize {
+                value,
+                expected_sign,
+            } => {
                 write!(
                     f,
                     "invalid step size: h = {}. h must be non-zero and its sign must match sign(xend - x) = {}",
-                    value, expected_sign.signum()
+                    value,
+                    expected_sign.signum()
                 )
             }
             ConfigError::InvalidScaleFactors { min, max } => {
@@ -124,7 +161,12 @@ impl std::fmt::Display for ConfigError {
                     min, max
                 )
             }
-            ConfigError::InvalidDAEPartition { n, nind1, nind2, nind3 } => {
+            ConfigError::InvalidDAEPartition {
+                n,
+                nind1,
+                nind2,
+                nind3,
+            } => {
                 write!(
                     f,
                     "invalid DAE partition: n={}, nind1={}, nind2={}, nind3={}. Counts must be non-negative, ordered (index-1, then index-2, then index-3), and sum to n",

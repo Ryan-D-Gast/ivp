@@ -1,4 +1,4 @@
-//! Options for solve_ivp
+//! Options for `solve_first_order_ivp`.
 
 use bon::Builder;
 
@@ -9,7 +9,7 @@ use crate::{
     Float,
 };
 
-/// Numerical methods for solve_ivp
+/// Numerical methods for `solve_first_order_ivp`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Method {
     /// Bogacki–Shampine 3(2) adaptive RK
@@ -73,7 +73,7 @@ impl From<&str> for Method {
 }
 
 #[derive(Builder)]
-/// Options for `solve_ivp`.
+/// Options for `solve_first_order_ivp`.
 pub struct Options {
     /// Integration method. Choose an explicit RK (RK23/DOPRI5/DOP853/RK4) for non‑stiff
     /// problems or an implicit RK (RADAU) for stiff/DAE systems. Default: DOPRI5 (aka RK45).

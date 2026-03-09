@@ -2,10 +2,10 @@
 
 use crate::{
     dense::StepInterpolant,
-    error::{Error, ConfigError},
+    error::{ConfigError, Error},
+    ivp::FirstOrderSystem,
     matrix::{lin_solve, lu_decomp, Matrix, MatrixStorage},
     methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
-    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
     Float,
@@ -68,7 +68,7 @@ impl BDF {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `IVP`.
+    /// - `f`: Right‑hand side implementing [`FirstOrderSystem`].
     /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y0`: Slice containing the initial state.
@@ -94,7 +94,7 @@ impl BDF {
         mut solout: Option<&mut S>,
     ) -> Result<IntegrationResult, Error>
     where
-        F: IVP,
+        F: FirstOrderSystem,
         S: SolOut,
     {
         let mut x = x0;
@@ -108,7 +108,7 @@ impl BDF {
                 Steps::new(),
             ));
         }
-        
+
         // Convert tolerances to per-component vectors and validate non-negativity/length
         for i in 0..n {
             if rtol[i] < 0.0 {
@@ -146,13 +146,13 @@ impl BDF {
 
         // Workspace vectors
         let mut f0 = vec![0.0; n];
-        f.ode(x, &y, &mut f0);
+        f.derivative(x, &y, &mut f0);
         evals.ode += 1;
 
         let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
         f.jac(x, &y, &mut jac);
         evals.jac += 1;
-        
+
         // Track when LU decomposition is current
         let mut lu_is_current = false;
         let mut current_c: Float = 0.0;
@@ -254,7 +254,7 @@ impl BDF {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.ode(x, &y, &mut f0);
+                    f.derivative(x, &y, &mut f0);
                     evals.ode += 1;
                     d[0].copy_from_slice(&y);
                     for i in 0..n {
@@ -291,7 +291,7 @@ impl BDF {
                 h_try = hmax;
                 current_h = h_try;
                 n_equal_steps = 0;
-                lu_is_current = false;  // Step size changed
+                lu_is_current = false; // Step size changed
             }
             if h_try < hmin && hmin > 0.0 {
                 let factor = (hmin / h_try).max(1.0);
@@ -299,7 +299,7 @@ impl BDF {
                 h_try = hmin;
                 current_h = h_try;
                 n_equal_steps = 0;
-                lu_is_current = false;  // Step size changed
+                lu_is_current = false; // Step size changed
             }
 
             let mut h_signed = direction * h_try;
@@ -318,7 +318,7 @@ impl BDF {
                 h_signed = direction * h_try;
                 x_new = x + h_signed;
                 n_equal_steps = 0;
-                lu_is_current = false;  // Step size changed
+                lu_is_current = false; // Step size changed
             }
 
             // Step size guard against stagnation
@@ -355,7 +355,7 @@ impl BDF {
 
             // Build and factor LU of (I - c*J) only when needed
             let c = h_signed / alpha[order];
-            
+
             // Rebuild LU if: not current, or c coefficient changed significantly, or Jacobian was refreshed
             if !lu_is_current || (c - current_c).abs() / c.abs().max(1.0) > 0.1 {
                 for r in 0..n {
@@ -389,7 +389,7 @@ impl BDF {
             let mut dy_norm_prev: Option<Float> = None;
             let mut iters = 0usize;
             while iters < newton_maxiter_val {
-                f.ode(x_new, &y_new, &mut rhs);
+                f.derivative(x_new, &y_new, &mut rhs);
                 evals.ode += 1;
                 for i in 0..n {
                     rhs[i] = c * rhs[i] - psi[i] - delta[i];
@@ -450,7 +450,7 @@ impl BDF {
                 f.jac(x_new, &y_predict, &mut jac);
                 evals.jac += 1;
                 lu_is_current = false;
-                
+
                 change_d(&mut d, order, 0.5, &mut scratch_change);
                 current_h *= 0.5;
                 n_equal_steps = 0;
@@ -524,7 +524,7 @@ impl BDF {
                     }
                     ControlFlag::ModifiedSolution => {
                         // Update derivatives at new (x, y).
-                        f.ode(x, &y, &mut f0);
+                        f.derivative(x, &y, &mut f0);
                         evals.ode += 1;
                         d[0].copy_from_slice(&y);
                         for i in 0..n {
@@ -574,7 +574,7 @@ impl BDF {
                     // 0.0.powf(negative) = inf in Rust, matching SciPy behavior
                     factors[idx] = err.powf(exponent);
                 }
-                
+
                 // Find best order change: argmax(factors) - 1
                 let (best_idx, _) = factors
                     .iter()
@@ -592,13 +592,13 @@ impl BDF {
                 // SciPy: factor = min(MAX_FACTOR, safety * max(factors))
                 let max_factor = factors.iter().cloned().fold(0.0, Float::max);
                 let step_factor = (safety * max_factor).min(MAX_FACTOR);
-                let old_order = order;  // Save before updating
+                let old_order = order; // Save before updating
                 change_d(&mut d, new_order, step_factor, &mut scratch_change);
                 current_h *= step_factor;
                 order = new_order;
                 n_equal_steps = 0;
-                lu_is_current = false;  // Order or step changed
-                
+                lu_is_current = false; // Order or step changed
+
                 if new_order != old_order {
                     f.jac(x, &y, &mut jac);
                     evals.jac += 1;
@@ -621,12 +621,12 @@ impl BDF {
         }
         const BLOCK: usize = BDF_COEFFS_PER_STATE;
         let n = yi.len();
-        
+
         // Handle empty state vector case
         if n == 0 {
             return;
         }
-        
+
         debug_assert_eq!(cont.len(), n * BLOCK);
 
         let order = cont[BLOCK - 1].round().clamp(1.0, MAX_ORDER as Float) as usize;

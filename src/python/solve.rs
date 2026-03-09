@@ -7,13 +7,16 @@ use numpy::{PyArray1, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
-use crate::methods::Tolerance;
+use crate::methods::{SymplecticMethod, Tolerance};
 use crate::solve::event::{Direction, EventConfig};
-use crate::solve::{solve_ivp, Method, Options};
+use crate::solve::{
+    solve_first_order_ivp, solve_hamiltonian_ivp, solve_second_order_ivp, Method, Options,
+    SymplecticOptions,
+};
 use crate::Float;
 
 use super::conversion::{extract_float_array, parse_t_span};
-use super::ivp_wrapper::PythonIVP;
+use super::ivp_wrapper::{PythonHamiltonianIVP, PythonIVP, PythonSecondOrderIVP};
 use super::result::PyOdeResult;
 use super::solution::PyOdeSolution;
 use super::sparsity::SparsityStructure;
@@ -55,6 +58,13 @@ use super::sparsity::SparsityStructure;
 ///     * 'BDF': Implicit multi-step variable-order (1 to 5) method based on a
 ///       backward differentiation formula. Suitable for stiff problems.
 ///     * 'RK4': Classic explicit Runge-Kutta method of order 4 with fixed step size.
+///     * 'SymplecticEulerKickDrift', 'SymplecticEulerDriftKick', 'VelocityVerlet',
+///       'Ruth3', 'Yoshida4': Fixed-step symplectic methods. For these methods,
+///       ``fun`` must be a structured object exposing either ``acceleration(t, q)``
+///       for second-order systems, or both ``position_derivative(t, p)`` and
+///       ``momentum_derivative(t, q)`` for separable Hamiltonian systems.
+///       Legacy ``drift``/``kick`` names are also accepted. In Python, ``y0`` is still the
+///       flattened state ``[q..., v...]`` or ``[q..., p...]``.
 ///
 /// t_eval : array_like or None, optional
 ///     Times at which to store the computed solution, must be sorted and lie
@@ -119,6 +129,10 @@ use super::sparsity::SparsityStructure;
 ///
 /// Other Parameters
 /// ----------------
+/// step_size : float, optional
+///     Fixed step size for symplectic methods. If omitted, ``first_step`` is
+///     used as a fallback, and if that is also omitted the step defaults to
+///     ``(tf - t0) / 100``.
 /// first_step : float, optional
 ///     Initial step size. Default is determined automatically.
 /// max_step : float, optional
@@ -172,10 +186,16 @@ pub fn solve_ivp_py<'py>(
     let y0_vec = extract_float_array(&y0)?;
 
     // Parse method
-    let method_enum = parse_method(method);
+    let parsed_method = parse_method(method);
 
     // Parse t_eval
     let t_eval_vec = parse_t_eval(t_eval)?;
+
+    if matches!(parsed_method, ParsedMethod::Symplectic(_)) && events.is_some() {
+        return Err(pyo3::exceptions::PyNotImplementedError::new_err(
+            "events are not yet supported for symplectic methods",
+        ));
+    }
 
     // Parse events
     let (event_funs, event_configs) = parse_events(&events)?;
@@ -187,33 +207,93 @@ pub fn solve_ivp_py<'py>(
     };
 
     // Parse solver options
-    let (rtol, atol, max_step_opt, min_step_opt, first_step_opt, max_steps_opt) = parse_options(&options)?;
+    let parsed_options = parse_options(&options)?;
 
-    // Build solver options
-    let opts = Options::builder()
-        .method(method_enum)
-        .dense_output(dense_output)
-        .maybe_t_eval(t_eval_vec)
-        .maybe_max_step(max_step_opt)
-        .maybe_min_step(min_step_opt)
-        .maybe_first_step(first_step_opt)
-        .maybe_max_steps(max_steps_opt)
-        .rtol(rtol)
-        .atol(atol)
-        .build();
+    let result = match parsed_method {
+        ParsedMethod::Standard(method_enum) => {
+            let opts = Options::builder()
+                .method(method_enum)
+                .dense_output(dense_output)
+                .maybe_t_eval(t_eval_vec)
+                .maybe_max_step(parsed_options.max_step)
+                .maybe_min_step(parsed_options.min_step)
+                .maybe_first_step(parsed_options.first_step)
+                .maybe_max_steps(parsed_options.max_steps)
+                .rtol(parsed_options.rtol)
+                .atol(parsed_options.atol)
+                .build();
 
-    // Check if Jacobian is a constant matrix (not callable)
-    // For scipy compatibility: constant Jacobians should have njev=0
-    let is_constant_jac = jac.as_ref().map_or(false, |j| !j.is_callable());
+            let is_constant_jac = jac.as_ref().is_some_and(|j| !j.is_callable());
+            let python_ivp = PythonIVP::new(
+                fun,
+                event_funs,
+                jac,
+                sparsity_structure,
+                args,
+                event_configs,
+                py,
+            );
+            solve_first_order_ivp(&python_ivp, t0, tf, &y0_vec, opts)
+                .and_then(|sol| Ok((sol, events.is_some(), is_constant_jac)))
+        }
+        ParsedMethod::Symplectic(method_enum) => {
+            let step_size = parsed_options
+                .step_size
+                .or(parsed_options.first_step)
+                .unwrap_or_else(|| (tf - t0) / 100.0);
 
-    // Create IVP wrapper
-    let python_ivp = PythonIVP::new(fun, event_funs, jac, sparsity_structure, args, event_configs, py);
+            let opts = SymplecticOptions::builder()
+                .method(method_enum)
+                .step_size(step_size)
+                .dense_output(dense_output)
+                .maybe_t_eval(t_eval_vec)
+                .maybe_max_steps(parsed_options.max_steps)
+                .build();
 
-    // Solve
-    let result = solve_ivp(&python_ivp, t0, tf, &y0_vec, opts);
+            let (q0, p0) = split_symplectic_state(&y0_vec)?;
+
+            let symplectic_result = if let (Ok(position_derivative), Ok(momentum_derivative)) = (
+                fun.getattr("position_derivative"),
+                fun.getattr("momentum_derivative"),
+            ) {
+                if !position_derivative.is_callable() || !momentum_derivative.is_callable() {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "`fun.position_derivative` and `fun.momentum_derivative` must both be callable for symplectic Hamiltonian methods",
+                    ));
+                }
+                let problem =
+                    PythonHamiltonianIVP::new(position_derivative, momentum_derivative, args, py);
+                solve_hamiltonian_ivp(&problem, t0, tf, q0, p0, opts)
+            } else if let (Ok(drift), Ok(kick)) = (fun.getattr("drift"), fun.getattr("kick")) {
+                if !drift.is_callable() || !kick.is_callable() {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "`fun.drift` and `fun.kick` must both be callable for symplectic Hamiltonian methods",
+                    ));
+                }
+                let problem = PythonHamiltonianIVP::new(drift, kick, args, py);
+                solve_hamiltonian_ivp(&problem, t0, tf, q0, p0, opts)
+            } else if let Ok(acceleration) = fun.getattr("acceleration") {
+                if !acceleration.is_callable() {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "`fun.acceleration` must be callable for second-order symplectic methods",
+                    ));
+                }
+                let problem = PythonSecondOrderIVP::new(acceleration, args, py);
+                solve_second_order_ivp(&problem, t0, tf, q0, p0, opts)
+            } else {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "symplectic methods require `fun.acceleration(t, q)` or both `fun.position_derivative(t, p)` and `fun.momentum_derivative(t, q)`; legacy `fun.drift`/`fun.kick` are also accepted",
+                ));
+            };
+
+            symplectic_result.and_then(|sol| Ok((sol, false, false)))
+        }
+    };
 
     match result {
-        Ok(sol) => build_result(py, sol, events.is_some(), is_constant_jac),
+        Ok((sol, has_events, is_constant_jac)) => {
+            build_result(py, sol, has_events, is_constant_jac)
+        }
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
             "Solver failed: {:?}",
             e
@@ -221,14 +301,33 @@ pub fn solve_ivp_py<'py>(
     }
 }
 
-/// Parse the method argument into a Method enum.
-fn parse_method(method: Option<Bound<'_, PyAny>>) -> Method {
+enum ParsedMethod {
+    Standard(Method),
+    Symplectic(SymplecticMethod),
+}
+
+/// Parse the method argument into a standard or symplectic method enum.
+fn parse_method(method: Option<Bound<'_, PyAny>>) -> ParsedMethod {
     if let Some(m) = method {
         if let Ok(s) = m.extract::<String>() {
-            return Method::from(s.as_str());
+            let upper = s.to_uppercase();
+            return match upper.as_str() {
+                "SYMPLECTICEULERKICKDRIFT" | "SEKD" => {
+                    ParsedMethod::Symplectic(SymplecticMethod::SymplecticEulerKickDrift)
+                }
+                "SYMPLECTICEULERDRIFTKICK" | "SEDK" => {
+                    ParsedMethod::Symplectic(SymplecticMethod::SymplecticEulerDriftKick)
+                }
+                "VELOCITYVERLET" | "VERLET" | "LEAPFROG" => {
+                    ParsedMethod::Symplectic(SymplecticMethod::VelocityVerlet)
+                }
+                "RUTH3" => ParsedMethod::Symplectic(SymplecticMethod::Ruth3),
+                "YOSHIDA4" => ParsedMethod::Symplectic(SymplecticMethod::Yoshida4),
+                _ => ParsedMethod::Standard(Method::from(s.as_str())),
+            };
         }
     }
-    Method::DOPRI5
+    ParsedMethod::Standard(Method::DOPRI5)
 }
 
 /// Parse optional t_eval array.
@@ -290,56 +389,81 @@ fn parse_events<'py>(
 }
 
 /// Parse solver options from kwargs.
-fn parse_options(
-    options: &Option<Bound<'_, PyDict>>,
-) -> PyResult<(Tolerance, Tolerance, Option<Float>, Option<Float>, Option<Float>, Option<usize>)> {
-    let mut rtol: Tolerance = Tolerance::Scalar(1e-3);
-    let mut atol: Tolerance = Tolerance::Scalar(1e-6);
-    let mut max_step: Option<Float> = None;
-    let mut min_step: Option<Float> = None;
-    let mut first_step: Option<Float> = None;
-    let mut max_steps: Option<usize> = None;
+struct ParsedOptions {
+    rtol: Tolerance,
+    atol: Tolerance,
+    max_step: Option<Float>,
+    min_step: Option<Float>,
+    first_step: Option<Float>,
+    step_size: Option<Float>,
+    max_steps: Option<usize>,
+}
+
+fn parse_options(options: &Option<Bound<'_, PyDict>>) -> PyResult<ParsedOptions> {
+    let mut parsed = ParsedOptions {
+        rtol: Tolerance::Scalar(1e-3),
+        atol: Tolerance::Scalar(1e-6),
+        max_step: None,
+        min_step: None,
+        first_step: None,
+        step_size: None,
+        max_steps: None,
+    };
 
     if let Some(opts) = options {
         if let Ok(Some(r)) = opts.get_item("rtol") {
-            // Try scalar first, then array
             if let Ok(val) = r.extract::<Float>() {
-                rtol = Tolerance::Scalar(val);
+                parsed.rtol = Tolerance::Scalar(val);
             } else if let Ok(arr) = r.extract::<Vec<Float>>() {
-                rtol = Tolerance::Vector(arr);
+                parsed.rtol = Tolerance::Vector(arr);
             }
         }
         if let Ok(Some(a)) = opts.get_item("atol") {
-            // Try scalar first, then array
             if let Ok(val) = a.extract::<Float>() {
-                atol = Tolerance::Scalar(val);
+                parsed.atol = Tolerance::Scalar(val);
             } else if let Ok(arr) = a.extract::<Vec<Float>>() {
-                atol = Tolerance::Vector(arr);
+                parsed.atol = Tolerance::Vector(arr);
             }
         }
         if let Ok(Some(m)) = opts.get_item("max_step") {
             if let Ok(val) = m.extract::<Float>() {
-                max_step = Some(val);
+                parsed.max_step = Some(val);
             }
         }
         if let Ok(Some(m)) = opts.get_item("min_step") {
             if let Ok(val) = m.extract::<Float>() {
-                min_step = Some(val);
+                parsed.min_step = Some(val);
             }
         }
         if let Ok(Some(f)) = opts.get_item("first_step") {
             if let Ok(val) = f.extract::<Float>() {
-                first_step = Some(val);
+                parsed.first_step = Some(val);
+            }
+        }
+        if let Ok(Some(f)) = opts.get_item("step_size") {
+            if let Ok(val) = f.extract::<Float>() {
+                parsed.step_size = Some(val);
             }
         }
         if let Ok(Some(ms)) = opts.get_item("max_steps") {
             if let Ok(val) = ms.extract::<usize>() {
-                max_steps = Some(val);
+                parsed.max_steps = Some(val);
             }
         }
     }
 
-    Ok((rtol, atol, max_step, min_step, first_step, max_steps))
+    Ok(parsed)
+}
+
+fn split_symplectic_state(y0: &[Float]) -> PyResult<(&[Float], &[Float])> {
+    if y0.is_empty() || y0.len() % 2 != 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "symplectic methods require an even-length initial state [q..., p...] or [q..., v...]",
+        ));
+    }
+
+    let mid = y0.len() / 2;
+    Ok(y0.split_at(mid))
 }
 
 /// Build the PyOdeResult from the Rust Solution.

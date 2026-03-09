@@ -26,18 +26,23 @@ impl ContinuousOutput {
             .collect();
         Self { segs, n_states }
     }
-    
+
+    /// Build a ContinuousOutput directly from owned dense segments.
+    pub(crate) fn from_dense_segments(n_states: usize, segs: Vec<DenseSegment>) -> Self {
+        Self { segs, n_states }
+    }
+
     /// Create a constant ContinuousOutput that always returns the initial state.
     /// Used for zero-interval integration (t0 == tf) and empty state vectors.
     pub(crate) fn constant(method: Method, x0: Float, y0: &[Float]) -> Self {
         let n = y0.len();
         let coeffs_per_state = method.coeffs_per_state();
         let interp_fn = method.interpolate_fn();
-        
+
         // Create coefficients that interpolate to constant y0
         // Layout depends on method - generally first element of each block is the value
         let mut cont = vec![0.0; n * coeffs_per_state];
-        
+
         // For RK methods: cont[0..n] = y0, derivatives in subsequent blocks
         // For BDF: cont[i * 7] = y0[i], then D1..D5 = 0, and order marker = 1
         match method {
@@ -54,7 +59,7 @@ impl ContinuousOutput {
                 cont[0..n].copy_from_slice(y0);
             }
         }
-        
+
         // Use a tiny h to create a valid segment at x0
         let seg = DenseSegment::new(cont, x0, 1e-15, interp_fn);
         Self {
@@ -101,9 +106,9 @@ impl ContinuousOutput {
         if self.segs.is_empty() {
             return None;
         }
-        
+
         let tol = 1e-12;
-        
+
         // Strict interpolation - only return segment if t is within it
         for seg in &self.segs {
             let left = seg.xold.min(seg.xold + seg.h);
@@ -112,17 +117,17 @@ impl ContinuousOutput {
                 return Some(seg);
             }
         }
-        
+
         None
     }
-    
+
     fn find_segment_extrapolate(&self, t: Float) -> Option<&DenseSegment> {
         if self.segs.is_empty() {
             return None;
         }
-        
+
         let tol = 1e-12;
-        
+
         // First check if t is within any segment (interpolation)
         for seg in &self.segs {
             let left = seg.xold.min(seg.xold + seg.h);
@@ -131,15 +136,15 @@ impl ContinuousOutput {
                 return Some(seg);
             }
         }
-        
+
         // If not within any segment, allow extrapolation using the closest segment
         // This matches SciPy's behavior
         let first = self.segs.first().unwrap();
         let last = self.segs.last().unwrap();
-        
+
         let first_left = first.xold.min(first.xold + first.h);
         let last_right = last.xold.max(last.xold + last.h);
-        
+
         if t < first_left {
             // Extrapolate backwards using first segment
             Some(first)

@@ -7,8 +7,8 @@
 //! // Van der Pol oscillator
 //! struct VanDerPol { eps: f64 }
 //!
-//! impl IVP for VanDerPol {
-//!    fn ode(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
+//! impl FirstOrderSystem for VanDerPol {
+//!    fn derivative(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
 //!       dydx[0] = y[1];
 //!       dydx[1] = ((1.0 - y[0]*y[0])*y[1] - y[0]) / self.eps;
 //!    }
@@ -27,17 +27,21 @@
 //!         .t_eval(t_eval)
 //!         .build();
 //!
-//!     let sol = solve_ivp(&vdp, x0, xend, &y0, options).unwrap();
+//!     let sol = solve_first_order_ivp(&vdp, x0, xend, &y0, options).unwrap();
 //!     println!("Finished with status: {:?}", sol.status);
 //! }
 //! ```
 
 pub use crate::{
     dense::{DenseSegment, StepInterpolant},
+    ivp::{FirstOrderSystem, SecondOrderSystem, SeparableHamiltonianSystem},
     matrix::{Matrix, MatrixStorage},
-    ivp::IVP,
+    methods::SymplecticMethod,
     solout::ControlFlag,
     solve::event::{Direction, EventConfig},
-    solve::{Method, Options, Solution, solve_ivp},
+    solve::{
+        solve_first_order_ivp, solve_hamiltonian_ivp, solve_second_order_ivp, Method, Options,
+        Solution, SymplecticOptions,
+    },
     status::Status,
 };

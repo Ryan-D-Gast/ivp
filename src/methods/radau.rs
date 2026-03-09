@@ -5,14 +5,14 @@
 //! Reference: Hairer & Wanner, Solving ODEs II (Radau IIA).
 
 use crate::{
-    Float,
     dense::StepInterpolant,
-    error::{Error, ConfigError},
-    matrix::{Matrix, MatrixStorage, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
+    error::{ConfigError, Error},
+    ivp::FirstOrderSystem,
+    matrix::{lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex, Matrix, MatrixStorage},
     methods::{Evals, IntegrationResult, Steps, Tolerance},
-    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
+    Float,
 };
 use bon::Builder;
 
@@ -99,7 +99,7 @@ impl RADAU {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `IVP` (optionally providing `jac`, `mass`).
+    /// - `f`: Right‑hand side implementing [`FirstOrderSystem`] (optionally providing `jac`, `mass`).
     /// - `x0`: Initial abscissa; `xend`: final abscissa.
     /// - `y0`: Initial state.
     /// - `rtol`, `atol`: Relative/absolute tolerances (scalar or vector).
@@ -122,7 +122,7 @@ impl RADAU {
         mut solout: Option<&mut S>,
     ) -> Result<IntegrationResult, Error>
     where
-        F: IVP,
+        F: FirstOrderSystem,
         S: SolOut,
     {
         // Create mutable copies for the solver to mutate
@@ -326,7 +326,7 @@ impl RADAU {
         // --- Initializations ---
 
         let mut f0 = vec![0.0; n];
-        f.ode(x, &y, &mut f0);
+        f.derivative(x, &y, &mut f0);
         evals.ode += 1;
 
         // Optional output scheduling
@@ -346,7 +346,7 @@ impl RADAU {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.ode(x, &y, &mut f0);
+                    f.derivative(x, &y, &mut f0);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -497,15 +497,15 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] = y[i] + z1[i];
                 }
-                f.ode(x + C1 * h, &cont[..n], &mut z1);
+                f.derivative(x + C1 * h, &cont[..n], &mut z1);
                 for i in 0..n {
                     cont[i] = y[i] + z2[i];
                 }
-                f.ode(x + C2 * h, &cont[..n], &mut z2);
+                f.derivative(x + C2 * h, &cont[..n], &mut z2);
                 for i in 0..n {
                     cont[i] = y[i] + z3[i];
                 }
-                f.ode(xph, &cont[..n], &mut z3);
+                f.derivative(xph, &cont[..n], &mut z3);
                 evals.ode += 3;
 
                 // --- Solve the linear systems ---
@@ -648,7 +648,7 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] += y[i];
                 }
-                f.ode(x, &cont[..n], &mut f1);
+                f.derivative(x, &cont[..n], &mut f1);
                 evals.ode += 1;
 
                 // contv = f1 + f2; solve again
@@ -679,7 +679,8 @@ impl RADAU {
                 // Predictive Gustafsson controller (use previous accepted step if available)
                 if predictive {
                     if steps.accepted > 1 {
-                        let mut facgus = (h_acc / h) * (err * err / err_acc).powf(0.25) / safety_factor;
+                        let mut facgus =
+                            (h_acc / h) * (err * err / err_acc).powf(0.25) / safety_factor;
                         facgus = facr.max(facl.min(facgus));
                         quot = quot.max(facgus);
                         hnew = h / quot;
@@ -705,7 +706,7 @@ impl RADAU {
                 }
 
                 // New derivative at x+h
-                f.ode(x, &y, &mut f0);
+                f.derivative(x, &y, &mut f0);
                 evals.ode += 1;
 
                 // Compute error scale
@@ -730,7 +731,7 @@ impl RADAU {
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.ode(x, &y, &mut f0);
+                            f.derivative(x, &y, &mut f0);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
