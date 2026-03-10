@@ -29,7 +29,7 @@ impl Matrix {
         }
     }
 
-    /// In-place component-wise scalar multiplication: self[i,j] *= rhs for all stored entries.
+    /// In-place component-wise scalar multiplication: `self[i,j] *= rhs` for all stored entries.
     /// For Identity, converts to a diagonal banded matrix with `rhs` on the diagonal.
     pub fn component_mul_mut(&mut self, rhs: Float) {
         match &mut self.storage {

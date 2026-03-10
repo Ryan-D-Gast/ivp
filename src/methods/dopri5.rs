@@ -15,7 +15,7 @@
 //!   Equations I. Nonstiff Problems", 2nd ed., Springer (1993).
 //!
 //! Original Fortran implementation and supporting material
-//! - https://www.unige.ch/~hairer/software.html
+//! - <https://www.unige.ch/~hairer/software.html>
 //!
 
 use crate::{
