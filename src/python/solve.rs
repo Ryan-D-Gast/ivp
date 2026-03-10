@@ -6,12 +6,12 @@
 use numpy::{PyArray1, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
+use crate::Float;
 use crate::methods::{SymplecticMethod, Tolerance};
 use crate::solve::event::{Direction, EventConfig};
-use crate::solve::{Ivp, Method};
-use crate::Float;
+use crate::solve::{Ivp, JacobianSource, Method};
 
 use super::conversion::{extract_float_array, parse_t_span};
 use super::ivp_wrapper::{
@@ -69,6 +69,8 @@ use super::sparsity::SparsityStructure;
 ///       Suitable for stiff problems.
 ///     * 'BDF': Implicit multi-step variable-order (1 to 5) method based on a
 ///       backward differentiation formula. Suitable for stiff problems.
+///     * 'LSODA': Automatic Adams/BDF switching multistep solver for problems
+///       that may change stiffness.
 ///     * 'RK4': Classic explicit Runge-Kutta method of order 4 with fixed step size.
 ///     * 'SymplecticEulerKickDrift', 'SymplecticEulerDriftKick', 'VelocityVerlet',
 ///       'Ruth3', 'Yoshida4': Fixed-step symplectic methods. For second-order
@@ -105,6 +107,9 @@ use super::sparsity::SparsityStructure;
 ///     element (i, j) is ``d f_i / d y_j``.
 ///     If callable, the signature is ``jac(t, y)``.
 ///     If array_like, the Jacobian is assumed to be constant.
+///     When using ``method='LSODA'``, providing ``jac`` switches LSODA to its
+///     explicit user-Jacobian path; otherwise LSODA uses its internal dense
+///     finite-difference Jacobian logic.
 /// jac_sparsity : array_like, sparse matrix, or None, optional
 ///     Defines the sparsity structure of the Jacobian matrix for BDF method.
 ///
@@ -216,6 +221,7 @@ use super::sparsity::SparsityStructure;
 /// See Also
 /// --------
 /// scipy.integrate.solve_ivp : SciPy's equivalent function
+#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(name = "solve_ivp")]
 #[pyo3(signature = (fun, t_span, y0, method=None, t_eval=None, dense_output=false, events=None, vectorized=false, args=None, jac=None, jac_sparsity=None, **options))]
@@ -267,6 +273,7 @@ pub fn solve_ivp_py<'py>(
         let result = match parsed_method {
             ParsedMethod::Standard(method_enum) => {
                 let is_constant_jac = jac.as_ref().is_some_and(|j| !j.is_callable());
+                let jacobian_source = jac.as_ref().map(|_| JacobianSource::UserProvided);
                 let python_ivp = PythonIVP::new(
                     fun,
                     event_funs,
@@ -284,10 +291,11 @@ pub fn solve_ivp_py<'py>(
                     .maybe_min_step(parsed_options.min_step)
                     .maybe_first_step(parsed_options.first_step)
                     .maybe_max_steps(parsed_options.max_steps)
+                    .maybe_jacobian_source(jacobian_source)
                     .rtol(parsed_options.rtol)
                     .atol(parsed_options.atol)
                     .solve()
-                    .and_then(|sol| Ok((sol, events.is_some(), is_constant_jac)))
+                    .map(|sol| (sol, events.is_some(), is_constant_jac))
             }
             ParsedMethod::Symplectic(method_enum) => {
                 let step_size = parsed_options.step_size.or(parsed_options.first_step);
@@ -325,7 +333,7 @@ pub fn solve_ivp_py<'py>(
                     }
                 };
 
-                symplectic_result.and_then(|sol| Ok((sol, false, false)))
+                symplectic_result.map(|sol| (sol, false, false))
             }
         };
 
@@ -363,24 +371,24 @@ enum SymplecticProblem<'py> {
 
 /// Parse the method argument into a standard or symplectic method enum.
 fn parse_method(method: Option<Bound<'_, PyAny>>) -> ParsedMethod {
-    if let Some(m) = method {
-        if let Ok(s) = m.extract::<String>() {
-            let upper = s.to_uppercase();
-            return match upper.as_str() {
-                "SYMPLECTICEULERKICKDRIFT" | "SEKD" => {
-                    ParsedMethod::Symplectic(SymplecticMethod::SymplecticEulerKickDrift)
-                }
-                "SYMPLECTICEULERDRIFTKICK" | "SEDK" => {
-                    ParsedMethod::Symplectic(SymplecticMethod::SymplecticEulerDriftKick)
-                }
-                "VELOCITYVERLET" | "VERLET" | "LEAPFROG" => {
-                    ParsedMethod::Symplectic(SymplecticMethod::VelocityVerlet)
-                }
-                "RUTH3" => ParsedMethod::Symplectic(SymplecticMethod::Ruth3),
-                "YOSHIDA4" => ParsedMethod::Symplectic(SymplecticMethod::Yoshida4),
-                _ => ParsedMethod::Standard(Method::from(s.as_str())),
-            };
-        }
+    if let Some(m) = method
+        && let Ok(s) = m.extract::<String>()
+    {
+        let upper = s.to_uppercase();
+        return match upper.as_str() {
+            "SYMPLECTICEULERKICKDRIFT" | "SEKD" => {
+                ParsedMethod::Symplectic(SymplecticMethod::SymplecticEulerKickDrift)
+            }
+            "SYMPLECTICEULERDRIFTKICK" | "SEDK" => {
+                ParsedMethod::Symplectic(SymplecticMethod::SymplecticEulerDriftKick)
+            }
+            "VELOCITYVERLET" | "VERLET" | "LEAPFROG" => {
+                ParsedMethod::Symplectic(SymplecticMethod::VelocityVerlet)
+            }
+            "RUTH3" => ParsedMethod::Symplectic(SymplecticMethod::Ruth3),
+            "YOSHIDA4" => ParsedMethod::Symplectic(SymplecticMethod::Yoshida4),
+            _ => ParsedMethod::Standard(Method::from(s.as_str())),
+        };
     }
     ParsedMethod::Standard(Method::DOPRI5)
 }
@@ -596,18 +604,17 @@ fn parse_events<'py>(
         for ef in &event_funs {
             let mut config = EventConfig::new();
 
-            if let Ok(term) = ef.getattr("terminal") {
-                if let Ok(is_term) = term.extract::<bool>() {
-                    if is_term {
-                        config.terminal();
-                    }
-                }
+            if let Ok(term) = ef.getattr("terminal")
+                && let Ok(is_term) = term.extract::<bool>()
+                && is_term
+            {
+                config.terminal();
             }
 
-            if let Ok(dir) = ef.getattr("direction") {
-                if let Ok(d) = dir.extract::<f64>() {
-                    config.direction(Direction::from(d as i32));
-                }
+            if let Ok(dir) = ef.getattr("direction")
+                && let Ok(d) = dir.extract::<f64>()
+            {
+                config.direction(Direction::from(d as i32));
             }
 
             event_configs.push(config);
@@ -654,30 +661,30 @@ fn parse_options(options: &Option<Bound<'_, PyDict>>) -> PyResult<ParsedOptions>
                 parsed.atol = Tolerance::Vector(arr);
             }
         }
-        if let Ok(Some(m)) = opts.get_item("max_step") {
-            if let Ok(val) = m.extract::<Float>() {
-                parsed.max_step = Some(val);
-            }
+        if let Ok(Some(m)) = opts.get_item("max_step")
+            && let Ok(val) = m.extract::<Float>()
+        {
+            parsed.max_step = Some(val);
         }
-        if let Ok(Some(m)) = opts.get_item("min_step") {
-            if let Ok(val) = m.extract::<Float>() {
-                parsed.min_step = Some(val);
-            }
+        if let Ok(Some(m)) = opts.get_item("min_step")
+            && let Ok(val) = m.extract::<Float>()
+        {
+            parsed.min_step = Some(val);
         }
-        if let Ok(Some(f)) = opts.get_item("first_step") {
-            if let Ok(val) = f.extract::<Float>() {
-                parsed.first_step = Some(val);
-            }
+        if let Ok(Some(f)) = opts.get_item("first_step")
+            && let Ok(val) = f.extract::<Float>()
+        {
+            parsed.first_step = Some(val);
         }
-        if let Ok(Some(f)) = opts.get_item("step_size") {
-            if let Ok(val) = f.extract::<Float>() {
-                parsed.step_size = Some(val);
-            }
+        if let Ok(Some(f)) = opts.get_item("step_size")
+            && let Ok(val) = f.extract::<Float>()
+        {
+            parsed.step_size = Some(val);
         }
-        if let Ok(Some(ms)) = opts.get_item("max_steps") {
-            if let Ok(val) = ms.extract::<usize>() {
-                parsed.max_steps = Some(val);
-            }
+        if let Ok(Some(ms)) = opts.get_item("max_steps")
+            && let Ok(val) = ms.extract::<usize>()
+        {
+            parsed.max_steps = Some(val);
         }
     }
 
@@ -685,7 +692,7 @@ fn parse_options(options: &Option<Bound<'_, PyDict>>) -> PyResult<ParsedOptions>
 }
 
 fn split_symplectic_state(y0: &[Float]) -> PyResult<(&[Float], &[Float])> {
-    if y0.is_empty() || y0.len() % 2 != 0 {
+    if y0.is_empty() || !y0.len().is_multiple_of(2) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "symplectic methods require an even-length initial state [q..., p...] or [q..., v...]",
         ));

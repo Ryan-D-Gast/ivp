@@ -1,14 +1,18 @@
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::collapsible_if)]
+
 //! BDF — variable order (1..5) Backward Differentiation Formula solver.
 
 use crate::{
+    Float,
     dense::StepInterpolant,
     error::{ConfigError, Error},
     ivp::FirstOrderSystem,
-    matrix::{lin_solve, lu_decomp, Matrix, MatrixStorage},
-    methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
+    matrix::{Matrix, MatrixStorage, lin_solve, lu_decomp},
+    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     solout::{ControlFlag, SolOut},
     status::Status,
-    Float,
 };
 use bon::Builder;
 
@@ -507,7 +511,7 @@ impl BDF {
                 let base = i * CONT_BLOCK;
                 cont[base] = d[0][i];
                 for k in 0..MAX_ORDER {
-                    let coeff = if k + 1 <= order { d[k + 1][i] } else { 0.0 };
+                    let coeff = if k < order { d[k + 1][i] } else { 0.0 };
                     cont[base + 1 + k] = coeff;
                 }
                 cont[base + CONT_BLOCK - 1] = order as Float;
@@ -549,7 +553,7 @@ impl BDF {
             }
 
             // Order and step-size adaptation when sufficient equal steps observed
-            if n_equal_steps >= order + 1 {
+            if n_equal_steps > order {
                 let mut err_m = Float::INFINITY;
                 let mut err_p = Float::INFINITY;
                 if order > 1 {

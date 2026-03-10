@@ -1,10 +1,10 @@
 //! Internal first-order solve implementation.
 
 use crate::{
+    Float,
     error::Error,
     ivp::FirstOrderSystem,
-    methods::{BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
-    Float,
+    methods::{BDF, DOP853, DOPRI5, LSODA, RADAU, RK4, RK23},
 };
 
 use super::{
@@ -191,6 +191,25 @@ where
                 .maybe_first_step(config.first_step)
                 .max_steps(config.max_steps.unwrap_or(usize::MAX))
                 .jac_storage(config.jac_storage)
+                .build();
+            solver.solve(
+                f,
+                x0,
+                y0,
+                xend,
+                config.rtol,
+                config.atol,
+                Some(&mut default_solout),
+            )
+        }
+        Method::LSODA => {
+            let solver = LSODA::builder()
+                .max_steps(config.max_steps.unwrap_or(usize::MAX))
+                .maybe_max_step(config.max_step)
+                .maybe_min_step(config.min_step)
+                .maybe_first_step(config.first_step)
+                .jac_storage(config.jac_storage)
+                .jacobian_source(config.jacobian_source)
                 .build();
             solver.solve(
                 f,

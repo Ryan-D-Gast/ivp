@@ -1,10 +1,10 @@
 //! Rich solution type shared by the solver APIs.
 
 use crate::{
+    Float,
     error::{Error, InterpolationError},
     solve::cont::ContinuousOutput,
     status::Status,
-    Float,
 };
 
 /// Rich solution: sampled data plus basic stats.

@@ -1,13 +1,15 @@
+#![allow(clippy::too_many_arguments)]
+
 //! Bogacki–Shampine 3(2) pair (RK23) adaptive-step integrator
 
 use crate::{
+    Float,
     dense::StepInterpolant,
     error::{ConfigError, Error},
     ivp::FirstOrderSystem,
-    methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
+    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     solout::{ControlFlag, SolOut},
     status::Status,
-    Float,
 };
 use bon::Builder;
 
@@ -256,7 +258,7 @@ impl RK23 {
 
                 // Optional callback function
                 if let Some(sol) = solout.as_mut() {
-                    let event = xout.map_or(false, |xo| xo <= x);
+                    let event = xout.is_some_and(|xo| xo <= x);
                     let interpolant = if self.dense_output || event {
                         Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {

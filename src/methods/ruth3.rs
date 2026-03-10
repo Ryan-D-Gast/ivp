@@ -1,6 +1,6 @@
 //! Ruth third-order symplectic composition.
 
-use crate::{ivp::SeparableHamiltonianSystem, Float};
+use crate::{Float, ivp::SeparableHamiltonianSystem};
 
 use super::SymplecticWork;
 

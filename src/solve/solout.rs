@@ -5,11 +5,11 @@
 //! first-order solving.
 
 use crate::{
+    Float,
     dense::StepInterpolant,
     ivp::FirstOrderSystem,
     solout::{ControlFlag, SolOut},
     solve::event::{Direction, EventConfig},
-    Float,
 };
 
 /// Internal output handler for first-order solving.
@@ -61,6 +61,14 @@ where
     g_mid_buf: Vec<Float>,
 }
 
+type SolOutPayload = (
+    Vec<Float>,
+    Vec<Vec<Float>>,
+    Vec<Vec<Float>>,
+    Vec<Vec<Vec<Float>>>,
+    Vec<(Vec<Float>, Float, Float)>,
+);
+
 impl<'a, F> DefaultSolOut<'a, F>
 where
     F: FirstOrderSystem,
@@ -106,15 +114,7 @@ where
     }
 
     /// Consumes the handler and returns all collected data.
-    pub fn into_payload(
-        self,
-    ) -> (
-        Vec<Float>,
-        Vec<Vec<Float>>,
-        Vec<Vec<Float>>,
-        Vec<Vec<Vec<Float>>>,
-        Vec<(Vec<Float>, Float, Float)>,
-    ) {
+    pub fn into_payload(self) -> SolOutPayload {
         (
             self.t,
             self.y,
@@ -139,8 +139,11 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
         // Collect interpolation coefficients from each accepted step for later
         // continuous evaluation. Skip the initial callback and degenerate segments.
 
-        if self.collect_dense && *x != xold && interpolant.is_some() {
-            let seg = interpolant.unwrap().to_segment();
+        if self.collect_dense
+            && *x != xold
+            && let Some(interpolant) = interpolant
+        {
+            let seg = interpolant.to_segment();
             if seg.h != 0.0 {
                 self.dense_segs.push((seg.cont, seg.xold, seg.h));
             }
@@ -319,16 +322,16 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
                     self.event_hits[i] += 1;
 
                     // Check for terminal event
-                    if let Some(limit) = config.terminal_count {
-                        if self.event_hits[i] >= limit {
-                            // Add the terminal event point to the output
-                            self.t.push(event_t);
-                            self.y.push(event_y);
+                    if let Some(limit) = config.terminal_count
+                        && self.event_hits[i] >= limit
+                    {
+                        // Add the terminal event point to the output
+                        self.t.push(event_t);
+                        self.y.push(event_y);
 
-                            // Update prev_event before returning
-                            self.prev_event.copy_from_slice(&self.g_curr_buf);
-                            return ControlFlag::Interrupt;
-                        }
+                        // Update prev_event before returning
+                        self.prev_event.copy_from_slice(&self.g_curr_buf);
+                        return ControlFlag::Interrupt;
                     }
                 }
 

@@ -1,13 +1,15 @@
+#![allow(clippy::too_many_arguments)]
+
 //! Classic explicit Runge–Kutta 4 (RK4) fixed-step integrator
 
 use crate::{
+    Float,
     dense::StepInterpolant,
     error::{ConfigError, Error},
     ivp::FirstOrderSystem,
     methods::{Evals, IntegrationResult, Steps},
     solout::{ControlFlag, SolOut},
     status::Status,
-    Float,
 };
 use bon::Builder;
 
@@ -181,7 +183,7 @@ impl RK4 {
             steps.total += 1;
 
             // Decide if we must build dense output (for user xout events as well)
-            let event = xout.map_or(false, |xo| xo <= x);
+            let event = xout.is_some_and(|xo| xo <= x);
             if (self.dense_output || event) && solout.is_some() {
                 cont[0..n].copy_from_slice(&yt);
                 for i in 0..n {
@@ -193,7 +195,7 @@ impl RK4 {
 
             // Optional callback function
             if let Some(sol) = solout.as_mut() {
-                let interpolant = if self.dense_output || xout.map_or(false, |xo| xo <= x) {
+                let interpolant = if self.dense_output || xout.is_some_and(|xo| xo <= x) {
                     Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                 } else {
                     None

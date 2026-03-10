@@ -8,12 +8,12 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 use std::panic::panic_any;
 
+use crate::Float;
 use crate::ivp::{FirstOrderSystem, SecondOrderSystem, SeparableHamiltonianSystem};
 use crate::matrix::Matrix;
 use crate::solve::event::EventConfig;
-use crate::Float;
 
-use super::sparsity::{sparse_jacobian_fd, SparsityStructure};
+use super::sparsity::{SparsityStructure, sparse_jacobian_fd};
 
 /// Wrapper that implements [`FirstOrderSystem`] for Python ODE functions.
 ///
@@ -405,7 +405,7 @@ impl<'py> PythonIVP<'py> {
     }
 
     /// Parse a 2D matrix result from Python into our Matrix type.
-    fn parse_matrix(&self, result: &Bound<'py, PyAny>, j: &mut Matrix) {
+    fn parse_matrix_result(result: &Bound<'py, PyAny>, j: &mut Matrix) {
         let dim = j.nrows();
 
         // Try float64 numpy 2D array (most common)
@@ -473,12 +473,12 @@ impl<'py> PythonIVP<'py> {
         }
 
         // Try scipy sparse matrix - convert to dense via toarray()
-        if let Ok(to_array) = result.getattr("toarray") {
-            if let Ok(dense) = to_array.call0() {
-                // Recursively parse the dense array
-                self.parse_matrix(&dense, j);
-                return;
-            }
+        if let Ok(to_array) = result.getattr("toarray")
+            && let Ok(dense) = to_array.call0()
+        {
+            // Recursively parse the dense array
+            Self::parse_matrix_result(&dense, j);
+            return;
         }
 
         raise_python_callback_error(
@@ -558,10 +558,10 @@ impl<'py> FirstOrderSystem for PythonIVP<'py> {
                     ),
                 };
 
-                self.parse_matrix(&result, j);
+                Self::parse_matrix_result(&result, j);
             } else {
                 // Constant matrix - extract once
-                self.parse_matrix(jac_fn, j);
+                Self::parse_matrix_result(jac_fn, j);
             }
         } else {
             // No Jacobian provided - use finite differences (default implementation)

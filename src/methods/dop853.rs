@@ -1,3 +1,6 @@
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::excessive_precision)]
+
 //! DOP853 - Dormand–Prince 8(5,3) explicit Runge–Kutta integrator
 //!
 //! # Authors and attribution
@@ -19,13 +22,13 @@
 //!
 
 use crate::{
+    Float,
     dense::StepInterpolant,
     error::{ConfigError, Error},
     ivp::FirstOrderSystem,
-    methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
+    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     solout::{ControlFlag, SolOut},
     status::Status,
-    Float,
 };
 use bon::Builder;
 
@@ -444,7 +447,7 @@ impl DOP853 {
                 evals.ode += 1;
 
                 // Stiffness detection
-                if (steps.accepted % nstiff == 0) || (iasti > 0) {
+                if steps.accepted.is_multiple_of(nstiff) || (iasti > 0) {
                     let mut stnum: Float = 0.0;
                     let mut stden: Float = 0.0;
                     for i in 0..n {
@@ -472,7 +475,7 @@ impl DOP853 {
                 }
 
                 // Prepare dense output
-                event = xout.map_or(false, |xo| xo <= xph);
+                event = xout.is_some_and(|xo| xo <= xph);
                 if self.dense_output || event {
                     for i in 0..n {
                         cont[i] = y[i];

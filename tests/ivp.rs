@@ -1,13 +1,14 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{default_ivp, default_ivp_dense, SHO};
+use common::{Sho, default_ivp, default_ivp_dense};
 
 fn all_methods() -> Vec<Method> {
     vec![
         Method::RK23,
         Method::DOPRI5,
         Method::DOP853,
+        Method::LSODA,
         Method::RADAU,
         Method::BDF,
     ]
@@ -35,12 +36,12 @@ fn integration_zero_rhs_all_methods() {
     // BDF is not suitable for RHS=0 and is thus excluded
     let all_but_bdf = all_methods()
         .iter()
-        .filter(|m| **m != Method::BDF)
+        .filter(|m| **m != Method::BDF && **m != Method::LSODA)
         .cloned()
         .collect::<Vec<_>>();
     for method in all_but_bdf {
         let sol = Ivp::first_order(&f, x0, xend, &y0)
-            .method(method.clone())
+            .method(method)
             .rtol(1e-9)
             .atol(1e-12)
             .t_eval(t_eval.clone())
@@ -64,8 +65,8 @@ fn max_step_and_first_step_controls() {
     // max_step respected
     let max_step = 0.05;
     for method in all_methods() {
-        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
-            .method(method.clone())
+        let sol = Ivp::first_order(&Sho, x0, xend, &y0)
+            .method(method)
             .rtol(1e-6)
             .atol(1e-9)
             .max_step(max_step)
@@ -90,12 +91,12 @@ fn max_step_and_first_step_controls() {
     // dedicated test that inspects the chosen step size via `solout`.
     let methods_to_test = all_methods()
         .iter()
-        .filter(|m| **m != Method::BDF)
+        .filter(|m| **m != Method::BDF && **m != Method::LSODA)
         .cloned()
         .collect::<Vec<_>>();
     for method in methods_to_test {
-        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
-            .method(method.clone())
+        let sol = Ivp::first_order(&Sho, x0, xend, &y0)
+            .method(method)
             .rtol(1e-3)
             .atol(1e-6)
             .first_step(first_step)
@@ -122,9 +123,15 @@ fn dense_output_matches_discrete_samples() {
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [1.0, 0.0];
-    for method in [Method::RK23, Method::DOPRI5, Method::DOP853, Method::RADAU] {
-        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
-            .method(method.clone())
+    for method in [
+        Method::RK23,
+        Method::DOPRI5,
+        Method::DOP853,
+        Method::LSODA,
+        Method::RADAU,
+    ] {
+        let sol = Ivp::first_order(&Sho, x0, xend, &y0)
+            .method(method)
             .rtol(1e-8)
             .atol(1e-10)
             .dense_output(true)
@@ -154,7 +161,7 @@ fn dense_output_out_of_range_errors() {
     let x0 = 0.0;
     let xend = 1.0;
     let y0 = [1.0, 0.0];
-    let sol = default_ivp_dense(&SHO, x0, xend, &y0, Method::DOPRI5)
+    let sol = default_ivp_dense(&Sho, x0, xend, &y0, Method::DOPRI5)
         .solve()
         .unwrap();
     let (t0, t1) = sol.sol_span().unwrap();
@@ -302,7 +309,7 @@ fn zero_interval_returns_initial_state() {
     let xend = 1.23;
     let y0 = [2.0, 3.0];
     for method in all_methods() {
-        let sol = default_ivp(&SHO, x0, xend, &y0, method).solve().unwrap();
+        let sol = default_ivp(&Sho, x0, xend, &y0, method).solve().unwrap();
         assert!(!sol.t.is_empty());
         let y_last = sol.y.last().unwrap();
         assert!((y_last[0] - y0[0]).abs() <= 1e-12);

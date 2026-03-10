@@ -46,7 +46,7 @@ fn main() {
         Ok(sol) => {
             println!("Status: {:?}", sol.status);
 
-            if let Some(t_impact) = sol.t_events.get(0).and_then(|e| e.first()) {
+            if let Some(t_impact) = sol.t_events.first().and_then(|e| e.first()) {
                 let v_impact = sol.y_events[0][0][1].abs();
                 println!(
                     "Ground impact at t={:.4}s, velocity={:.4} m/s",

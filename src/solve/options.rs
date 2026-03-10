@@ -1,10 +1,10 @@
 //! Internal configuration for first-order solving.
 
 use crate::{
+    Float,
     dense::InterpolateFn,
     matrix::MatrixStorage,
-    methods::{Tolerance, BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
-    Float,
+    methods::{BDF, DOP853, DOPRI5, LSODA, RADAU, RK4, RK23, Tolerance},
 };
 
 /// Numerical methods for first-order IVPs.
@@ -22,6 +22,8 @@ pub enum Method {
     RADAU,
     /// Variable-order (1-5) Backward Differentiation Formula method for stiff problems
     BDF,
+    /// LSODA automatic Adams/BDF switching method
+    LSODA,
 }
 
 impl Method {
@@ -37,6 +39,7 @@ impl Method {
             Method::DOP853 => 8,
             Method::RADAU => 4,
             Method::BDF => 7,
+            Method::LSODA => 8,
         }
     }
 
@@ -52,6 +55,7 @@ impl Method {
             Method::DOP853 => DOP853::interpolate,
             Method::RADAU => RADAU::interpolate,
             Method::BDF => BDF::interpolate,
+            Method::LSODA => LSODA::interpolate,
         }
     }
 }
@@ -65,9 +69,27 @@ impl From<&str> for Method {
             "RK4" => Method::RK4,
             "RADAU" | "RADAU5" => Method::RADAU,
             "BDF" | "BDF15" => Method::BDF,
+            "LSODA" => Method::LSODA,
             _ => Method::DOPRI5, // Default
         }
     }
+}
+
+/// Selects how a first-order solver should obtain Jacobian information.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JacobianSource {
+    /// Use the solver's default behavior.
+    ///
+    /// For LSODA this means its internal finite-difference Jacobian path.
+    /// Other solvers continue to call [`crate::ivp::FirstOrderSystem::jac`].
+    Auto,
+    /// Call [`crate::ivp::FirstOrderSystem::jac`] for Jacobian information.
+    UserProvided,
+    /// Force the solver's internal finite-difference Jacobian path when available.
+    ///
+    /// Solvers without an internal Jacobian approximation may ignore this and
+    /// continue to call [`crate::ivp::FirstOrderSystem::jac`].
+    InternalFiniteDifference,
 }
 
 /// Internal options for first-order solving.
@@ -98,6 +120,8 @@ pub(crate) struct FirstOrderConfig {
     /// Solvers that don’t use a Jacobian ignore this. For banded storage you must provide
     /// an analytical Jacobian consistent with the chosen layout.
     pub jac_storage: MatrixStorage,
+    /// How the solver should obtain Jacobian information.
+    pub jacobian_source: JacobianSource,
     /// Preferred storage for the mass matrix `M` in `M y' = f(t,y)`. Default: `Identity`
     /// (implicit I, no allocation). Set to `Full`/`Banded` to provide a non‑trivial mass matrix.
     pub mass_storage: MatrixStorage,

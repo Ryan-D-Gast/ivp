@@ -1,6 +1,6 @@
 //! Velocity Verlet / leapfrog.
 
-use crate::{ivp::SeparableHamiltonianSystem, Float};
+use crate::{Float, ivp::SeparableHamiltonianSystem};
 
 use super::SymplecticWork;
 

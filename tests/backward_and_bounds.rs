@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{default_ivp_dense, SHO};
+use common::{Sho, default_ivp_dense};
 
 #[test]
 fn backward_integration_works() {
@@ -15,7 +15,7 @@ fn backward_integration_works() {
         Method::RADAU,
         Method::BDF,
     ] {
-        let sol = default_ivp_dense(&SHO, x0, xend, &y0, method)
+        let sol = default_ivp_dense(&Sho, x0, xend, &y0, method)
             .solve()
             .unwrap();
         // Check we got a span and can evaluate at mid

@@ -6,8 +6,8 @@
 use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1};
 use pyo3::prelude::*;
 
-use crate::solve::cont::ContinuousOutput;
 use crate::Float;
+use crate::solve::cont::ContinuousOutput;
 
 /// Python wrapper for dense output interpolation.
 ///

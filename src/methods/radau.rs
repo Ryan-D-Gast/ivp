@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 //! RADAU — 3-stage, order-5 Radau IIA implicit Runge–Kutta solver.
 //!
 //! Solves stiff ODEs/DAEs `M·y' = f(t,y)` with adaptive step-size,
@@ -5,14 +7,14 @@
 //! Reference: Hairer & Wanner, Solving ODEs II (Radau IIA).
 
 use crate::{
+    Float,
     dense::StepInterpolant,
     error::{ConfigError, Error},
     ivp::FirstOrderSystem,
-    matrix::{lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex, Matrix, MatrixStorage},
+    matrix::{Matrix, MatrixStorage, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{Evals, IntegrationResult, Steps, Tolerance},
     solout::{ControlFlag, SolOut},
     status::Status,
-    Float,
 };
 use bon::Builder;
 
@@ -164,7 +166,7 @@ impl RADAU {
         let scale_max = self.scale_max;
         let facl = 1.0 / scale_min;
         let facr = 1.0 / scale_max;
-        if scale_min <= 0.0 || !(scale_min < scale_max) {
+        if scale_min <= 0.0 || scale_min.partial_cmp(&scale_max) != Some(std::cmp::Ordering::Less) {
             return Err(Error::Config(ConfigError::InvalidScaleFactors {
                 min: scale_min,
                 max: scale_max,
@@ -433,13 +435,13 @@ impl RADAU {
 
             // Account for index-2 and index-3 algebraic variables
             if nind2 > 0 {
-                for i in nind1..(nind1 + nind2) {
-                    scal[i] /= hhfac;
+                for value in scal.iter_mut().skip(nind1).take(nind2) {
+                    *value /= hhfac;
                 }
             }
             if nind3 > 0 {
-                for i in (nind1 + nind2)..(nind1 + nind2 + nind3) {
-                    scal[i] /= hhfac.powi(2);
+                for value in scal.iter_mut().skip(nind1 + nind2).take(nind3) {
+                    *value /= hhfac.powi(2);
                 }
             }
             xph = x + h;
@@ -699,7 +701,7 @@ impl RADAU {
                     y[i] += z3[i];
                     let ak = (z1[i] - z2[i]) / C1MC2;
                     let acont3 = (ak - (z1[i] / C1)) / C2;
-                    cont[0 * n + i] = y[i];
+                    cont[i] = y[i];
                     cont[n + i] = (z2[i] - z3[i]) / C2M1;
                     cont[2 * n + i] = (ak - cont[n + i]) / C1M1;
                     cont[3 * n + i] = cont[2 * n + i] - acont3;
@@ -717,7 +719,7 @@ impl RADAU {
                 // Callback with optional dense interpolant
                 if let Some(sol) = solout.as_mut() {
                     // Build interpolant if requested or an event output is due
-                    let event = xout.map_or(false, |xo| xo <= x);
+                    let event = xout.is_some_and(|xo| xo <= x);
                     let interpolant = if self.dense_output || event {
                         Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {
@@ -800,7 +802,7 @@ impl RADAU {
         let n = cont.len() / 4;
         // s = (xi - (xold + h)) / h
         let s = (xi - (xold + h)) / h;
-        let c0 = &cont[0 * n..n];
+        let c0 = &cont[..n];
         let c1 = &cont[n..2 * n];
         let c2 = &cont[2 * n..3 * n];
         let c3 = &cont[3 * n..4 * n];

@@ -14,21 +14,19 @@
 //!    }
 //! }
 //!
-//! fn main() {
-//!     let vdp = VanDerPol { eps: 1e-3 };
-//!     let x0 = 0.0;
-//!     let xend = 2.0;
-//!     let y0 = [2.0, 0.0];
-//!     let t_eval = (0..=20).map(|i| i as f64 * 0.1).collect();
-//!     let sol = Ivp::first_order(&vdp, x0, xend, &y0)
-//!         .method(Method::DOP853)
-//!         .rtol(1e-6)
-//!         .atol(1e-11)
-//!         .t_eval(t_eval)
-//!         .solve()
-//!         .unwrap();
-//!     println!("Finished with status: {:?}", sol.status);
-//! }
+//! let vdp = VanDerPol { eps: 1e-3 };
+//! let x0 = 0.0;
+//! let xend = 2.0;
+//! let y0 = [2.0, 0.0];
+//! let t_eval = (0..=20).map(|i| i as f64 * 0.1).collect();
+//! let sol = Ivp::first_order(&vdp, x0, xend, &y0)
+//!     .method(Method::DOP853)
+//!     .rtol(1e-6)
+//!     .atol(1e-11)
+//!     .t_eval(t_eval)
+//!     .solve()
+//!     .unwrap();
+//! println!("Finished with status: {:?}", sol.status);
 //! ```
 
 pub use crate::{
@@ -38,6 +36,6 @@ pub use crate::{
     methods::SymplecticMethod,
     solout::ControlFlag,
     solve::event::{Direction, EventConfig},
-    solve::{FirstOrderIvp, HamiltonianIvp, Ivp, Method, SecondOrderIvp, Solution},
+    solve::{FirstOrderIvp, HamiltonianIvp, Ivp, JacobianSource, Method, SecondOrderIvp, Solution},
     status::Status,
 };

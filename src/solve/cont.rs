@@ -1,6 +1,6 @@
 //! Continuous output provided by dense output coefficients (cont) from each step.
 
-use crate::{dense::DenseSegment, Float};
+use crate::{Float, dense::DenseSegment};
 
 use super::options::Method;
 

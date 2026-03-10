@@ -1,6 +1,6 @@
 //! Symplectic Euler variants.
 
-use crate::{ivp::SeparableHamiltonianSystem, Float};
+use crate::{Float, ivp::SeparableHamiltonianSystem};
 
 use super::SymplecticWork;
 

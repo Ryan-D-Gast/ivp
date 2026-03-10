@@ -1,17 +1,18 @@
 //! Typed IVP builders for the public Rust API.
 
 use crate::{
+    Float,
     error::Error,
     ivp::{FirstOrderSystem, SecondOrderSystem, SeparableHamiltonianSystem},
     matrix::MatrixStorage,
     methods::{SymplecticMethod, Tolerance},
-    Float,
 };
 
 use super::{
-    options::{FirstOrderConfig, Method},
+    SymplecticConfig,
+    options::{FirstOrderConfig, JacobianSource, Method},
     solution::Solution,
-    solve_first_order_impl, solve_hamiltonian_impl, solve_second_order_impl, SymplecticConfig,
+    solve_first_order_impl, solve_hamiltonian_impl, solve_second_order_impl,
 };
 
 /// Entry point for constructing typed initial value problems.
@@ -43,6 +44,7 @@ impl Ivp {
             min_step: None,
             dense_output: false,
             jac_storage: MatrixStorage::Full,
+            jacobian_source: JacobianSource::Auto,
             mass_storage: MatrixStorage::Identity,
             nind1: None,
             nind2: None,
@@ -118,6 +120,7 @@ pub struct FirstOrderIvp<'a, F> {
     min_step: Option<Float>,
     dense_output: bool,
     jac_storage: MatrixStorage,
+    jacobian_source: JacobianSource,
     mass_storage: MatrixStorage,
     nind1: Option<usize>,
     nind2: Option<usize>,
@@ -221,6 +224,24 @@ impl<'a, F> FirstOrderIvp<'a, F> {
         self
     }
 
+    /// Select how the solver should obtain Jacobian information.
+    ///
+    /// This mainly matters for LSODA, which can either use its internal
+    /// finite-difference Jacobian logic or call the system's `jac(...)`
+    /// implementation directly.
+    pub fn jacobian_source(mut self, jacobian_source: JacobianSource) -> Self {
+        self.jacobian_source = jacobian_source;
+        self
+    }
+
+    #[cfg_attr(not(feature = "python"), allow(dead_code))]
+    pub(crate) fn maybe_jacobian_source(mut self, jacobian_source: Option<JacobianSource>) -> Self {
+        if let Some(jacobian_source) = jacobian_source {
+            self.jacobian_source = jacobian_source;
+        }
+        self
+    }
+
     /// Select the storage layout used for the mass matrix.
     pub fn mass_storage(mut self, mass_storage: MatrixStorage) -> Self {
         self.mass_storage = mass_storage;
@@ -263,6 +284,7 @@ where
             min_step: self.min_step,
             dense_output: self.dense_output,
             jac_storage: self.jac_storage,
+            jacobian_source: self.jacobian_source,
             mass_storage: self.mass_storage,
             nind1: self.nind1,
             nind2: self.nind2,

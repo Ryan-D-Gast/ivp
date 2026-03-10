@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
-pub struct SHO;
-impl FirstOrderSystem for SHO {
+pub struct Sho;
+impl FirstOrderSystem for Sho {
     fn derivative(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];

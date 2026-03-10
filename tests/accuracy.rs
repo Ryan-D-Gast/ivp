@@ -1,7 +1,7 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{default_ivp, SHO};
+use common::{Sho, default_ivp};
 
 fn methods() -> Vec<Method> {
     vec![
@@ -9,6 +9,7 @@ fn methods() -> Vec<Method> {
         Method::RK23,
         Method::DOPRI5,
         Method::DOP853,
+        Method::LSODA,
         Method::RADAU,
         Method::BDF,
     ]
@@ -25,12 +26,12 @@ fn harmonic_accuracy_end_state() {
         let sol = if let Method::RK4 = method {
             // fixed step RK4: choose step to land on period
             let h = (xend - x0) / 2000.0;
-            Ivp::first_order(&SHO, x0, xend, &y0)
-                .method(method.clone())
+            Ivp::first_order(&Sho, x0, xend, &y0)
+                .method(method)
                 .first_step(h)
                 .solve()
         } else {
-            default_ivp(&SHO, x0, xend, &y0, method.clone()).solve()
+            default_ivp(&Sho, x0, xend, &y0, method).solve()
         };
         let sol = sol.expect("Ivp::solve failed");
         let y_end = sol.y.last().unwrap().clone();
@@ -56,7 +57,7 @@ fn t_eval_sampling_exact_times() {
 
     for method in methods() {
         let method_dbg = format!("{:?}", method);
-        let sol = Ivp::first_order(&SHO, x0, xend, &y0)
+        let sol = Ivp::first_order(&Sho, x0, xend, &y0)
             .method(method)
             .rtol(1e-9)
             .atol(1e-9)
@@ -81,7 +82,7 @@ fn iterate_samples() {
     let x0 = 0.0;
     let xend = 1.0;
     let y0 = [1.0, 0.0];
-    let sol = default_ivp(&SHO, x0, xend, &y0, Method::DOPRI5)
+    let sol = default_ivp(&Sho, x0, xend, &y0, Method::DOPRI5)
         .solve()
         .unwrap();
     for (t, y) in sol.iter() {

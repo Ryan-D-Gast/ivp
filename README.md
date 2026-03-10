@@ -45,6 +45,7 @@ Currently implemented solvers:
 -   **DOPRI5**: A 5th order Dormand-Prince method with step-size control and dense output.
 -   **RK4**: The classic 4th order Runge-Kutta method with fixed step-size and cubic Hermite interpolation for dense output.
 -   **RK23**: A 3rd order Runge-Kutta method with 2nd order error estimate for step-size control.
+-   **LSODA**: An automatic Adams/BDF switching multistep method for problems that may change stiffness.
 -   **Radau**: A 5th order implicit Runge-Kutta method of Radau IIA type with step-size control and dense output.
 -   **BDF**: A variable-order (1 to 5) Backward Differentiation Formula method for stiff ODEs with adaptive step-size control and dense output.
 -   **Symplectic methods**: Fixed-step structured solvers for separable Hamiltonian and second-order systems, including Symplectic Euler, Velocity Verlet, Ruth 3, and Yoshida 4.

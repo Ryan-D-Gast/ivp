@@ -1,9 +1,9 @@
 //! User-supplied dynamical system definitions.
 
 use crate::{
+    Float,
     matrix::{Matrix, MatrixStorage},
     solve::event::EventConfig,
-    Float,
 };
 
 /// User-supplied first-order system.

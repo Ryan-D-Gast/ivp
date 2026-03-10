@@ -1,16 +1,16 @@
 //! Internal fixed-step symplectic solve implementations.
 
 use crate::{
+    Float,
     dense::DenseSegment,
     error::{ConfigError, Error},
     ivp::{SecondOrderSystem, SeparableHamiltonianSystem},
     methods::{
-        drift_kick_step, kick_drift_step, ruth3_step, velocity_verlet_step, yoshida4_step,
-        SymplecticMethod, SymplecticWork,
+        SymplecticMethod, SymplecticWork, drift_kick_step, kick_drift_step, ruth3_step,
+        velocity_verlet_step, yoshida4_step,
     },
     solve::cont::ContinuousOutput,
     status::Status,
-    Float,
 };
 
 use super::solution::Solution;
@@ -241,6 +241,7 @@ where
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn step_once<F>(
     method: SymplecticMethod,
     f: &F,
@@ -385,6 +386,7 @@ where
     (work.dqdt.clone(), work.dpdt.clone())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_dense_segment(
     xold: Float,
     h: Float,

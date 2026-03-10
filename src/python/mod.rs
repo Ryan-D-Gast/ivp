@@ -35,6 +35,7 @@ pub fn ivp(m: &Bound<'_, PyModule>) -> PyResult<()> {
          using high-performance Rust solvers.\n\n\
          Supported methods:\n\
          - RK45, RK23, DOP853 (Explicit Runge-Kutta)\n\
+         - LSODA (Automatic Adams/BDF switching multistep)\n\
          - Radau, BDF (Implicit methods for stiff problems)\n\
          - RK4 (Classic Runge-Kutta)\n\
          - VelocityVerlet, Ruth3, Yoshida4, SymplecticEuler* (structured symplectic methods)\n\n\

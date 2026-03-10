@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 //! DOPRI5 - Dormand–Prince 5(4) explicit Runge–Kutta integrator
 //!
 //! # Authors and attribution
@@ -19,13 +21,13 @@
 //!
 
 use crate::{
+    Float,
     dense::StepInterpolant,
     error::{ConfigError, Error},
     ivp::FirstOrderSystem,
-    methods::{hinit, Evals, IntegrationResult, Steps, Tolerance},
+    methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
     solout::{ControlFlag, SolOut},
     status::Status,
-    Float,
 };
 use bon::Builder;
 
@@ -325,7 +327,7 @@ impl DOPRI5 {
             evals.ode += 6;
 
             // Prepare last segment of dense output before recalculating k4
-            event = xout.map_or(false, |xo| xo <= xph);
+            event = xout.is_some_and(|xo| xo <= xph);
             if self.dense_output || event {
                 for i in 0..n {
                     cont[4 * n + i] = h
@@ -367,7 +369,7 @@ impl DOPRI5 {
                 steps.accepted += 1;
 
                 // Stiffness detection
-                if (steps.accepted % nstiff == 0) || (iasti > 0) {
+                if steps.accepted.is_multiple_of(nstiff) || (iasti > 0) {
                     let mut stnum = 0.0_f64;
                     let mut stden = 0.0_f64;
                     for i in 0..n {

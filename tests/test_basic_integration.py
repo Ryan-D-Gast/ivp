@@ -105,6 +105,25 @@ def test_integration_BDF_forward():
 
 
 @pytest.mark.timeout(10)
+def test_integration_LSODA_forward():
+    """Test LSODA forward integration."""
+    rtol = 1e-3
+    atol = 1e-6
+    y0 = [1/3, 2/9]
+    t_span = [5, 9]
+
+    res = solve_ivp(fun_rational, t_span, y0, rtol=rtol,
+                    atol=atol, method='LSODA', dense_output=True)
+    assert_equal(res.t[0], t_span[0])
+    assert_(res.success)
+    assert_equal(res.status, 0)
+
+    y_true = sol_rational(res.t)
+    e = compute_error(res.y, y_true, rtol, atol)
+    assert_(np.all(e < 20))
+
+
+@pytest.mark.timeout(10)
 def test_integration_RK23_backward():
     """Test RK23 method backward integration."""
     rtol = 1e-3

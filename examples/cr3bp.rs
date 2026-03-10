@@ -45,14 +45,14 @@ fn main() {
     // Arenstorf orbit initial conditions (periodic orbit, period T ~ 17.0652)
     // From Hairer, Norsett & Wanner "Solving ODEs I"
     let y0 = [
-        0.994,                            // x
-        0.0,                              // y
-        0.0,                              // z
-        0.0,                              // vx
-        -2.00158510637908252240537862224, // vy
-        0.0,                              // vz
+        0.994,                    // x
+        0.0,                      // y
+        0.0,                      // z
+        0.0,                      // vx
+        -2.001_585_106_379_082_4, // vy
+        0.0,                      // vz
     ];
-    let period = 17.0652165601579625588917206249;
+    let period = 17.065_216_560_157_964;
     let c_initial = cr3bp.jacobi_constant(&y0);
 
     let t_eval: Vec<f64> = (0..=100).map(|i| i as f64 * period / 100.0).collect();
