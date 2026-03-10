@@ -56,7 +56,10 @@ impl SparsityStructure {
             let np = sparsity.py().import("numpy")?;
             let arr = np.call_method1("asarray", (indices,))?;
             let arr = arr.call_method1("astype", ("int64",))?;
-            arr.extract::<Vec<i64>>()?.iter().map(|&x| x as usize).collect()
+            arr.extract::<Vec<i64>>()?
+                .iter()
+                .map(|&x| x as usize)
+                .collect()
         };
 
         let indptr_vec: Vec<usize> = if let Ok(arr) = indptr.extract::<PyReadonlyArray2<i64>>() {
@@ -69,7 +72,10 @@ impl SparsityStructure {
             let np = sparsity.py().import("numpy")?;
             let arr = np.call_method1("asarray", (indptr,))?;
             let arr = arr.call_method1("astype", ("int64",))?;
-            arr.extract::<Vec<i64>>()?.iter().map(|&x| x as usize).collect()
+            arr.extract::<Vec<i64>>()?
+                .iter()
+                .map(|&x| x as usize)
+                .collect()
         };
 
         // Build col_to_rows mapping
@@ -155,10 +161,10 @@ fn group_columns(col_to_rows: &[Vec<usize>], n: usize) -> (Vec<usize>, usize) {
 
 /// Compute sparse Jacobian using finite differences with column grouping.
 ///
-/// This function evaluates the ODE function `n_groups` times instead of `n` times,
+/// This function evaluates the derivative function `n_groups` times instead of `n` times,
 /// where `n_groups` is typically much smaller than `n` for sparse Jacobians.
 pub fn sparse_jacobian_fd<F>(
-    ode: F,
+    derivative: F,
     x: Float,
     y: &[Float],
     f0: &[Float],
@@ -186,9 +192,9 @@ pub fn sparse_jacobian_fd<F>(
             h[col] = perturbation;
         }
 
-        // Evaluate ODE with all perturbations
+        // Evaluate the derivative with all perturbations
         let mut f_perturbed = vec![0.0; n];
-        ode(x, &y_perturbed, &mut f_perturbed);
+        derivative(x, &y_perturbed, &mut f_perturbed);
 
         // Extract Jacobian columns from the difference
         for &col in &cols {

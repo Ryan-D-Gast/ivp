@@ -1,16 +1,23 @@
 use ivp::prelude::*;
 
 mod common;
-use common::{SHO, default_opts, default_opts_dense};
+use common::{Sho, default_ivp, default_ivp_dense};
 
 fn all_methods() -> Vec<Method> {
-    vec![Method::RK23, Method::DOPRI5, Method::DOP853, Method::RADAU, Method::BDF]
+    vec![
+        Method::RK23,
+        Method::DOPRI5,
+        Method::DOP853,
+        Method::LSODA,
+        Method::RADAU,
+        Method::BDF,
+    ]
 }
 
 #[derive(Clone, Copy)]
 struct ZeroRhs;
-impl IVP for ZeroRhs {
-    fn ode(&self, _t: f64, _y: &[f64], dydx: &mut [f64]) {
+impl FirstOrderSystem for ZeroRhs {
+    fn derivative(&self, _t: f64, _y: &[f64], dydx: &mut [f64]) {
         for v in dydx.iter_mut() {
             *v = 0.0;
         }
@@ -27,15 +34,19 @@ fn integration_zero_rhs_all_methods() {
         .map(|i| x0 + (xend - x0) * (i as f64) / 20.0)
         .collect();
     // BDF is not suitable for RHS=0 and is thus excluded
-    let all_but_bdf = all_methods().iter().filter(|m| **m != Method::BDF).cloned().collect::<Vec<_>>();
+    let all_but_bdf = all_methods()
+        .iter()
+        .filter(|m| **m != Method::BDF && **m != Method::LSODA)
+        .cloned()
+        .collect::<Vec<_>>();
     for method in all_but_bdf {
-        let opts = Options::builder()
-            .method(method.clone())
+        let sol = Ivp::first_order(&f, x0, xend, &y0)
+            .method(method)
             .rtol(1e-9)
             .atol(1e-12)
             .t_eval(t_eval.clone())
-            .build();
-        let sol = solve_ivp(&f, x0, xend, &y0, opts).expect("solve_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         assert_eq!(sol.t, t_eval);
         for yi in sol.y {
             for &v in &yi {
@@ -54,13 +65,13 @@ fn max_step_and_first_step_controls() {
     // max_step respected
     let max_step = 0.05;
     for method in all_methods() {
-        let opts = Options::builder()
-            .method(method.clone())
+        let sol = Ivp::first_order(&Sho, x0, xend, &y0)
+            .method(method)
             .rtol(1e-6)
             .atol(1e-9)
             .max_step(max_step)
-            .build();
-        let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         for w in sol.t.windows(2) {
             let dt = (w[1] - w[0]).abs();
             assert!(
@@ -78,15 +89,19 @@ fn max_step_and_first_step_controls() {
     // BDF may adjust the first step internally; exclude it from this check
     // to avoid false negatives. To test BDF's initial step behavior, add a
     // dedicated test that inspects the chosen step size via `solout`.
-    let methods_to_test = all_methods().iter().filter(|m| **m != Method::BDF).cloned().collect::<Vec<_>>();
+    let methods_to_test = all_methods()
+        .iter()
+        .filter(|m| **m != Method::BDF && **m != Method::LSODA)
+        .cloned()
+        .collect::<Vec<_>>();
     for method in methods_to_test {
-        let opts = Options::builder()
-            .method(method.clone())
+        let sol = Ivp::first_order(&Sho, x0, xend, &y0)
+            .method(method)
             .rtol(1e-3)
             .atol(1e-6)
             .first_step(first_step)
-            .build();
-        let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         assert!(
             sol.t.len() >= 2,
             "expected at least two time points for {:?}",
@@ -108,14 +123,20 @@ fn dense_output_matches_discrete_samples() {
     let x0 = 0.0;
     let xend = 2.0;
     let y0 = [1.0, 0.0];
-    for method in [Method::RK23, Method::DOPRI5, Method::DOP853, Method::RADAU] {
-        let opts = Options::builder()
-            .method(method.clone())
+    for method in [
+        Method::RK23,
+        Method::DOPRI5,
+        Method::DOP853,
+        Method::LSODA,
+        Method::RADAU,
+    ] {
+        let sol = Ivp::first_order(&Sho, x0, xend, &y0)
+            .method(method)
             .rtol(1e-8)
             .atol(1e-10)
             .dense_output(true)
-            .build();
-        let sol = solve_ivp(&SHO, x0, xend, &y0, opts).expect("solve_ivp failed");
+            .solve()
+            .expect("Ivp::solve failed");
         // Ensure span exists
         assert!(sol.sol_span().is_some());
         // Evaluate dense output at stored times and compare
@@ -140,7 +161,9 @@ fn dense_output_out_of_range_errors() {
     let x0 = 0.0;
     let xend = 1.0;
     let y0 = [1.0, 0.0];
-    let sol = solve_ivp(&SHO, x0, xend, &y0, default_opts_dense(Method::DOPRI5)).unwrap();
+    let sol = default_ivp_dense(&Sho, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let (t0, t1) = sol.sol_span().unwrap();
     let before = t0 - 0.1;
     let after = t1 + 0.1;
@@ -149,8 +172,8 @@ fn dense_output_out_of_range_errors() {
 }
 
 struct ShoZeroEventAll;
-impl IVP for ShoZeroEventAll {
-    fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+impl FirstOrderSystem for ShoZeroEventAll {
+    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
@@ -170,8 +193,8 @@ impl IVP for ShoZeroEventAll {
 }
 
 struct ShoZeroEventPositive;
-impl IVP for ShoZeroEventPositive {
-    fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+impl FirstOrderSystem for ShoZeroEventPositive {
+    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
@@ -190,8 +213,8 @@ impl IVP for ShoZeroEventPositive {
 }
 
 struct ShoZeroEventNegative;
-impl IVP for ShoZeroEventNegative {
-    fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+impl FirstOrderSystem for ShoZeroEventNegative {
+    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
@@ -227,7 +250,9 @@ fn event_detection_all_and_directional() {
 
     // All crossings, stop after 2 -> expect near pi/2 and 3pi/2, terminates at latter
     let f_all = ShoZeroEventAll;
-    let sol_all = solve_ivp(&f_all, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol_all = default_ivp(&f_all, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let zeros = find_near_zero_times(&sol_all.t_events[0], &sol_all.y_events[0], 1e-8);
     // Expect at least two event samples recorded
     assert!(
@@ -251,7 +276,9 @@ fn event_detection_all_and_directional() {
 
     // Positive-going only -> expect ~3pi/2
     let f_pos = ShoZeroEventPositive;
-    let sol_pos = solve_ivp(&f_pos, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol_pos = default_ivp(&f_pos, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let zeros_pos = find_near_zero_times(&sol_pos.t_events[0], &sol_pos.y_events[0], 1e-8);
     assert!(!zeros_pos.is_empty());
     let z = zeros_pos[0];
@@ -263,7 +290,9 @@ fn event_detection_all_and_directional() {
 
     // Negative-going only -> expect ~pi/2
     let f_neg = ShoZeroEventNegative;
-    let sol_neg = solve_ivp(&f_neg, x0, xend, &y0, default_opts(Method::DOPRI5)).unwrap();
+    let sol_neg = default_ivp(&f_neg, x0, xend, &y0, Method::DOPRI5)
+        .solve()
+        .unwrap();
     let zeros_neg = find_near_zero_times(&sol_neg.t_events[0], &sol_neg.y_events[0], 1e-8);
     assert!(!zeros_neg.is_empty());
     let z = zeros_neg[0];
@@ -280,7 +309,7 @@ fn zero_interval_returns_initial_state() {
     let xend = 1.23;
     let y0 = [2.0, 3.0];
     for method in all_methods() {
-        let sol = solve_ivp(&SHO, x0, xend, &y0, default_opts(method)).unwrap();
+        let sol = default_ivp(&Sho, x0, xend, &y0, method).solve().unwrap();
         assert!(!sol.t.is_empty());
         let y_last = sol.y.last().unwrap();
         assert!((y_last[0] - y0[0]).abs() <= 1e-12);
@@ -289,8 +318,8 @@ fn zero_interval_returns_initial_state() {
 }
 
 struct Exp2;
-impl IVP for Exp2 {
-    fn ode(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+impl FirstOrderSystem for Exp2 {
+    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[0];
         dydx[1] = y[1];
     }
@@ -305,19 +334,18 @@ fn vector_rtol_componentwise_control() {
     let y0 = [1.0, 1.0];
 
     // looser vs tighter rtol on second component
-    let opts_loose = Options::builder()
+    let sol_loose = Ivp::first_order(&f, x0, xend, &y0)
         .method(Method::DOPRI5)
         .rtol([1e-2, 1e-2])
         .atol(1e-10)
-        .build();
-    let opts_tight_second = Options::builder()
+        .solve()
+        .unwrap();
+    let sol_tight = Ivp::first_order(&f, x0, xend, &y0)
         .method(Method::DOPRI5)
         .rtol([1e-2, 1e-10])
         .atol(1e-10)
-        .build();
-
-    let sol_loose = solve_ivp(&f, x0, xend, &y0, opts_loose).unwrap();
-    let sol_tight = solve_ivp(&f, x0, xend, &y0, opts_tight_second).unwrap();
+        .solve()
+        .unwrap();
     let y_end_loose = sol_loose.y.last().unwrap();
     let y_end_tight = sol_tight.y.last().unwrap();
     let exact = std::f64::consts::E;

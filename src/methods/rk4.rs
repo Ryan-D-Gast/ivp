@@ -1,11 +1,13 @@
+#![allow(clippy::too_many_arguments)]
+
 //! Classic explicit Runge–Kutta 4 (RK4) fixed-step integrator
 
 use crate::{
     Float,
     dense::StepInterpolant,
-    error::{Error, ConfigError},
+    error::{ConfigError, Error},
+    ivp::FirstOrderSystem,
     methods::{Evals, IntegrationResult, Steps},
-    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
@@ -31,7 +33,7 @@ impl Default for RK4 {
     }
 }
 
-impl RK4 { 
+impl RK4 {
     /// Classical explicit Runge–Kutta 4 (RK4) — fixed-step solver with optional dense output.
     ///
     /// This function integrates the autonomous system `y' = f(x, y)` from `x` to
@@ -42,18 +44,18 @@ impl RK4 {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `IVP`.
+    /// - `f`: Right‑hand side implementing [`FirstOrderSystem`].
     /// - `x`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y`: Mutable slice for the initial state; on success contains the state at `xend`.
     /// - `h`: Fixed step size (its sign must match `xend - x`).
-    /// 
+    ///
     /// ## Output Control
     /// - `solout`: Optional mutable reference to a `SolOut` callback invoked once
     ///   before the loop and after each accepted step.
     /// - `dense_output`: If `true`, dense‑output coefficients are computed for each
     ///   accepted step and an interpolant is passed to the callback.
-    /// 
+    ///
     /// ## Optional Settings
     /// - `max_steps`: Optional upper bound on the number of steps (default `100_000`).
     ///
@@ -71,7 +73,7 @@ impl RK4 {
         mut solout: Option<&mut S>,
     ) -> Result<IntegrationResult, Error>
     where
-        F: IVP,
+        F: FirstOrderSystem,
         S: SolOut,
     {
         // Create mutable copies for the solver to mutate
@@ -79,7 +81,7 @@ impl RK4 {
         let mut y = y0.to_vec();
 
         // --- Input Validation ---
-        
+
         // Initial Step Size
         let posneg = (xend - x).signum();
         if h == 0.0 || h.signum() != posneg {
@@ -113,7 +115,7 @@ impl RK4 {
         let mut xout: Option<Float> = None;
 
         // --- Initializations ---
-        f.ode(x, &y, &mut k1);
+        f.derivative(x, &y, &mut k1);
 
         // Initial SolOut call (no interpolator yet; xold == x)
         if let Some(sol) = solout.as_mut() {
@@ -127,7 +129,7 @@ impl RK4 {
                     });
                 }
                 ControlFlag::ModifiedSolution => {
-                    f.ode(x, &y, &mut k1);
+                    f.derivative(x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -155,17 +157,17 @@ impl RK4 {
             for i in 0..n {
                 yt[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(x + C2 * h, &yt, &mut k2);
+            f.derivative(x + C2 * h, &yt, &mut k2);
 
             for i in 0..n {
                 yt[i] = y[i] + h * A32 * k2[i];
             }
-            f.ode(x + C3 * h, &yt, &mut k3);
+            f.derivative(x + C3 * h, &yt, &mut k3);
 
             for i in 0..n {
                 yt[i] = y[i] + h * A43 * k3[i];
             }
-            f.ode(x + C4 * h, &yt, &mut k4);
+            f.derivative(x + C4 * h, &yt, &mut k4);
 
             xold = x;
             yt.copy_from_slice(&y);
@@ -175,13 +177,13 @@ impl RK4 {
             for i in 0..n {
                 y[i] += h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i] + B4 * k4[i]);
             }
-            f.ode(x, &y, &mut k1);
+            f.derivative(x, &y, &mut k1);
 
             evals.ode += 4;
             steps.total += 1;
 
             // Decide if we must build dense output (for user xout events as well)
-            let event = xout.map_or(false, |xo| xo <= x);
+            let event = xout.is_some_and(|xo| xo <= x);
             if (self.dense_output || event) && solout.is_some() {
                 cont[0..n].copy_from_slice(&yt);
                 for i in 0..n {
@@ -193,7 +195,7 @@ impl RK4 {
 
             // Optional callback function
             if let Some(sol) = solout.as_mut() {
-                let interpolant = if self.dense_output || xout.map_or(false, |xo| xo <= x) {
+                let interpolant = if self.dense_output || xout.is_some_and(|xo| xo <= x) {
                     Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                 } else {
                     None
@@ -205,7 +207,7 @@ impl RK4 {
                     }
                     ControlFlag::ModifiedSolution => {
                         // Recompute k1 at new (x, y).
-                        f.ode(x, &y, &mut k1);
+                        f.derivative(x, &y, &mut k1);
                         evals.ode += 1;
                     }
                     ControlFlag::XOut(xo) => {

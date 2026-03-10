@@ -6,8 +6,8 @@ struct VanDerPol {
     eps: f64,
 }
 
-impl IVP for VanDerPol {
-    fn ode(&self, _t: f64, y: &[f64], dydt: &mut [f64]) {
+impl FirstOrderSystem for VanDerPol {
+    fn derivative(&self, _t: f64, y: &[f64], dydt: &mut [f64]) {
         dydt[0] = y[1];
         dydt[1] = ((1.0 - y[0] * y[0]) * y[1] - y[0]) / self.eps;
     }
@@ -19,14 +19,13 @@ fn main() {
     let y0 = [2.0, 0.0];
     let t_eval: Vec<f64> = (0..=20).map(|i| i as f64 * 0.1).collect();
 
-    let options = Options::builder()
+    match Ivp::first_order(&vdp, 0.0, 2.0, &y0)
         .method(Method::BDF)
         .rtol(1e-6)
         .atol(1e-8)
         .t_eval(t_eval)
-        .build();
-
-    match solve_ivp(&vdp, 0.0, 2.0, &y0, options) {
+        .solve()
+    {
         Ok(sol) => {
             println!("Status: {:?}", sol.status);
             println!("nfev: {}, njev: {}, nlu: {}", sol.nfev, sol.njev, sol.nlu);

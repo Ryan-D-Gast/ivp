@@ -7,7 +7,7 @@
 //!
 //! - [`solution`]: Dense output wrapper (`OdeSolution`)
 //! - [`result`]: Result object (`OdeResult`)
-//! - [`ivp_wrapper`]: IVP trait implementation for Python callables
+//! - [`ivp_wrapper`]: System-trait implementations for Python callables
 //! - [`solve`]: Main `solve_ivp` function
 //! - [`conversion`]: Type conversion utilities
 //! - [`sparsity`]: Sparse Jacobian utilities
@@ -35,12 +35,20 @@ pub fn ivp(m: &Bound<'_, PyModule>) -> PyResult<()> {
          using high-performance Rust solvers.\n\n\
          Supported methods:\n\
          - RK45, RK23, DOP853 (Explicit Runge-Kutta)\n\
+         - LSODA (Automatic Adams/BDF switching multistep)\n\
          - Radau, BDF (Implicit methods for stiff problems)\n\
-         - RK4 (Classic Runge-Kutta)\n\n\
+         - RK4 (Classic Runge-Kutta)\n\
+         - VelocityVerlet, Ruth3, Yoshida4, SymplecticEuler* (structured symplectic methods)\n\n\
          Features:\n\
          - Dense output (continuous solution)\n\
          - Event detection (terminal and direction)\n\
          - Vectorized evaluation (optional)\n\
+         - Structured symplectic integration through `solve_ivp` using either\n\
+           a callable `fun(t, q)` for second-order systems, a callback pair for\n\
+           Hamiltonian systems, or legacy object methods such as\n\
+           `acceleration(t, q)` and `position_derivative(t, p)`/`momentum_derivative(t, q)`\n\
+         - User callback validation with Python exceptions for bad shapes and\n\
+           invalid callback signatures instead of uncaught Rust panics\n\
          - Argument passing to ODE functions",
     )?;
 

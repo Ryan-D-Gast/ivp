@@ -1,15 +1,13 @@
-//! Options for solve_ivp
-
-use bon::Builder;
+//! Internal configuration for first-order solving.
 
 use crate::{
+    Float,
     dense::InterpolateFn,
     matrix::MatrixStorage,
-    methods::{Tolerance, BDF, DOP853, DOPRI5, RADAU, RK23, RK4},
-    Float,
+    methods::{BDF, DOP853, DOPRI5, LSODA, RADAU, RK4, RK23, Tolerance},
 };
 
-/// Numerical methods for solve_ivp
+/// Numerical methods for first-order IVPs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Method {
     /// Bogacki–Shampine 3(2) adaptive RK
@@ -24,6 +22,8 @@ pub enum Method {
     RADAU,
     /// Variable-order (1-5) Backward Differentiation Formula method for stiff problems
     BDF,
+    /// LSODA automatic Adams/BDF switching method
+    LSODA,
 }
 
 impl Method {
@@ -39,6 +39,7 @@ impl Method {
             Method::DOP853 => 8,
             Method::RADAU => 4,
             Method::BDF => 7,
+            Method::LSODA => 8,
         }
     }
 
@@ -54,6 +55,7 @@ impl Method {
             Method::DOP853 => DOP853::interpolate,
             Method::RADAU => RADAU::interpolate,
             Method::BDF => BDF::interpolate,
+            Method::LSODA => LSODA::interpolate,
         }
     }
 }
@@ -67,25 +69,39 @@ impl From<&str> for Method {
             "RK4" => Method::RK4,
             "RADAU" | "RADAU5" => Method::RADAU,
             "BDF" | "BDF15" => Method::BDF,
+            "LSODA" => Method::LSODA,
             _ => Method::DOPRI5, // Default
         }
     }
 }
 
-#[derive(Builder)]
-/// Options for `solve_ivp`.
-pub struct Options {
+/// Selects how a first-order solver should obtain Jacobian information.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JacobianSource {
+    /// Use the solver's default behavior.
+    ///
+    /// For LSODA this means its internal finite-difference Jacobian path.
+    /// Other solvers continue to call [`crate::ivp::FirstOrderSystem::jac`].
+    Auto,
+    /// Call [`crate::ivp::FirstOrderSystem::jac`] for Jacobian information.
+    UserProvided,
+    /// Force the solver's internal finite-difference Jacobian path when available.
+    ///
+    /// Solvers without an internal Jacobian approximation may ignore this and
+    /// continue to call [`crate::ivp::FirstOrderSystem::jac`].
+    InternalFiniteDifference,
+}
+
+/// Internal options for first-order solving.
+pub(crate) struct FirstOrderConfig {
     /// Integration method. Choose an explicit RK (RK23/DOPRI5/DOP853/RK4) for non‑stiff
     /// problems or an implicit RK (RADAU) for stiff/DAE systems. Default: DOPRI5 (aka RK45).
-    #[builder(default = Method::DOPRI5, into)]
     pub method: Method,
     /// Relative tolerance for local error control. Accepts scalar or per‑component array/vector
     /// via [`Tolerance`]. The effective scaling for component i is `atol[i] + rtol[i]*|y[i]|`.
-    #[builder(default = 1e-3, into)]
     pub rtol: Tolerance,
     /// Absolute tolerance for local error control. Accepts scalar or per‑component array/vector.
     /// Used together with `rtol` to build the error scale `atol + rtol*|y|`.
-    #[builder(default = 1e-6, into)]
     pub atol: Tolerance,
     /// Maximum number of solver steps.
     pub max_steps: Option<usize>,
@@ -99,16 +115,15 @@ pub struct Options {
     pub min_step: Option<Float>,
     /// Store per‑step interpolants for cheap post‑run evaluation via `Solution::sol`/`sol_many`.
     /// Increases memory usage; recommended if you need values at times other than internal steps.
-    #[builder(default = false)]
     pub dense_output: bool,
     /// Preferred storage for the Jacobian `J = ∂f/∂y`. Default: `Full` (dense, writable).
     /// Solvers that don’t use a Jacobian ignore this. For banded storage you must provide
     /// an analytical Jacobian consistent with the chosen layout.
-    #[builder(default = MatrixStorage::Full)]
     pub jac_storage: MatrixStorage,
+    /// How the solver should obtain Jacobian information.
+    pub jacobian_source: JacobianSource,
     /// Preferred storage for the mass matrix `M` in `M y' = f(t,y)`. Default: `Identity`
     /// (implicit I, no allocation). Set to `Full`/`Banded` to provide a non‑trivial mass matrix.
-    #[builder(default = MatrixStorage::Identity)]
     pub mass_storage: MatrixStorage,
     /// DAE partition: number of index‑1 (differential) variables at the start of the state.
     /// If `nind2`/`nind3` are set and `nind1` is omitted, it is inferred as `n − nind2 − nind3`.

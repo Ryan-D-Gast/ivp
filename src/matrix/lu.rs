@@ -44,10 +44,12 @@ pub fn lu_decomp(a: &mut Matrix, ip: &mut [usize]) -> Result<(), Error> {
     }
 
     if ip.len() != n {
-        return Err(Error::LinearAlgebra(LinearAlgebraError::PivotSizeMismatch {
-            expected: n,
-            actual: ip.len(),
-        }));
+        return Err(Error::LinearAlgebra(
+            LinearAlgebraError::PivotSizeMismatch {
+                expected: n,
+                actual: ip.len(),
+            },
+        ));
     }
 
     if n == 1 {
@@ -185,10 +187,12 @@ pub fn lu_decomp_complex(ar: &mut Matrix, ai: &mut Matrix, ip: &mut [usize]) -> 
     }
 
     if ip.len() != n {
-        return Err(Error::LinearAlgebra(LinearAlgebraError::PivotSizeMismatch {
-            expected: n,
-            actual: ip.len(),
-        }));
+        return Err(Error::LinearAlgebra(
+            LinearAlgebraError::PivotSizeMismatch {
+                expected: n,
+                actual: ip.len(),
+            },
+        ));
     }
 
     if n == 1 {

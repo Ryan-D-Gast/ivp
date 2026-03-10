@@ -1,3 +1,6 @@
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::excessive_precision)]
+
 //! DOP853 - Dormand–Prince 8(5,3) explicit Runge–Kutta integrator
 //!
 //! # Authors and attribution
@@ -15,15 +18,15 @@
 //!   Equations I. Nonstiff Problems", 2nd ed., Springer (1993).
 //!
 //! Original Fortran implementation and supporting material
-//! - https://www.unige.ch/~hairer/software.html
+//! - <https://www.unige.ch/~hairer/software.html>
 //!
 
 use crate::{
     Float,
     dense::StepInterpolant,
-    error::{Error, ConfigError},
+    error::{ConfigError, Error},
+    ivp::FirstOrderSystem,
     methods::{Evals, IntegrationResult, Steps, Tolerance, hinit},
-    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
@@ -91,7 +94,7 @@ impl DOP853 {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `IVP`.
+    /// - `f`: Right‑hand side implementing [`FirstOrderSystem`].
     /// - `x0`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y0`: Slice containing the initial state.
@@ -101,8 +104,8 @@ impl DOP853 {
     /// - `solout`: Optional mutable reference to a `SolOut` callback used for
     ///   intermediate output and event handling.
     ///
-    /// Solver settings (`uround`, `safety_factor`, `scale_min`, `scale_max`, `beta`, 
-    /// `max_step`, `first_step`, `max_steps`, `stiff_test`, `dense_output`) are 
+    /// Solver settings (`uround`, `safety_factor`, `scale_min`, `scale_max`, `beta`,
+    /// `max_step`, `first_step`, `max_steps`, `stiff_test`, `dense_output`) are
     /// configured via the `DOP853` struct fields.
     ///
     /// # Returns
@@ -122,7 +125,7 @@ impl DOP853 {
         mut solout: Option<&mut S>,
     ) -> Result<IntegrationResult, Error>
     where
-        F: IVP,
+        F: FirstOrderSystem,
         S: SolOut,
     {
         // Create mutable copies for the solver to mutate
@@ -167,7 +170,7 @@ impl DOP853 {
                 max: 0.2,
             }));
         }
-        
+
         // Maximum step size
         let h_max = match self.max_step {
             Some(h) => h.abs(),
@@ -231,7 +234,7 @@ impl DOP853 {
         let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.ode(x, &y, &mut k1);
+        f.derivative(x, &y, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
@@ -257,7 +260,7 @@ impl DOP853 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.ode(x, &y, &mut k1);
+                    f.derivative(x, &y, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -295,43 +298,43 @@ impl DOP853 {
             for i in 0..n {
                 y1[i] = y[i] + h * A21 * k1[i];
             }
-            f.ode(x + C2 * h, &y1, &mut k2);
+            f.derivative(x + C2 * h, &y1, &mut k2);
             // Stage 3
             for i in 0..n {
                 y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
             }
-            f.ode(x + C3 * h, &y1, &mut k3);
+            f.derivative(x + C3 * h, &y1, &mut k3);
 
             // Stage 4
             for i in 0..n {
                 y1[i] = y[i] + h * (A41 * k1[i] + A43 * k3[i]);
             }
-            f.ode(x + C4 * h, &y1, &mut k4);
+            f.derivative(x + C4 * h, &y1, &mut k4);
 
             // Stage 5
             for i in 0..n {
                 y1[i] = y[i] + h * (A51 * k1[i] + A53 * k3[i] + A54 * k4[i]);
             }
-            f.ode(x + C5 * h, &y1, &mut k5);
+            f.derivative(x + C5 * h, &y1, &mut k5);
 
             // Stage 6
             for i in 0..n {
                 y1[i] = y[i] + h * (A61 * k1[i] + A64 * k4[i] + A65 * k5[i]);
             }
-            f.ode(x + C6 * h, &y1, &mut k6);
+            f.derivative(x + C6 * h, &y1, &mut k6);
 
             // Stage 7
             for i in 0..n {
                 y1[i] = y[i] + h * (A71 * k1[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
             }
-            f.ode(x + C7 * h, &y1, &mut k7);
+            f.derivative(x + C7 * h, &y1, &mut k7);
 
             // Stage 8
             for i in 0..n {
                 y1[i] = y[i]
                     + h * (A81 * k1[i] + A84 * k4[i] + A85 * k5[i] + A86 * k6[i] + A87 * k7[i]);
             }
-            f.ode(x + C8 * h, &y1, &mut k8);
+            f.derivative(x + C8 * h, &y1, &mut k8);
 
             // Stage 9
             for i in 0..n {
@@ -343,7 +346,7 @@ impl DOP853 {
                         + A97 * k7[i]
                         + A98 * k8[i]);
             }
-            f.ode(x + C9 * h, &y1, &mut k9);
+            f.derivative(x + C9 * h, &y1, &mut k9);
 
             // Stage 10
             for i in 0..n {
@@ -356,7 +359,7 @@ impl DOP853 {
                         + A108 * k8[i]
                         + A109 * k9[i]);
             }
-            f.ode(x + C10 * h, &y1, &mut k10);
+            f.derivative(x + C10 * h, &y1, &mut k10);
 
             // Stage 11
             for i in 0..n {
@@ -370,7 +373,7 @@ impl DOP853 {
                         + A119 * k9[i]
                         + A1110 * k10[i]);
             }
-            f.ode(x + C11 * h, &y1, &mut k2);
+            f.derivative(x + C11 * h, &y1, &mut k2);
 
             // Stage 12
             xph = x + h;
@@ -386,7 +389,7 @@ impl DOP853 {
                         + A1210 * k10[i]
                         + A1211 * k2[i]);
             }
-            f.ode(xph, &y1, &mut k3);
+            f.derivative(xph, &y1, &mut k3);
             evals.ode += 11;
 
             for i in 0..n {
@@ -440,11 +443,11 @@ impl DOP853 {
                 // Step accepted
                 facold = err.max(1.0e-4);
                 steps.accepted += 1;
-                f.ode(xph, &k5, &mut k4);
+                f.derivative(xph, &k5, &mut k4);
                 evals.ode += 1;
 
                 // Stiffness detection
-                if (steps.accepted % nstiff == 0) || (iasti > 0) {
+                if steps.accepted.is_multiple_of(nstiff) || (iasti > 0) {
                     let mut stnum: Float = 0.0;
                     let mut stden: Float = 0.0;
                     for i in 0..n {
@@ -472,7 +475,7 @@ impl DOP853 {
                 }
 
                 // Prepare dense output
-                event = xout.map_or(false, |xo| xo <= xph);
+                event = xout.is_some_and(|xo| xo <= xph);
                 if self.dense_output || event {
                     for i in 0..n {
                         cont[i] = y[i];
@@ -530,7 +533,7 @@ impl DOP853 {
                                 + A1412 * k3[i]
                                 + A1413 * k4[i]);
                     }
-                    f.ode(x + C14 * h, &y1, &mut k10);
+                    f.derivative(x + C14 * h, &y1, &mut k10);
 
                     for i in 0..n {
                         y1[i] = y[i]
@@ -543,7 +546,7 @@ impl DOP853 {
                                 + A1513 * k4[i]
                                 + A1514 * k10[i]);
                     }
-                    f.ode(x + C15 * h, &y1, &mut k2);
+                    f.derivative(x + C15 * h, &y1, &mut k2);
 
                     for i in 0..n {
                         y1[i] = y[i]
@@ -556,7 +559,7 @@ impl DOP853 {
                                 + A1614 * k10[i]
                                 + A1615 * k2[i]);
                     }
-                    f.ode(x + C16 * h, &y1, &mut k3);
+                    f.derivative(x + C16 * h, &y1, &mut k3);
                     evals.ode += 3;
 
                     // Add contributions of last three stages
@@ -612,7 +615,7 @@ impl DOP853 {
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.ode(x, &y, &mut k1);
+                            f.derivative(x, &y, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
@@ -661,8 +664,8 @@ impl DOP853 {
         let s = (xi - xold) / h;
         let s1 = 1.0 - s;
         for i in 0..n {
-            let conpar =
-                cont[4 * n + i] + s * (cont[5 * n + i] + s1 * (cont[6 * n + i] + s * cont[7 * n + i]));
+            let conpar = cont[4 * n + i]
+                + s * (cont[5 * n + i] + s1 * (cont[6 * n + i] + s * cont[7 * n + i]));
             let contd8 = cont[i]
                 + s * (cont[n + i] + s1 * (cont[2 * n + i] + s * (cont[3 * n + i] + s1 * conpar)));
             yi[i] = contd8;

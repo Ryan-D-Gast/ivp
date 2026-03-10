@@ -1,21 +1,34 @@
-// Numerical methods
+//! Numerical method implementations and shared solver utilities.
 
-// --- ODE Solvers ---
+// First-order methods.
+mod bdf;
 mod dop853;
 mod dopri5;
+mod lsoda;
 mod radau;
-mod rk4;
 mod rk23;
-mod bdf;
+mod rk4;
+
+// Fixed-step symplectic methods.
+mod ruth3;
+mod symplectic_euler;
+mod velocity_verlet;
+mod yoshida4;
 
 pub use bdf::BDF;
 pub use dop853::DOP853;
 pub use dopri5::DOPRI5;
+pub use lsoda::LSODA;
 pub use radau::RADAU;
 pub use rk4::RK4;
 pub use rk23::RK23;
 
-use crate::{Float, ivp::IVP, status::Status};
+pub(crate) use ruth3::step as ruth3_step;
+pub(crate) use symplectic_euler::{drift_kick_step, kick_drift_step};
+pub(crate) use velocity_verlet::step as velocity_verlet_step;
+pub(crate) use yoshida4::step as yoshida4_step;
+
+use crate::{Float, ivp::FirstOrderSystem, status::Status};
 
 use std::{
     iter::{ExactSizeIterator, FusedIterator},
@@ -23,7 +36,36 @@ use std::{
     slice::Iter,
 };
 
-/// --- Shared types and utilities ---
+/// Fixed-step symplectic methods for separable Hamiltonian systems.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SymplecticMethod {
+    /// First-order kick-then-drift symplectic Euler.
+    SymplecticEulerKickDrift,
+    /// First-order drift-then-kick symplectic Euler.
+    SymplecticEulerDriftKick,
+    /// Second-order velocity Verlet / leapfrog.
+    VelocityVerlet,
+    /// Third-order Ruth composition.
+    Ruth3,
+    /// Fourth-order Yoshida composition of a symmetric second-order method.
+    Yoshida4,
+}
+
+pub(crate) struct SymplecticWork {
+    pub dqdt: Vec<Float>,
+    pub dpdt: Vec<Float>,
+}
+
+impl SymplecticWork {
+    pub(crate) fn new(n: usize) -> Self {
+        Self {
+            dqdt: vec![0.0; n],
+            dpdt: vec![0.0; n],
+        }
+    }
+}
+
+// Shared types and utilities.
 
 /// The output of a numerical integrator
 #[derive(Clone, Debug)]
@@ -75,6 +117,12 @@ impl Evals {
     }
 }
 
+impl Default for Evals {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The step statistics of a numerical integrator
 #[derive(Clone, Debug)]
 pub struct Steps {
@@ -93,6 +141,12 @@ impl Steps {
             accepted: 0,
             rejected: 0,
         }
+    }
+}
+
+impl Default for Steps {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -214,6 +268,7 @@ impl IndexMut<usize> for Tolerance {
 }
 
 /// Compute an initial step size guess for an ODE solver.
+#[allow(clippy::too_many_arguments)]
 pub fn hinit<F>(
     f: &F,
     x: Float,
@@ -228,7 +283,7 @@ pub fn hinit<F>(
     rtol: &Tolerance,
 ) -> Float
 where
-    F: IVP,
+    F: FirstOrderSystem,
 {
     let n = y.len();
     let mut dnf: Float = 0.0;
@@ -257,7 +312,7 @@ where
         y1[i] = y[i] + h * f0[i];
     }
     // Evaluate f at x+h
-    f.ode(x + h, y1, f1);
+    f.derivative(x + h, y1, f1);
 
     // Estimate second derivative
     let mut der2: Float = 0.0;
@@ -269,13 +324,16 @@ where
     der2 = der2.sqrt() / h.abs();
 
     let der12 = der2.abs().max(dnf.sqrt());
-    let h1: Float;
-    if der12 <= 1.0e-15_f64 {
-        h1 = (1.0e-6_f64).max(h.abs() * 1.0e-3_f64);
+    let h1: Float = if der12 <= 1.0e-15 {
+        (1.0e-6 as Float).max(h.abs() * (1.0e-3 as Float))
     } else {
-        h1 = (0.01_f64 / der12).powf(1.0_f64 / (iord as Float));
-    }
+        ((0.01 as Float) / der12).powf((1.0 as Float) / iord as Float)
+    };
 
-    let h_final = h.abs().min(100.0_f64 * h.abs()).min(h1).min(hmax.abs());
+    let h_final = h
+        .abs()
+        .min((100.0 as Float) * h.abs())
+        .min(h1)
+        .min(hmax.abs());
     h_final.abs() * posneg.signum()
 }

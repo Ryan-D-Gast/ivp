@@ -6,8 +6,8 @@
 use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1};
 use pyo3::prelude::*;
 
-use crate::solve::cont::ContinuousOutput;
 use crate::Float;
+use crate::solve::cont::ContinuousOutput;
 
 /// Python wrapper for dense output interpolation.
 ///
@@ -54,8 +54,7 @@ impl PyOdeSolution {
 
         // Handle empty state vector
         if n_states == 0 {
-            let arr =
-                PyArray1::from_vec(py, Vec::<Float>::new()).reshape((0, t_slice.len()))?;
+            let arr = PyArray1::from_vec(py, Vec::<Float>::new()).reshape((0, t_slice.len()))?;
             return Ok(arr.into_any());
         }
 
@@ -106,11 +105,7 @@ impl PyOdeSolution {
     /// -------
     /// y : ndarray
     ///     Solution at time(s) t. Shape is (n,) for scalar t, or (n, len(t)) for array t.
-    fn __call__<'py>(
-        &self,
-        py: Python<'py>,
-        t: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    fn __call__<'py>(&self, py: Python<'py>, t: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Single float
         if let Ok(t_val) = t.extract::<Float>() {
             if let Some(y) = self.inner.evaluate_extrapolate(t_val) {

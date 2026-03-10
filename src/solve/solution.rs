@@ -1,8 +1,13 @@
-//! Rich solution type for solve_ivp: sampled data, stats, and dense evaluation helpers.
+//! Rich solution type shared by the solver APIs.
 
-use crate::{Float, error::{Error, InterpolationError}, solve::cont::ContinuousOutput, status::Status};
+use crate::{
+    Float,
+    error::{Error, InterpolationError},
+    solve::cont::ContinuousOutput,
+    status::Status,
+};
 
-/// Rich solution of solve_ivp: sampled data plus basic stats
+/// Rich solution: sampled data plus basic stats.
 #[derive(Debug, Clone)]
 pub struct Solution {
     pub t: Vec<Float>,
@@ -27,7 +32,9 @@ impl Solution {
             .continuous_sol
             .as_ref()
             .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
-        let (start, end) = dense.t_span().ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
+        let (start, end) = dense
+            .t_span()
+            .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
         let (lo, hi) = (start.min(end), start.max(end));
         if t < lo || t > hi {
             return Err(Error::Interpolation(InterpolationError::OutOfRange {
@@ -36,11 +43,13 @@ impl Solution {
                 t_end: end,
             }));
         }
-        dense.evaluate(t).ok_or(Error::Interpolation(InterpolationError::OutOfRange {
-            t,
-            t_start: start,
-            t_end: end,
-        }))
+        dense
+            .evaluate(t)
+            .ok_or(Error::Interpolation(InterpolationError::OutOfRange {
+                t,
+                t_start: start,
+                t_end: end,
+            }))
     }
 
     /// Evaluate the continuous solution at many time points.
@@ -50,7 +59,9 @@ impl Solution {
             .continuous_sol
             .as_ref()
             .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
-        let (start, end) = dense.t_span().ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
+        let (start, end) = dense
+            .t_span()
+            .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
         let (lo, hi) = (start.min(end), start.max(end));
         for &t in ts {
             if t < lo || t > hi {

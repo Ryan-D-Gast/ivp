@@ -64,12 +64,10 @@ pub fn lin_solve(a: &Matrix, b: &mut [Float], ip: &[usize]) {
     let nm1 = n - 1;
 
     // Forward elimination with partial pivoting
-    for k in 0..nm1 {
+    for (k, &m) in ip.iter().enumerate().take(nm1) {
         let kp1 = k + 1;
-        let m = ip[k]; // Pivot row index
 
         // Apply row permutation (swap b[m] and b[k])
-        let k = k;
         b.swap(m, k);
 
         // Forward substitution step: b[i] += L[i,k] * b[k]

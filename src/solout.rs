@@ -1,6 +1,6 @@
 //! User defined callback hook executed after each accepted step.
 
-use crate::{dense::StepInterpolant, Float};
+use crate::{Float, dense::StepInterpolant};
 
 /// Callback hook executed after each accepted step.
 ///
@@ -24,8 +24,8 @@ use crate::{dense::StepInterpolant, Float};
 /// Return value:
 /// - `ControlFlag::Continue` -> continue integration normally;
 /// - `ControlFlag::Interrupt` -> stop integration and return to caller;
-/// - `ControlFlag::ModifiedSolution` -> integrator will recompute f(x, y)
-///    after the callback (the integrator expects that you updated `y`.
+/// - `ControlFlag::ModifiedSolution` -> integrator will recompute `f(x, y)`
+///   after the callback, assuming that you updated `y`.
 ///
 /// # Example
 ///

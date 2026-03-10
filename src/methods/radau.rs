@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 //! RADAU — 3-stage, order-5 Radau IIA implicit Runge–Kutta solver.
 //!
 //! Solves stiff ODEs/DAEs `M·y' = f(t,y)` with adaptive step-size,
@@ -7,10 +9,10 @@
 use crate::{
     Float,
     dense::StepInterpolant,
-    error::{Error, ConfigError},
+    error::{ConfigError, Error},
+    ivp::FirstOrderSystem,
     matrix::{Matrix, MatrixStorage, lin_solve, lin_solve_complex, lu_decomp, lu_decomp_complex},
     methods::{Evals, IntegrationResult, Steps, Tolerance},
-    ivp::IVP,
     solout::{ControlFlag, SolOut},
     status::Status,
 };
@@ -99,7 +101,7 @@ impl RADAU {
     /// # Arguments
     ///
     /// ## Defining the Problem
-    /// - `f`: Right‑hand side implementing `IVP` (optionally providing `jac`, `mass`).
+    /// - `f`: Right‑hand side implementing [`FirstOrderSystem`] (optionally providing `jac`, `mass`).
     /// - `x0`: Initial abscissa; `xend`: final abscissa.
     /// - `y0`: Initial state.
     /// - `rtol`, `atol`: Relative/absolute tolerances (scalar or vector).
@@ -122,7 +124,7 @@ impl RADAU {
         mut solout: Option<&mut S>,
     ) -> Result<IntegrationResult, Error>
     where
-        F: IVP,
+        F: FirstOrderSystem,
         S: SolOut,
     {
         // Create mutable copies for the solver to mutate
@@ -164,7 +166,7 @@ impl RADAU {
         let scale_max = self.scale_max;
         let facl = 1.0 / scale_min;
         let facr = 1.0 / scale_max;
-        if scale_min <= 0.0 || !(scale_min < scale_max) {
+        if scale_min <= 0.0 || scale_min.partial_cmp(&scale_max) != Some(std::cmp::Ordering::Less) {
             return Err(Error::Config(ConfigError::InvalidScaleFactors {
                 min: scale_min,
                 max: scale_max,
@@ -326,7 +328,7 @@ impl RADAU {
         // --- Initializations ---
 
         let mut f0 = vec![0.0; n];
-        f.ode(x, &y, &mut f0);
+        f.derivative(x, &y, &mut f0);
         evals.ode += 1;
 
         // Optional output scheduling
@@ -346,7 +348,7 @@ impl RADAU {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.ode(x, &y, &mut f0);
+                    f.derivative(x, &y, &mut f0);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -433,13 +435,13 @@ impl RADAU {
 
             // Account for index-2 and index-3 algebraic variables
             if nind2 > 0 {
-                for i in nind1..(nind1 + nind2) {
-                    scal[i] /= hhfac;
+                for value in scal.iter_mut().skip(nind1).take(nind2) {
+                    *value /= hhfac;
                 }
             }
             if nind3 > 0 {
-                for i in (nind1 + nind2)..(nind1 + nind2 + nind3) {
-                    scal[i] /= hhfac.powi(2);
+                for value in scal.iter_mut().skip(nind1 + nind2).take(nind3) {
+                    *value /= hhfac.powi(2);
                 }
             }
             xph = x + h;
@@ -497,15 +499,15 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] = y[i] + z1[i];
                 }
-                f.ode(x + C1 * h, &cont[..n], &mut z1);
+                f.derivative(x + C1 * h, &cont[..n], &mut z1);
                 for i in 0..n {
                     cont[i] = y[i] + z2[i];
                 }
-                f.ode(x + C2 * h, &cont[..n], &mut z2);
+                f.derivative(x + C2 * h, &cont[..n], &mut z2);
                 for i in 0..n {
                     cont[i] = y[i] + z3[i];
                 }
-                f.ode(xph, &cont[..n], &mut z3);
+                f.derivative(xph, &cont[..n], &mut z3);
                 evals.ode += 3;
 
                 // --- Solve the linear systems ---
@@ -648,7 +650,7 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] += y[i];
                 }
-                f.ode(x, &cont[..n], &mut f1);
+                f.derivative(x, &cont[..n], &mut f1);
                 evals.ode += 1;
 
                 // contv = f1 + f2; solve again
@@ -679,7 +681,8 @@ impl RADAU {
                 // Predictive Gustafsson controller (use previous accepted step if available)
                 if predictive {
                     if steps.accepted > 1 {
-                        let mut facgus = (h_acc / h) * (err * err / err_acc).powf(0.25) / safety_factor;
+                        let mut facgus =
+                            (h_acc / h) * (err * err / err_acc).powf(0.25) / safety_factor;
                         facgus = facr.max(facl.min(facgus));
                         quot = quot.max(facgus);
                         hnew = h / quot;
@@ -698,14 +701,14 @@ impl RADAU {
                     y[i] += z3[i];
                     let ak = (z1[i] - z2[i]) / C1MC2;
                     let acont3 = (ak - (z1[i] / C1)) / C2;
-                    cont[0 * n + i] = y[i];
+                    cont[i] = y[i];
                     cont[n + i] = (z2[i] - z3[i]) / C2M1;
                     cont[2 * n + i] = (ak - cont[n + i]) / C1M1;
                     cont[3 * n + i] = cont[2 * n + i] - acont3;
                 }
 
                 // New derivative at x+h
-                f.ode(x, &y, &mut f0);
+                f.derivative(x, &y, &mut f0);
                 evals.ode += 1;
 
                 // Compute error scale
@@ -716,7 +719,7 @@ impl RADAU {
                 // Callback with optional dense interpolant
                 if let Some(sol) = solout.as_mut() {
                     // Build interpolant if requested or an event output is due
-                    let event = xout.map_or(false, |xo| xo <= x);
+                    let event = xout.is_some_and(|xo| xo <= x);
                     let interpolant = if self.dense_output || event {
                         Some(StepInterpolant::new(&cont, xold, h, Self::interpolate))
                     } else {
@@ -730,7 +733,7 @@ impl RADAU {
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.ode(x, &y, &mut f0);
+                            f.derivative(x, &y, &mut f0);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {
@@ -799,7 +802,7 @@ impl RADAU {
         let n = cont.len() / 4;
         // s = (xi - (xold + h)) / h
         let s = (xi - (xold + h)) / h;
-        let c0 = &cont[0 * n..n];
+        let c0 = &cont[..n];
         let c1 = &cont[n..2 * n];
         let c2 = &cont[2 * n..3 * n];
         let c3 = &cont[3 * n..4 * n];

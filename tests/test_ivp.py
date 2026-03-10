@@ -6,7 +6,7 @@ https://github.com/scipy/scipy/blob/v1.16.2/scipy/integrate/_ivp/tests/test_ivp.
 
 MODIFICATIONS FROM SCIPY:
 =========================
-1. LSODA solver not implemented - all LSODA tests removed
+1. LSODA coverage differs from SciPy and some LSODA-specific SciPy tests remain removed
 2. BDF Jacobian optimization: Implemented LU reuse strategy reducing njev from 479→9
    for Robertson problem (test_integration_stiff now asserts njev < 200)
 3. Dense output accuracy: BDF interpolation has lower accuracy than scipy/Radau
@@ -340,6 +340,31 @@ def test_integration_stiff(method, num_parallel_threads):
     # MODIFICATION: scipy expects njev < 200. Our BDF optimization achieves njev=9
     # for Robertson problem (98% reduction from unoptimized 479)
     assert res.njev < 200
+
+
+@pytest.mark.slow
+def test_integration_stiff_lsoda(num_parallel_threads):
+    rtol = 1e-6
+    atol = 1e-6
+    y0 = [1e4, 0, 0]
+    tspan = [0, 1e8]
+
+    def fun_robertson(t, state):
+        x, y, z = state
+        return [
+            -0.04 * x + 1e4 * y * z,
+            0.04 * x - 1e4 * y * z - 3e7 * y * y,
+            3e7 * y * y,
+        ]
+
+    res = solve_ivp(fun_robertson, tspan, y0, rtol=rtol,
+                    atol=atol, method='LSODA')
+
+    assert_(res.success)
+    assert_equal(res.status, 0)
+    assert_allclose(res.t[-1], tspan[-1], rtol=0, atol=1e-12)
+    assert_(res.nfev < 300000)
+    assert_(res.njev < 10000)
 
 
 def test_events(num_parallel_threads):
