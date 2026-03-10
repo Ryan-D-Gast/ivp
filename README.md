@@ -105,6 +105,10 @@ fn main() {
 }
 ```
 
+More complete examples:
+- Rust: [`docs/rust-examples.md`](./docs/rust-examples.md)
+- Python: [`docs/python-examples.md`](./docs/python-examples.md)
+
 ## Symplectic Usage
 
 For structured mechanics problems, use the dedicated second-order or Hamiltonian
@@ -135,21 +139,21 @@ fn main() {
 }
 ```
 
-Python can also route these methods through `solve_ivp`, but `fun` must expose
-structure, not just a generic first-order RHS:
+Python can also route these methods through `solve_ivp`. Second-order problems
+can use a plain acceleration callback, and Hamiltonian problems can use a
+callback pair:
 
 ```python
 import numpy as np
 from ivp import solve_ivp
 
-class HarmonicOscillator:
-    def acceleration(self, t, q):
-        return np.array([-q[0]])
+def acceleration(t, q):
+    return -np.asarray(q, dtype=float)
 
 sol = solve_ivp(
-    HarmonicOscillator(),
+    acceleration,
     (0.0, 20.0),
-    [1.0, 0.0],
+    [1.0, 0.0, -0.5, 0.0, 1.0, 0.25],  # [q..., v...]
     method="VelocityVerlet",
     step_size=0.05,
     dense_output=True,
@@ -157,5 +161,26 @@ sol = solve_ivp(
 
 print(sol.sol(0.5))
 ```
+
+```python
+def position_derivative(t, p):
+    return np.array([p[0]])
+
+def momentum_derivative(t, q):
+    return np.array([-q[0]])
+
+sol = solve_ivp(
+    (position_derivative, momentum_derivative),
+    (0.0, 20.0),
+    [1.0, 0.0],
+    method="Yoshida4",
+    step_size=0.05,
+)
+```
+
+On the Python side, invalid callback shapes now raise normal Python exceptions
+with explicit messages. For example, a symplectic callback returning the wrong
+number of values raises `ValueError`, and an incomplete Hamiltonian callback
+pair raises `TypeError`.
 
 Current limitation: event handling is not yet supported for symplectic methods.

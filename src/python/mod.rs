@@ -42,9 +42,12 @@ pub fn ivp(m: &Bound<'_, PyModule>) -> PyResult<()> {
          - Dense output (continuous solution)\n\
          - Event detection (terminal and direction)\n\
          - Vectorized evaluation (optional)\n\
-         - Structured symplectic integration through `solve_ivp` when `fun` exposes\n\
-           `acceleration(t, q)` or `position_derivative(t, p)`/`momentum_derivative(t, q)`\n\
-           (legacy `drift`/`kick` names are also accepted)\n\
+         - Structured symplectic integration through `solve_ivp` using either\n\
+           a callable `fun(t, q)` for second-order systems, a callback pair for\n\
+           Hamiltonian systems, or legacy object methods such as\n\
+           `acceleration(t, q)` and `position_derivative(t, p)`/`momentum_derivative(t, q)`\n\
+         - User callback validation with Python exceptions for bad shapes and\n\
+           invalid callback signatures instead of uncaught Rust panics\n\
          - Argument passing to ODE functions",
     )?;
 

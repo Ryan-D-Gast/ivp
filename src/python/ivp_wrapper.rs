@@ -6,6 +6,7 @@
 use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
+use std::panic::panic_any;
 
 use crate::ivp::{FirstOrderSystem, SecondOrderSystem, SeparableHamiltonianSystem};
 use crate::matrix::Matrix;
@@ -26,6 +27,26 @@ pub struct PythonIVP<'py> {
     args: Option<Bound<'py, PyTuple>>,
     event_configs: Vec<EventConfig>,
     py: Python<'py>,
+}
+
+#[derive(Debug)]
+pub enum PythonCallbackErrorKind {
+    Type,
+    Value,
+    Runtime,
+}
+
+#[derive(Debug)]
+pub struct PythonCallbackError {
+    pub kind: PythonCallbackErrorKind,
+    pub message: String,
+}
+
+fn raise_python_callback_error(kind: PythonCallbackErrorKind, message: impl Into<String>) -> ! {
+    panic_any(PythonCallbackError {
+        kind,
+        message: message.into(),
+    });
 }
 
 fn build_call_args<'py>(
@@ -53,10 +74,22 @@ fn build_call_args<'py>(
 
 fn parse_vector_result(result: &Bound<'_, PyAny>, out: &mut [Float]) {
     if let Ok(res_arr) = result.extract::<PyReadonlyArray1<Float>>() {
-        let res_slice = res_arr.as_slice().expect(
-            "Failed to obtain contiguous slice from numpy array returned by Python function",
-        );
-        debug_assert_eq!(res_slice.len(), out.len(), "Vector shape mismatch");
+        let res_slice = res_arr.as_slice().unwrap_or_else(|_| {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Type,
+                "Python callback must return a contiguous 1D NumPy array or other 1D array-like object",
+            )
+        });
+        if res_slice.len() != out.len() {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Value,
+                format!(
+                    "Python callback returned {} values, but {} were expected",
+                    res_slice.len(),
+                    out.len()
+                ),
+            );
+        }
         out.copy_from_slice(res_slice);
         return;
     }
@@ -75,13 +108,34 @@ fn parse_vector_result(result: &Bound<'_, PyAny>, out: &mut [Float]) {
             }
             return;
         }
+        raise_python_callback_error(
+            PythonCallbackErrorKind::Value,
+            format!(
+                "Python callback returned a 2D array with shape {:?}; expected ({}, 1) or (1, {})",
+                shape,
+                out.len(),
+                out.len()
+            ),
+        );
     }
 
     if let Ok(res_arr) = result.extract::<PyReadonlyArray1<i64>>() {
-        let res_slice = res_arr
-            .as_slice()
-            .expect("Failed to obtain contiguous slice from integer numpy array returned by Python function");
-        debug_assert_eq!(res_slice.len(), out.len(), "Vector shape mismatch");
+        let res_slice = res_arr.as_slice().unwrap_or_else(|_| {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Type,
+                "Python callback must return a contiguous 1D NumPy array or other 1D array-like object",
+            )
+        });
+        if res_slice.len() != out.len() {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Value,
+                format!(
+                    "Python callback returned {} values, but {} were expected",
+                    res_slice.len(),
+                    out.len()
+                ),
+            );
+        }
         for (i, &val) in res_slice.iter().enumerate() {
             out[i] = val as Float;
         }
@@ -102,13 +156,34 @@ fn parse_vector_result(result: &Bound<'_, PyAny>, out: &mut [Float]) {
             }
             return;
         }
+        raise_python_callback_error(
+            PythonCallbackErrorKind::Value,
+            format!(
+                "Python callback returned a 2D array with shape {:?}; expected ({}, 1) or (1, {})",
+                shape,
+                out.len(),
+                out.len()
+            ),
+        );
     }
 
     if let Ok(res_arr) = result.extract::<PyReadonlyArray1<i32>>() {
-        let res_slice = res_arr
-            .as_slice()
-            .expect("Failed to obtain contiguous slice from integer numpy array returned by Python function");
-        debug_assert_eq!(res_slice.len(), out.len(), "Vector shape mismatch");
+        let res_slice = res_arr.as_slice().unwrap_or_else(|_| {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Type,
+                "Python callback must return a contiguous 1D NumPy array or other 1D array-like object",
+            )
+        });
+        if res_slice.len() != out.len() {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Value,
+                format!(
+                    "Python callback returned {} values, but {} were expected",
+                    res_slice.len(),
+                    out.len()
+                ),
+            );
+        }
         for (i, &val) in res_slice.iter().enumerate() {
             out[i] = val as Float;
         }
@@ -129,25 +204,61 @@ fn parse_vector_result(result: &Bound<'_, PyAny>, out: &mut [Float]) {
             }
             return;
         }
+        raise_python_callback_error(
+            PythonCallbackErrorKind::Value,
+            format!(
+                "Python callback returned a 2D array with shape {:?}; expected ({}, 1) or (1, {})",
+                shape,
+                out.len(),
+                out.len()
+            ),
+        );
     }
 
     if let Ok(res_list) = result.cast::<PyList>() {
-        debug_assert_eq!(res_list.len(), out.len(), "Vector shape mismatch");
+        if res_list.len() != out.len() {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Value,
+                format!(
+                    "Python callback returned {} values, but {} were expected",
+                    res_list.len(),
+                    out.len()
+                ),
+            );
+        }
         for (i, item) in res_list.iter().enumerate() {
             out[i] = item.extract::<Float>().unwrap_or_else(|_| {
-                panic!("Failed to extract float from result list at index {}", i)
+                raise_python_callback_error(
+                    PythonCallbackErrorKind::Type,
+                    format!(
+                        "Python callback returned a non-numeric value at index {}",
+                        i
+                    ),
+                )
             });
         }
         return;
     }
 
     if let Ok(res_tuple) = result.extract::<Vec<Float>>() {
-        debug_assert_eq!(res_tuple.len(), out.len(), "Vector shape mismatch");
+        if res_tuple.len() != out.len() {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Value,
+                format!(
+                    "Python callback returned {} values, but {} were expected",
+                    res_tuple.len(),
+                    out.len()
+                ),
+            );
+        }
         out.copy_from_slice(&res_tuple);
         return;
     }
 
-    panic!("Python function must return a 1D array-like object");
+    raise_python_callback_error(
+        PythonCallbackErrorKind::Type,
+        "Python callback must return a 1D array-like object",
+    );
 }
 
 /// Python wrapper for second-order symplectic problems.
@@ -175,32 +286,34 @@ impl SecondOrderSystem for PythonSecondOrderIVP<'_> {
     fn acceleration(&self, t: Float, q: &[Float], a: &mut [Float]) {
         let q_arr = PyArray1::from_slice(self.py, q);
         let args = build_call_args(self.py, self.args.as_ref(), t, q_arr);
-        let result = self
-            .acceleration
-            .call1(args)
-            .expect("Acceleration function raised an exception");
+        let result = self.acceleration.call1(args).unwrap_or_else(|e| {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Runtime,
+                format!("acceleration callback raised an exception: {}", e),
+            )
+        });
         parse_vector_result(&result, a);
     }
 }
 
 /// Python wrapper for separable Hamiltonian symplectic problems.
 pub struct PythonHamiltonianIVP<'py> {
-    drift: Bound<'py, PyAny>,
-    kick: Bound<'py, PyAny>,
+    position_derivative: Bound<'py, PyAny>,
+    momentum_derivative: Bound<'py, PyAny>,
     args: Option<Bound<'py, PyTuple>>,
     py: Python<'py>,
 }
 
 impl<'py> PythonHamiltonianIVP<'py> {
     pub fn new(
-        drift: Bound<'py, PyAny>,
-        kick: Bound<'py, PyAny>,
+        position_derivative: Bound<'py, PyAny>,
+        momentum_derivative: Bound<'py, PyAny>,
         args: Option<Bound<'py, PyTuple>>,
         py: Python<'py>,
     ) -> Self {
         Self {
-            drift,
-            kick,
+            position_derivative,
+            momentum_derivative,
             args,
             py,
         }
@@ -211,20 +324,24 @@ impl SeparableHamiltonianSystem for PythonHamiltonianIVP<'_> {
     fn position_derivative(&self, t: Float, p: &[Float], dqdt: &mut [Float]) {
         let p_arr = PyArray1::from_slice(self.py, p);
         let args = build_call_args(self.py, self.args.as_ref(), t, p_arr);
-        let result = self
-            .drift
-            .call1(args)
-            .expect("Drift function raised an exception");
+        let result = self.position_derivative.call1(args).unwrap_or_else(|e| {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Runtime,
+                format!("position_derivative callback raised an exception: {}", e),
+            )
+        });
         parse_vector_result(&result, dqdt);
     }
 
     fn momentum_derivative(&self, t: Float, q: &[Float], dpdt: &mut [Float]) {
         let q_arr = PyArray1::from_slice(self.py, q);
         let args = build_call_args(self.py, self.args.as_ref(), t, q_arr);
-        let result = self
-            .kick
-            .call1(args)
-            .expect("Kick function raised an exception");
+        let result = self.momentum_derivative.call1(args).unwrap_or_else(|e| {
+            raise_python_callback_error(
+                PythonCallbackErrorKind::Runtime,
+                format!("momentum_derivative callback raised an exception: {}", e),
+            )
+        });
         parse_vector_result(&result, dpdt);
     }
 }
@@ -294,8 +411,15 @@ impl<'py> PythonIVP<'py> {
         // Try float64 numpy 2D array (most common)
         if let Ok(res_arr) = result.extract::<PyReadonlyArray2<Float>>() {
             let shape = res_arr.shape();
-            debug_assert_eq!(shape[0], dim, "Jacobian row dimension mismatch");
-            debug_assert_eq!(shape[1], dim, "Jacobian column dimension mismatch");
+            if shape[0] != dim || shape[1] != dim {
+                raise_python_callback_error(
+                    PythonCallbackErrorKind::Value,
+                    format!(
+                        "Jacobian must have shape ({0}, {0}), got ({1}, {2})",
+                        dim, shape[0], shape[1]
+                    ),
+                );
+            }
 
             // Copy values row by row
             for row in 0..dim {
@@ -309,8 +433,15 @@ impl<'py> PythonIVP<'py> {
         // Try int64 numpy 2D array
         if let Ok(res_arr) = result.extract::<PyReadonlyArray2<i64>>() {
             let shape = res_arr.shape();
-            debug_assert_eq!(shape[0], dim, "Jacobian row dimension mismatch");
-            debug_assert_eq!(shape[1], dim, "Jacobian column dimension mismatch");
+            if shape[0] != dim || shape[1] != dim {
+                raise_python_callback_error(
+                    PythonCallbackErrorKind::Value,
+                    format!(
+                        "Jacobian must have shape ({0}, {0}), got ({1}, {2})",
+                        dim, shape[0], shape[1]
+                    ),
+                );
+            }
 
             for row in 0..dim {
                 for col in 0..dim {
@@ -323,8 +454,15 @@ impl<'py> PythonIVP<'py> {
         // Try int32 numpy 2D array
         if let Ok(res_arr) = result.extract::<PyReadonlyArray2<i32>>() {
             let shape = res_arr.shape();
-            debug_assert_eq!(shape[0], dim, "Jacobian row dimension mismatch");
-            debug_assert_eq!(shape[1], dim, "Jacobian column dimension mismatch");
+            if shape[0] != dim || shape[1] != dim {
+                raise_python_callback_error(
+                    PythonCallbackErrorKind::Value,
+                    format!(
+                        "Jacobian must have shape ({0}, {0}), got ({1}, {2})",
+                        dim, shape[0], shape[1]
+                    ),
+                );
+            }
 
             for row in 0..dim {
                 for col in 0..dim {
@@ -343,7 +481,10 @@ impl<'py> PythonIVP<'py> {
             }
         }
 
-        panic!("Jacobian must be a 2D array or sparse matrix (e.g. numpy array or scipy sparse matrix)");
+        raise_python_callback_error(
+            PythonCallbackErrorKind::Type,
+            "Jacobian must be a 2D array or sparse matrix (for example, a NumPy array or SciPy sparse matrix)",
+        );
     }
 
     /// Finite difference Jacobian approximation (default fallback).
@@ -392,7 +533,10 @@ impl<'py> FirstOrderSystem for PythonIVP<'py> {
 
         let result = match self.fun.call1(args) {
             Ok(r) => r,
-            Err(e) => panic!("ODE function raised an exception: {}", e),
+            Err(e) => raise_python_callback_error(
+                PythonCallbackErrorKind::Runtime,
+                format!("ODE function raised an exception: {}", e),
+            ),
         };
 
         self.parse_result(&result, dydx);
@@ -408,7 +552,10 @@ impl<'py> FirstOrderSystem for PythonIVP<'py> {
 
                 let result = match jac_fn.call1(args) {
                     Ok(r) => r,
-                    Err(e) => panic!("Jacobian function raised an exception: {}", e),
+                    Err(e) => raise_python_callback_error(
+                        PythonCallbackErrorKind::Runtime,
+                        format!("Jacobian function raised an exception: {}", e),
+                    ),
                 };
 
                 self.parse_matrix(&result, j);
@@ -429,14 +576,19 @@ impl<'py> FirstOrderSystem for PythonIVP<'py> {
         for (i, event_fun) in self.events.iter().enumerate() {
             let args = self.build_call_args(x, y_arr.clone());
 
-            let result = event_fun
-                .call1(args)
-                .expect(&format!("Failed to call event function at index {}", i));
+            let result = event_fun.call1(args).unwrap_or_else(|e| {
+                raise_python_callback_error(
+                    PythonCallbackErrorKind::Runtime,
+                    format!("event function at index {} raised an exception: {}", i, e),
+                )
+            });
 
-            out[i] = result.extract::<Float>().expect(&format!(
-                "Event function at index {} must return a float",
-                i
-            ));
+            out[i] = result.extract::<Float>().unwrap_or_else(|_| {
+                raise_python_callback_error(
+                    PythonCallbackErrorKind::Type,
+                    format!("event function at index {} must return a float", i),
+                )
+            });
         }
     }
 
