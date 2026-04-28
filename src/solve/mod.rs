@@ -8,6 +8,8 @@ mod options;
 mod solout;
 pub mod solution;
 mod symplectic;
+pub mod sensitivity;
+pub mod adjoint;
 
 // Required exports for the public solve APIs.
 pub use builder::{FirstOrderIvp, HamiltonianIvp, Ivp, SecondOrderIvp};

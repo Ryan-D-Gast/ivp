@@ -3,7 +3,7 @@
 //! Wraps Python ODE functions and event functions so they can be used with
 //! the Rust solver infrastructure.
 
-use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 use std::panic::panic_any;
@@ -23,6 +23,7 @@ pub struct PythonIVP<'py> {
     fun: Bound<'py, PyAny>,
     events: Vec<Bound<'py, PyAny>>,
     jac: Option<Bound<'py, PyAny>>,
+    quad: Option<Bound<'py, PyAny>>,
     jac_sparsity: Option<SparsityStructure>,
     args: Option<Bound<'py, PyTuple>>,
     event_configs: Vec<EventConfig>,
@@ -54,21 +55,30 @@ fn build_call_args<'py>(
     args: Option<&Bound<'py, PyTuple>>,
     x: Float,
     y_arr: Bound<'py, PyArray1<Float>>,
+    p_arr: Bound<'py, PyArray1<Float>>,
 ) -> Bound<'py, PyTuple> {
-    if let Some(extra_args) = args {
-        let mut call_args = Vec::with_capacity(2 + extra_args.len());
+    let p_len = p_arr.readonly().len();
+    if p_len > 0 {
+        let mut call_args = Vec::with_capacity(3 + args.map_or(0, |a| a.len()));
         call_args.push(x.into_pyobject(py).unwrap().into_any());
         call_args.push(y_arr.into_any());
-        for arg in extra_args.iter() {
-            call_args.push(arg);
+        call_args.push(p_arr.into_any());
+        if let Some(extra_args) = args {
+            for arg in extra_args.iter() {
+                call_args.push(arg);
+            }
         }
         PyTuple::new(py, call_args).unwrap()
     } else {
-        PyTuple::new(
-            py,
-            &[x.into_pyobject(py).unwrap().into_any(), y_arr.into_any()],
-        )
-        .unwrap()
+        let mut call_args = Vec::with_capacity(2 + args.map_or(0, |a| a.len()));
+        call_args.push(x.into_pyobject(py).unwrap().into_any());
+        call_args.push(y_arr.into_any());
+        if let Some(extra_args) = args {
+            for arg in extra_args.iter() {
+                call_args.push(arg);
+            }
+        }
+        PyTuple::new(py, call_args).unwrap()
     }
 }
 
@@ -283,9 +293,10 @@ impl<'py> PythonSecondOrderIVP<'py> {
 }
 
 impl SecondOrderSystem for PythonSecondOrderIVP<'_> {
-    fn acceleration(&self, t: Float, q: &[Float], a: &mut [Float]) {
+    fn acceleration(&self, t: Float, q: &[Float], p: &[Float], a: &mut [Float]) {
         let q_arr = PyArray1::from_slice(self.py, q);
-        let args = build_call_args(self.py, self.args.as_ref(), t, q_arr);
+        let p_arr = PyArray1::from_slice(self.py, p);
+        let args = build_call_args(self.py, self.args.as_ref(), t, q_arr, p_arr);
         let result = self.acceleration.call1(args).unwrap_or_else(|e| {
             raise_python_callback_error(
                 PythonCallbackErrorKind::Runtime,
@@ -321,9 +332,10 @@ impl<'py> PythonHamiltonianIVP<'py> {
 }
 
 impl SeparableHamiltonianSystem for PythonHamiltonianIVP<'_> {
-    fn position_derivative(&self, t: Float, p: &[Float], dqdt: &mut [Float]) {
+    fn position_derivative(&self, t: Float, p_state: &[Float], p: &[Float], dqdt: &mut [Float]) {
+        let p_state_arr = PyArray1::from_slice(self.py, p_state);
         let p_arr = PyArray1::from_slice(self.py, p);
-        let args = build_call_args(self.py, self.args.as_ref(), t, p_arr);
+        let args = build_call_args(self.py, self.args.as_ref(), t, p_state_arr, p_arr);
         let result = self.position_derivative.call1(args).unwrap_or_else(|e| {
             raise_python_callback_error(
                 PythonCallbackErrorKind::Runtime,
@@ -333,9 +345,10 @@ impl SeparableHamiltonianSystem for PythonHamiltonianIVP<'_> {
         parse_vector_result(&result, dqdt);
     }
 
-    fn momentum_derivative(&self, t: Float, q: &[Float], dpdt: &mut [Float]) {
+    fn momentum_derivative(&self, t: Float, q: &[Float], p: &[Float], dpdt: &mut [Float]) {
         let q_arr = PyArray1::from_slice(self.py, q);
-        let args = build_call_args(self.py, self.args.as_ref(), t, q_arr);
+        let p_arr = PyArray1::from_slice(self.py, p);
+        let args = build_call_args(self.py, self.args.as_ref(), t, q_arr, p_arr);
         let result = self.momentum_derivative.call1(args).unwrap_or_else(|e| {
             raise_python_callback_error(
                 PythonCallbackErrorKind::Runtime,
@@ -350,17 +363,20 @@ impl<'py> PythonIVP<'py> {
     /// Create a new PythonIVP wrapper.
     ///
     /// # Arguments
-    /// * `fun` - The ODE function `f(t, y, *args)`
+    /// * `fun` - The ODE function `f(t, y, p, *args)`
     /// * `events` - List of event functions
     /// * `jac` - Optional Jacobian function or constant matrix
+    /// * `quad` - Optional quadrature function
     /// * `jac_sparsity` - Optional Jacobian sparsity structure
     /// * `args` - Additional arguments to pass to `fun` and events
     /// * `event_configs` - Configuration for each event (terminal, direction)
     /// * `py` - Python interpreter handle
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         fun: Bound<'py, PyAny>,
         events: Vec<Bound<'py, PyAny>>,
         jac: Option<Bound<'py, PyAny>>,
+        quad: Option<Bound<'py, PyAny>>,
         jac_sparsity: Option<SparsityStructure>,
         args: Option<Bound<'py, PyTuple>>,
         event_configs: Vec<EventConfig>,
@@ -370,6 +386,7 @@ impl<'py> PythonIVP<'py> {
             fun,
             events,
             jac,
+            quad,
             jac_sparsity,
             args,
             event_configs,
@@ -377,26 +394,9 @@ impl<'py> PythonIVP<'py> {
         }
     }
 
-    /// Build call arguments tuple: (t, y, *args)
-    fn build_call_args(&self, x: Float, y_arr: Bound<'py, PyArray1<Float>>) -> Bound<'py, PyTuple> {
-        if let Some(extra_args) = &self.args {
-            let mut call_args = Vec::with_capacity(2 + extra_args.len());
-            call_args.push(x.into_pyobject(self.py).unwrap().into_any());
-            call_args.push(y_arr.into_any());
-            for arg in extra_args.iter() {
-                call_args.push(arg);
-            }
-            PyTuple::new(self.py, call_args).unwrap()
-        } else {
-            PyTuple::new(
-                self.py,
-                &[
-                    x.into_pyobject(self.py).unwrap().into_any(),
-                    y_arr.into_any(),
-                ],
-            )
-            .unwrap()
-        }
+    /// Build call arguments tuple: (t, y, p, *args)
+    fn build_call_args(&self, x: Float, y_arr: Bound<'py, PyArray1<Float>>, p_arr: Bound<'py, PyArray1<Float>>) -> Bound<'py, PyTuple> {
+        build_call_args(self.py, self.args.as_ref(), x, y_arr, p_arr)
     }
 
     /// Parse ODE function result into the derivative array.
@@ -406,67 +406,26 @@ impl<'py> PythonIVP<'py> {
 
     /// Parse a 2D matrix result from Python into our Matrix type.
     fn parse_matrix_result(result: &Bound<'py, PyAny>, j: &mut Matrix) {
-        let dim = j.nrows();
+        let dim_rows = j.nrows();
+        let dim_cols = j.ncols();
 
         // Try float64 numpy 2D array (most common)
         if let Ok(res_arr) = result.extract::<PyReadonlyArray2<Float>>() {
             let shape = res_arr.shape();
-            if shape[0] != dim || shape[1] != dim {
+            if shape[0] != dim_rows || shape[1] != dim_cols {
                 raise_python_callback_error(
                     PythonCallbackErrorKind::Value,
                     format!(
-                        "Jacobian must have shape ({0}, {0}), got ({1}, {2})",
-                        dim, shape[0], shape[1]
+                        "Matrix must have shape ({0}, {1}), got ({2}, {3})",
+                        dim_rows, dim_cols, shape[0], shape[1]
                     ),
                 );
             }
 
             // Copy values row by row
-            for row in 0..dim {
-                for col in 0..dim {
+            for row in 0..dim_rows {
+                for col in 0..dim_cols {
                     j[(row, col)] = res_arr.get([row, col]).copied().unwrap_or(0.0);
-                }
-            }
-            return;
-        }
-
-        // Try int64 numpy 2D array
-        if let Ok(res_arr) = result.extract::<PyReadonlyArray2<i64>>() {
-            let shape = res_arr.shape();
-            if shape[0] != dim || shape[1] != dim {
-                raise_python_callback_error(
-                    PythonCallbackErrorKind::Value,
-                    format!(
-                        "Jacobian must have shape ({0}, {0}), got ({1}, {2})",
-                        dim, shape[0], shape[1]
-                    ),
-                );
-            }
-
-            for row in 0..dim {
-                for col in 0..dim {
-                    j[(row, col)] = res_arr.get([row, col]).copied().unwrap_or(0) as Float;
-                }
-            }
-            return;
-        }
-
-        // Try int32 numpy 2D array
-        if let Ok(res_arr) = result.extract::<PyReadonlyArray2<i32>>() {
-            let shape = res_arr.shape();
-            if shape[0] != dim || shape[1] != dim {
-                raise_python_callback_error(
-                    PythonCallbackErrorKind::Value,
-                    format!(
-                        "Jacobian must have shape ({0}, {0}), got ({1}, {2})",
-                        dim, shape[0], shape[1]
-                    ),
-                );
-            }
-
-            for row in 0..dim {
-                for col in 0..dim {
-                    j[(row, col)] = res_arr.get([row, col]).copied().unwrap_or(0) as Float;
                 }
             }
             return;
@@ -483,25 +442,25 @@ impl<'py> PythonIVP<'py> {
 
         raise_python_callback_error(
             PythonCallbackErrorKind::Type,
-            "Jacobian must be a 2D array or sparse matrix (for example, a NumPy array or SciPy sparse matrix)",
+            "Matrix must be a 2D array or sparse matrix",
         );
     }
 
     /// Finite difference Jacobian approximation (default fallback).
-    fn jac_fd(&self, x: Float, y: &[Float], j: &mut Matrix) {
+    fn jac_fd(&self, x: Float, y: &[Float], p: &[Float], j: &mut Matrix) {
         let dim = y.len();
         let mut f_origin = vec![0.0; dim];
 
         // Compute the unperturbed derivative
-        self.derivative(x, y, &mut f_origin);
+        self.derivative(x, y, p, &mut f_origin);
 
         // Use sparse FD if sparsity structure is known
         if let Some(sparsity) = &self.jac_sparsity {
             // Create a closure that captures self for the ODE call
-            let ode_fn = |t: Float, y: &[Float], dydx: &mut [Float]| {
-                self.derivative(t, y, dydx);
+            let ode_fn = |t: Float, y: &[Float], p_params: &[Float], dydx: &mut [Float]| {
+                self.derivative(t, y, p_params, dydx);
             };
-            sparse_jacobian_fd(ode_fn, x, y, &f_origin, sparsity, j);
+            sparse_jacobian_fd(ode_fn, x, y, p, &f_origin, sparsity, j);
             return;
         }
 
@@ -515,7 +474,7 @@ impl<'py> PythonIVP<'py> {
             let y_original_j = y[col];
             let perturbation = eps * y_original_j.abs().max(1.0);
             y_perturbed[col] = y_original_j + perturbation;
-            self.derivative(x, &y_perturbed, &mut f_perturbed);
+            self.derivative(x, &y_perturbed, p, &mut f_perturbed);
             y_perturbed[col] = y_original_j;
 
             for row in 0..dim {
@@ -527,9 +486,10 @@ impl<'py> PythonIVP<'py> {
 
 impl<'py> FirstOrderSystem for PythonIVP<'py> {
     #[inline]
-    fn derivative(&self, x: Float, y: &[Float], dydx: &mut [Float]) {
+    fn derivative(&self, x: Float, y: &[Float], p: &[Float], dydx: &mut [Float]) {
         let y_arr = PyArray1::from_slice(self.py, y);
-        let args = self.build_call_args(x, y_arr);
+        let p_arr = PyArray1::from_slice(self.py, p);
+        let args = self.build_call_args(x, y_arr, p_arr);
 
         let result = match self.fun.call1(args) {
             Ok(r) => r,
@@ -542,13 +502,14 @@ impl<'py> FirstOrderSystem for PythonIVP<'py> {
         self.parse_result(&result, dydx);
     }
 
-    fn jac(&self, x: Float, y: &[Float], j: &mut Matrix) {
+    fn jac(&self, x: Float, y: &[Float], p: &[Float], j: &mut Matrix) {
         if let Some(jac_fn) = &self.jac {
             // Check if jac is callable or a constant matrix
             if jac_fn.is_callable() {
                 // Call the Jacobian function
                 let y_arr = PyArray1::from_slice(self.py, y);
-                let args = self.build_call_args(x, y_arr);
+                let p_arr = PyArray1::from_slice(self.py, p);
+                let args = self.build_call_args(x, y_arr, p_arr);
 
                 let result = match jac_fn.call1(args) {
                     Ok(r) => r,
@@ -565,16 +526,47 @@ impl<'py> FirstOrderSystem for PythonIVP<'py> {
             }
         } else {
             // No Jacobian provided - use finite differences (default implementation)
-            // Call the default implementation from FirstOrderSystem trait
-            self.jac_fd(x, y, j);
+            self.jac_fd(x, y, p, j);
         }
     }
 
-    fn events(&self, x: Float, y: &[Float], out: &mut [Float]) {
+    fn quadrature(&self, x: Float, y: &[Float], p: &[Float], out: &mut [Float]) {
+        if let Some(quad_fn) = &self.quad {
+            let y_arr = PyArray1::from_slice(self.py, y);
+            let p_arr = PyArray1::from_slice(self.py, p);
+            let args = self.build_call_args(x, y_arr, p_arr);
+
+            let result = quad_fn.call1(args).unwrap_or_else(|e| {
+                raise_python_callback_error(
+                    PythonCallbackErrorKind::Runtime,
+                    format!("quadrature function raised an exception: {}", e),
+                )
+            });
+
+            parse_vector_result(&result, out);
+        }
+    }
+
+    fn n_quadrature(&self) -> usize {
+        if let Some(q) = &self.quad {
+            // This is a bit tricky: we don't know the size until we call it.
+            if let Ok(size) = q.getattr("size") {
+                size.extract::<usize>().unwrap_or(1)
+            } else {
+                // Assume 1 if not specified
+                1
+            }
+        } else {
+            0
+        }
+    }
+
+    fn events(&self, x: Float, y: &[Float], p: &[Float], out: &mut [Float]) {
         let y_arr = PyArray1::from_slice(self.py, y);
+        let p_arr = PyArray1::from_slice(self.py, p);
 
         for (i, event_fun) in self.events.iter().enumerate() {
-            let args = self.build_call_args(x, y_arr.clone());
+            let args = self.build_call_args(x, y_arr.clone(), p_arr.clone());
 
             let result = event_fun.call1(args).unwrap_or_else(|e| {
                 raise_python_callback_error(

@@ -167,11 +167,12 @@ pub fn sparse_jacobian_fd<F>(
     derivative: F,
     x: Float,
     y: &[Float],
+    p: &[Float],
     f0: &[Float],
     sparsity: &SparsityStructure,
     j: &mut crate::matrix::Matrix,
 ) where
-    F: Fn(Float, &[Float], &mut [Float]),
+    F: Fn(Float, &[Float], &[Float], &mut [Float]),
 {
     let n = sparsity.n;
     let eps = Float::EPSILON.sqrt();
@@ -194,7 +195,7 @@ pub fn sparse_jacobian_fd<F>(
 
         // Evaluate the derivative with all perturbations
         let mut f_perturbed = vec![0.0; n];
-        derivative(x, &y_perturbed, &mut f_perturbed);
+        derivative(x, &y_perturbed, p, &mut f_perturbed);
 
         // Extract Jacobian columns from the difference
         for &col in &cols {

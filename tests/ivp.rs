@@ -17,7 +17,7 @@ fn all_methods() -> Vec<Method> {
 #[derive(Clone, Copy)]
 struct ZeroRhs;
 impl FirstOrderSystem for ZeroRhs {
-    fn derivative(&self, _t: f64, _y: &[f64], dydx: &mut [f64]) {
+    fn derivative(&self, _t: f64, _y: &[f64], _p: &[f64], dydx: &mut [f64]) {
         for v in dydx.iter_mut() {
             *v = 0.0;
         }
@@ -173,11 +173,11 @@ fn dense_output_out_of_range_errors() {
 
 struct ShoZeroEventAll;
 impl FirstOrderSystem for ShoZeroEventAll {
-    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+    fn derivative(&self, _t: f64, y: &[f64], _p: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
-    fn events(&self, _t: f64, y: &[f64], out: &mut [f64]) {
+    fn events(&self, _t: f64, y: &[f64], _p: &[f64], out: &mut [f64]) {
         out[0] = y[0];
     }
     fn n_events(&self) -> usize {
@@ -194,11 +194,11 @@ impl FirstOrderSystem for ShoZeroEventAll {
 
 struct ShoZeroEventPositive;
 impl FirstOrderSystem for ShoZeroEventPositive {
-    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+    fn derivative(&self, _t: f64, y: &[f64], _p: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
-    fn events(&self, _t: f64, y: &[f64], out: &mut [f64]) {
+    fn events(&self, _t: f64, y: &[f64], _p: &[f64], out: &mut [f64]) {
         out[0] = y[0];
     }
     fn n_events(&self) -> usize {
@@ -214,11 +214,11 @@ impl FirstOrderSystem for ShoZeroEventPositive {
 
 struct ShoZeroEventNegative;
 impl FirstOrderSystem for ShoZeroEventNegative {
-    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+    fn derivative(&self, _t: f64, y: &[f64], _p: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[1];
         dydx[1] = -y[0];
     }
-    fn events(&self, _t: f64, y: &[f64], out: &mut [f64]) {
+    fn events(&self, _t: f64, y: &[f64], _p: &[f64], out: &mut [f64]) {
         out[0] = y[0];
     }
     fn n_events(&self) -> usize {
@@ -319,7 +319,7 @@ fn zero_interval_returns_initial_state() {
 
 struct Exp2;
 impl FirstOrderSystem for Exp2 {
-    fn derivative(&self, _t: f64, y: &[f64], dydx: &mut [f64]) {
+    fn derivative(&self, _t: f64, y: &[f64], _p: &[f64], dydx: &mut [f64]) {
         dydx[0] = y[0];
         dydx[1] = y[1];
     }

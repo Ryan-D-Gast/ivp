@@ -14,6 +14,7 @@ pub struct Solution {
     pub y: Vec<Vec<Float>>,
     pub t_events: Vec<Vec<Float>>,
     pub y_events: Vec<Vec<Vec<Float>>>,
+    pub quad: Vec<Float>,
     pub nfev: usize,
     pub njev: usize,
     pub nlu: usize,
@@ -35,7 +36,7 @@ impl Solution {
         let (start, end) = dense
             .t_span()
             .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
-        let (lo, hi) = (start.min(end), start.max(end));
+        let (lo, hi) = if start < end { (start, end) } else { (end, start) };
         if t < lo || t > hi {
             return Err(Error::Interpolation(InterpolationError::OutOfRange {
                 t,
@@ -62,7 +63,7 @@ impl Solution {
         let (start, end) = dense
             .t_span()
             .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
-        let (lo, hi) = (start.min(end), start.max(end));
+        let (lo, hi) = if start < end { (start, end) } else { (end, start) };
         for &t in ts {
             if t < lo || t > hi {
                 return Err(Error::Interpolation(InterpolationError::OutOfRange {
@@ -73,7 +74,7 @@ impl Solution {
             }
         }
         let results = dense.evaluate_many(ts);
-        Ok(results.into_iter().map(|opt| opt.unwrap()).collect())
+        Ok(results.into_iter().map(|opt: Option<Vec<Float>>| opt.unwrap()).collect())
     }
 
     /// Return the time span covered by the dense output if available.

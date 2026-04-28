@@ -27,204 +27,43 @@ use super::sparsity::SparsityStructure;
 /// This function numerically integrates a system of ordinary differential
 /// equations given an initial value::
 ///
-///     dy / dt = f(t, y)
+///     dy / dt = f(t, y, p)
 ///     y(t0) = y0
-///
-/// Here t is a 1-D independent variable (time), y(t) is an N-D vector-valued
-/// function (state), and an N-D vector-valued function f(t, y) determines the
-/// differential equations.
 ///
 /// Parameters
 /// ----------
-/// fun : callable, tuple of callables, or object
-///     For standard first-order methods, ``fun`` is the right-hand side
-///     ``fun(t, y)`` and must return an array-like object with the same shape
-///     as ``y``.
-///
-///     For symplectic second-order methods, ``fun`` may be the acceleration
-///     callback ``fun(t, q)`` unless ``acceleration=...`` is provided
-///     explicitly.
-///
-///     For symplectic Hamiltonian methods, ``fun`` may be a two-tuple
-///     ``(position_derivative, momentum_derivative)`` unless the equivalent
-///     keyword callbacks are provided explicitly.
-///
-///     Legacy objects exposing methods such as ``acceleration(...)``,
-///     ``position_derivative(...)``/``momentum_derivative(...)``, or
-///     ``drift(...)``/``kick(...)`` are also accepted.
+/// fun : callable
+///     The right-hand side function `f(t, y, p, *args)`.
 /// t_span : 2-member sequence
-///     Interval of integration (t0, tf). The solver starts with t=t0 and
-///     integrates until it reaches t=tf. Both t0 and tf must be floats.
+///     Interval of integration (t0, tf).
 /// y0 : array_like, shape (n,)
 ///     Initial state.
 /// method : str, optional
-///     Integration method to use:
-///
-///     * 'RK45' or 'DOPRI5' (default): Explicit Runge-Kutta method of order 5(4).
-///       The error is controlled assuming accuracy of the fourth-order method,
-///       but steps are taken using the fifth-order accurate formula.
-///     * 'RK23': Explicit Runge-Kutta method of order 3(2).
-///     * 'DOP853': Explicit Runge-Kutta method of order 8.
-///     * 'Radau': Implicit Runge-Kutta method of the Radau IIA family of order 5.
-///       Suitable for stiff problems.
-///     * 'BDF': Implicit multi-step variable-order (1 to 5) method based on a
-///       backward differentiation formula. Suitable for stiff problems.
-///     * 'LSODA': Automatic Adams/BDF switching multistep solver for problems
-///       that may change stiffness.
-///     * 'RK4': Classic explicit Runge-Kutta method of order 4 with fixed step size.
-///     * 'SymplecticEulerKickDrift', 'SymplecticEulerDriftKick', 'VelocityVerlet',
-///       'Ruth3', 'Yoshida4': Fixed-step symplectic methods. For second-order
-///       systems, ``fun`` may be a plain callable ``fun(t, q)`` returning the
-///       acceleration. For separable Hamiltonian systems, pass either
-///       ``fun=(position_derivative, momentum_derivative)`` or provide
-///       ``position_derivative=...`` and ``momentum_derivative=...`` as keyword
-///       arguments. Legacy object methods ``acceleration(...)``,
-///       ``position_derivative(...)``/``momentum_derivative(...)``, and
-///       ``drift(...)``/``kick(...)`` are still accepted. In Python, ``y0`` is
-///       still the flattened state ``[q..., v...]`` or ``[q..., p...]``.
-///
+///     Integration method to use.
 /// t_eval : array_like or None, optional
-///     Times at which to store the computed solution, must be sorted and lie
-///     within t_span. If None (default), use points selected by the solver.
+///     Times at which to store the computed solution.
 /// dense_output : bool, optional
-///     Whether to compute a continuous solution. Default is False.
+///     Whether to compute a continuous solution.
 /// events : callable, or list of callables, optional
-///     Events to track. Each event function has the signature ``event(t, y)``
-///     and returns a float. A zero crossing of this function is detected.
-///     Event functions can have the following attributes:
-///
-///     * terminal: bool, whether to terminate integration when this event occurs.
-///     * direction: float, direction of a zero crossing. +1 for increasing,
-///       -1 for decreasing, 0 for both directions.
-///
-/// vectorized : bool, optional
-///     This argument is provided for scipy compatibility and is currently ignored.
+///     Events to track.
 /// args : tuple, optional
-///     Additional arguments to pass to the user-defined functions (fun, events, jac).
+///     Additional arguments to pass to the user-defined functions.
 /// jac : array_like, callable or None, optional
-///     Jacobian matrix of the right-hand side with respect to y, required for
-///     stiff solvers (Radau, BDF). The Jacobian matrix has shape (n, n) and
-///     element (i, j) is ``d f_i / d y_j``.
-///     If callable, the signature is ``jac(t, y)``.
-///     If array_like, the Jacobian is assumed to be constant.
-///     When using ``method='LSODA'``, providing ``jac`` switches LSODA to its
-///     explicit user-Jacobian path; otherwise LSODA uses its internal dense
-///     finite-difference Jacobian logic.
-/// jac_sparsity : array_like, sparse matrix, or None, optional
-///     Defines the sparsity structure of the Jacobian matrix for BDF method.
+///     Jacobian matrix of the right-hand side.
+/// p : array_like, optional
+///     Parameters passed to the system functions.
+/// quadrature : callable, optional
+///     Function `g(t, y, p, *args)` to integrate over time.
+/// forward_sensitivity : bool, optional
+///     Whether to compute forward sensitivities dy/dp.
 ///
 /// Returns
 /// -------
-/// Bunch object with the following fields:
-///
-/// t : ndarray, shape (n_points,)
-///     Time points.
-/// y : ndarray, shape (n, n_points)
-///     Values of the solution at t.
-/// sol : OdeSolution or None
-///     Found solution as OdeSolution instance; None if dense_output was False.
-/// t_events : list of ndarray or None
-///     Contains for each event type a list of arrays at which an event of
-///     that type was detected. None if events was None.
-/// y_events : list of ndarray or None
-///     For each event type, a list of arrays with the state at each event time.
-///     None if events was None.
-/// nfev : int
-///     Number of evaluations of the right-hand side.
-/// njev : int
-///     Number of evaluations of the Jacobian.
-/// nlu : int
-///     Number of LU decompositions.
-/// status : int
-///     Reason for algorithm termination:
-///
-///     * -1: Integration step failed.
-///     *  0: The solver successfully reached the end of t_span.
-///     *  1: A termination event occurred.
-///
-/// message : str
-///     Human-readable description of the termination reason.
-/// success : bool
-///     True if the solver reached the end of t_span or a termination event occurred.
-///
-/// Other Parameters
-/// ----------------
-/// step_size : float, optional
-///     Fixed step size for symplectic methods. If omitted, ``first_step`` is
-///     used as a fallback, and if that is also omitted the step defaults to
-///     ``(tf - t0) / 100``.
-/// acceleration : callable, optional
-///     Explicit acceleration callback for second-order symplectic methods.
-///     Use this when you prefer not to pass the acceleration as ``fun``.
-/// position_derivative : callable, optional
-///     Position derivative callback ``q' = dT/dp`` for Hamiltonian symplectic
-///     methods.
-/// momentum_derivative : callable, optional
-///     Momentum derivative callback ``p' = -dV/dq`` for Hamiltonian symplectic
-///     methods.
-/// first_step : float, optional
-///     Initial step size. Default is determined automatically.
-/// max_step : float, optional
-///     Maximum allowed step size. Default is inf.
-/// min_step : float, optional
-///     Minimum allowed step size for stiff solvers (Radau, BDF). Default is 0.
-/// max_steps : int, optional
-///     Maximum number of steps the solver can take. Default is unlimited.
-/// rtol : float, optional
-///     Relative tolerance. Default is 1e-3.
-/// atol : float, optional
-///     Absolute tolerance. Default is 1e-6.
-///
-/// Callback Requirements
-/// ---------------------
-/// Standard first-order methods expect ``fun(t, y)`` to return a one-dimensional
-/// array-like object with the same length as ``y``.
-///
-/// Symplectic second-order methods expect either:
-///
-/// * ``fun(t, q)``
-/// * ``acceleration=...``
-///
-/// Both forms must return a one-dimensional array-like object with length
-/// ``len(y0) // 2``.
-/// The flattened initial state must be ordered as ``[q..., v...]``. For example,
-/// a 3D second-order system uses ``y0 = [x, y, z, vx, vy, vz]``, while the
-/// callback still receives only ``q = [x, y, z]``.
-///
-/// Symplectic Hamiltonian methods expect either:
-///
-/// * ``fun=(position_derivative, momentum_derivative)``
-/// * ``position_derivative=...`` and ``momentum_derivative=...``
-///
-/// Each Hamiltonian callback must return a one-dimensional array-like object
-/// with length ``len(y0) // 2``.
-///
-/// Common Errors
-/// -------------
-/// Misconfigured callbacks raise Python exceptions instead of causing a Rust panic.
-/// Typical mistakes include returning the wrong number of values, returning a
-/// non-numeric result, passing an odd-length ``y0`` to a symplectic method, or
-/// providing only one Hamiltonian callback instead of both.
-///
-/// Examples
-/// --------
-/// Solve an exponential decay ODE::
-///
-///     >>> from ivp import solve_ivp
-///     >>> import numpy as np
-///     >>> def exponential_decay(t, y):
-///     ...     return -0.5 * y
-///     >>> sol = solve_ivp(exponential_decay, (0, 10), [2, 4, 8])
-///     >>> print(sol.t)
-///     >>> print(sol.y)
-///
-/// See Also
-/// --------
-/// scipy.integrate.solve_ivp : SciPy's equivalent function
+/// OdeResult object with the solution data.
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(name = "solve_ivp")]
-#[pyo3(signature = (fun, t_span, y0, method=None, t_eval=None, dense_output=false, events=None, vectorized=false, args=None, jac=None, jac_sparsity=None, **options))]
+#[pyo3(signature = (fun, t_span, y0, method=None, t_eval=None, dense_output=false, events=None, vectorized=false, args=None, jac=None, jac_sparsity=None, p=None, quadrature=None, forward_sensitivity=false, **options))]
 pub fn solve_ivp_py<'py>(
     py: Python<'py>,
     fun: Bound<'py, PyAny>,
@@ -238,6 +77,9 @@ pub fn solve_ivp_py<'py>(
     args: Option<Bound<'py, PyTuple>>,
     jac: Option<Bound<'py, PyAny>>,
     jac_sparsity: Option<Bound<'py, PyAny>>,
+    p: Option<Bound<'py, PyAny>>,
+    quadrature: Option<Bound<'py, PyAny>>,
+    forward_sensitivity: bool,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let _ = vectorized; // Not currently used
@@ -270,32 +112,70 @@ pub fn solve_ivp_py<'py>(
         // Parse solver options
         let parsed_options = parse_options(&options)?;
 
+        // Parse p
+        let p_vec = match p {
+            Some(ref pv) => extract_float_array(pv)?,
+            None => Vec::new(),
+        };
+
+        let dim_y = y0_vec.len();
+        let dim_p = p_vec.len();
+
         let result = match parsed_method {
             ParsedMethod::Standard(method_enum) => {
                 let is_constant_jac = jac.as_ref().is_some_and(|j| !j.is_callable());
                 let jacobian_source = jac.as_ref().map(|_| JacobianSource::UserProvided);
                 let python_ivp = PythonIVP::new(
-                    fun,
+                    fun.clone(),
                     event_funs,
                     jac,
+                    quadrature,
                     sparsity_structure,
-                    args,
+                    args.clone(),
                     event_configs,
                     py,
                 );
-                Ivp::first_order(&python_ivp, t0, tf, &y0_vec)
-                    .method(method_enum)
-                    .dense_output(dense_output)
-                    .maybe_t_eval(t_eval_vec)
-                    .maybe_max_step(parsed_options.max_step)
-                    .maybe_min_step(parsed_options.min_step)
-                    .maybe_first_step(parsed_options.first_step)
-                    .maybe_max_steps(parsed_options.max_steps)
-                    .maybe_jacobian_source(jacobian_source)
-                    .rtol(parsed_options.rtol)
-                    .atol(parsed_options.atol)
-                    .solve()
-                    .map(|sol| (sol, events.is_some(), is_constant_jac))
+
+                if forward_sensitivity {
+                    let mut y0_augmented = vec![0.0; dim_y + dim_y * dim_p];
+                    y0_augmented[0..dim_y].copy_from_slice(&y0_vec);
+
+                    let sensitivity_system = crate::solve::sensitivity::ForwardSensitivitySystem::new(
+                        &python_ivp,
+                        dim_y,
+                        dim_p,
+                    );
+
+                    Ivp::first_order(&sensitivity_system, t0, tf, &y0_augmented)
+                        .p(p_vec.clone())
+                        .method(method_enum)
+                        .dense_output(dense_output)
+                        .maybe_t_eval(t_eval_vec)
+                        .maybe_max_step(parsed_options.max_step)
+                        .maybe_min_step(parsed_options.min_step)
+                        .maybe_first_step(parsed_options.first_step)
+                        .maybe_max_steps(parsed_options.max_steps)
+                        .maybe_jacobian_source(jacobian_source)
+                        .rtol(parsed_options.rtol)
+                        .atol(parsed_options.atol)
+                        .solve()
+                        .map(|sol| (sol, events.is_some(), is_constant_jac))
+                } else {
+                    Ivp::first_order(&python_ivp, t0, tf, &y0_vec)
+                        .p(p_vec.clone())
+                        .method(method_enum)
+                        .dense_output(dense_output)
+                        .maybe_t_eval(t_eval_vec)
+                        .maybe_max_step(parsed_options.max_step)
+                        .maybe_min_step(parsed_options.min_step)
+                        .maybe_first_step(parsed_options.first_step)
+                        .maybe_max_steps(parsed_options.max_steps)
+                        .maybe_jacobian_source(jacobian_source)
+                        .rtol(parsed_options.rtol)
+                        .atol(parsed_options.atol)
+                        .solve()
+                        .map(|sol| (sol, events.is_some(), is_constant_jac))
+                }
             }
             ParsedMethod::Symplectic(method_enum) => {
                 let step_size = parsed_options.step_size.or(parsed_options.first_step);
@@ -310,10 +190,11 @@ pub fn solve_ivp_py<'py>(
                         let problem = PythonHamiltonianIVP::new(
                             position_derivative,
                             momentum_derivative,
-                            args,
+                            args.clone(),
                             py,
                         );
                         Ivp::hamiltonian(&problem, t0, tf, q0, p0)
+                            .p(p_vec.clone())
                             .method(method_enum)
                             .maybe_step_size(step_size)
                             .dense_output(dense_output)
@@ -322,8 +203,9 @@ pub fn solve_ivp_py<'py>(
                             .solve()
                     }
                     SymplecticProblem::SecondOrder { acceleration } => {
-                        let problem = PythonSecondOrderIVP::new(acceleration, args, py);
+                        let problem = PythonSecondOrderIVP::new(acceleration, args.clone(), py);
                         Ivp::second_order(&problem, t0, tf, q0, p0)
+                            .p(p_vec.clone())
                             .method(method_enum)
                             .maybe_step_size(step_size)
                             .dense_output(dense_output)
@@ -339,7 +221,18 @@ pub fn solve_ivp_py<'py>(
 
         match result {
             Ok((sol, has_events, is_constant_jac)) => {
-                build_result(py, sol, has_events, is_constant_jac)
+                build_result(
+                    py,
+                    sol,
+                    has_events,
+                    is_constant_jac,
+                    dim_y,
+                    dim_p,
+                    forward_sensitivity,
+                    fun.clone().unbind(),
+                    args.clone().map(|a| a.unbind()),
+                    p.clone().map(|pv| pv.unbind()),
+                )
             }
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Solver failed: {:?}",
@@ -726,24 +619,53 @@ fn panic_payload_to_pyerr(payload: Box<dyn std::any::Any + Send>) -> PyErr {
 }
 
 /// Build the PyOdeResult from the Rust Solution.
+#[allow(clippy::too_many_arguments)]
 fn build_result<'py>(
     py: Python<'py>,
     sol: crate::solve::Solution,
     has_events: bool,
     is_constant_jac: bool,
+    dim_y: usize,
+    dim_p: usize,
+    has_sensitivity: bool,
+    fun: Py<PyAny>,
+    args: Option<Py<PyTuple>>,
+    p: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    // Transpose y from (time, state) to (state, time) for SciPy compatibility
-    let n_steps = sol.y.len();
-    let n_states = if n_steps > 0 { sol.y[0].len() } else { 0 };
+    let n_steps = sol.t.len();
 
-    let mut y_transposed = vec![0.0; n_steps * n_states];
-    for (i, step) in sol.y.iter().enumerate() {
-        for (j, val) in step.iter().enumerate() {
-            y_transposed[j * n_steps + i] = *val;
+    // Split y into state and sensitivities if necessary
+    let (y_out, s_out) = if has_sensitivity && dim_p > 0 {
+        let mut y_vals = vec![0.0; n_steps * dim_y];
+        let mut s_vals = vec![0.0; n_steps * dim_y * dim_p];
+
+        for (i, step_y) in sol.y.iter().enumerate() {
+            // State
+            for j in 0..dim_y {
+                y_vals[j * n_steps + i] = step_y[j];
+            }
+            // Sensitivities
+            for j in 0..(dim_y * dim_p) {
+                s_vals[j * n_steps + i] = step_y[dim_y + j];
+            }
         }
-    }
-
-    let y_arr = PyArray1::from_vec(py, y_transposed).reshape((n_states, n_steps))?;
+        (
+            PyArray1::from_vec(py, y_vals).reshape((dim_y, n_steps))?.into_any().unbind(),
+            Some(PyArray1::from_vec(py, s_vals).reshape((dim_p, dim_y, n_steps))?.into_any().unbind()),
+        )
+    } else {
+        let n_states = if n_steps > 0 { sol.y[0].len() } else { 0 };
+        let mut y_transposed = vec![0.0; n_steps * n_states];
+        for (i, step) in sol.y.iter().enumerate() {
+            for (j, val) in step.iter().enumerate() {
+                y_transposed[j * n_steps + i] = *val;
+            }
+        }
+        (
+            PyArray1::from_vec(py, y_transposed).reshape((n_states, n_steps))?.into_any().unbind(),
+            None,
+        )
+    };
 
     // Build t_events list
     let t_events_list = if has_events {
@@ -783,6 +705,13 @@ fn build_result<'py>(
         None
     };
 
+    // Build quad results
+    let quad_arr = if !sol.quad.is_empty() {
+        Some(PyArray1::from_vec(py, sol.quad).into_any().unbind())
+    } else {
+        None
+    };
+
     // Convert status
     let status_int = match sol.status {
         crate::status::Status::Success => 0,
@@ -798,10 +727,15 @@ fn build_result<'py>(
     };
 
     let result = PyOdeResult {
+        fun,
+        args,
+        p,
         t: PyArray1::from_vec(py, sol.t).into_any().unbind(),
-        y: y_arr.into_any().unbind(),
+        y: y_out,
+        s: s_out,
         t_events: t_events_list,
         y_events: y_events_list,
+        quad: quad_arr,
         nfev: sol.nfev,
         njev: if is_constant_jac { 0 } else { sol.njev },
         nlu: sol.nlu,

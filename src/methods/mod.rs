@@ -273,6 +273,7 @@ pub fn hinit<F>(
     f: &F,
     x: Float,
     y: &[Float],
+    p: &[Float],
     posneg: Float,
     f0: &[Float],
     f1: &mut [Float],
@@ -312,7 +313,7 @@ where
         y1[i] = y[i] + h * f0[i];
     }
     // Evaluate f at x+h
-    f.derivative(x + h, y1, f1);
+    f.derivative(x + h, y1, p, f1);
 
     // Estimate second derivative
     let mut der2: Float = 0.0;

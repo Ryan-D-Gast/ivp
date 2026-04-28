@@ -10,6 +10,7 @@ pub(crate) fn step<F>(
     h: Float,
     q: &mut [Float],
     p: &mut [Float],
+    p_params: &[Float],
     work: &mut SymplecticWork,
     nfev: &mut usize,
 ) where
@@ -19,43 +20,43 @@ pub(crate) fn step<F>(
     let w1 = 1.0 / (2.0 - two_cubert);
     let w0 = -two_cubert / (2.0 - two_cubert);
 
-    f.momentum_derivative(t, q, &mut work.dpdt);
+    f.momentum_derivative(t, q, p_params, &mut work.dpdt);
     *nfev += 1;
     for (pi, dpdt_i) in p.iter_mut().zip(work.dpdt.iter()) {
         *pi += (0.5 * w1) * h * *dpdt_i;
     }
 
-    f.position_derivative(t, p, &mut work.dqdt);
+    f.position_derivative(t, p, p_params, &mut work.dqdt);
     *nfev += 1;
     for (qi, dqdt_i) in q.iter_mut().zip(work.dqdt.iter()) {
         *qi += w1 * h * *dqdt_i;
     }
 
-    f.momentum_derivative(t, q, &mut work.dpdt);
+    f.momentum_derivative(t, q, p_params, &mut work.dpdt);
     *nfev += 1;
     for (pi, dpdt_i) in p.iter_mut().zip(work.dpdt.iter()) {
         *pi += (0.5 * (w1 + w0)) * h * *dpdt_i;
     }
 
-    f.position_derivative(t, p, &mut work.dqdt);
+    f.position_derivative(t, p, p_params, &mut work.dqdt);
     *nfev += 1;
     for (qi, dqdt_i) in q.iter_mut().zip(work.dqdt.iter()) {
         *qi += w0 * h * *dqdt_i;
     }
 
-    f.momentum_derivative(t, q, &mut work.dpdt);
+    f.momentum_derivative(t, q, p_params, &mut work.dpdt);
     *nfev += 1;
     for (pi, dpdt_i) in p.iter_mut().zip(work.dpdt.iter()) {
         *pi += (0.5 * (w0 + w1)) * h * *dpdt_i;
     }
 
-    f.position_derivative(t, p, &mut work.dqdt);
+    f.position_derivative(t, p, p_params, &mut work.dqdt);
     *nfev += 1;
     for (qi, dqdt_i) in q.iter_mut().zip(work.dqdt.iter()) {
         *qi += w1 * h * *dqdt_i;
     }
 
-    f.momentum_derivative(t, q, &mut work.dpdt);
+    f.momentum_derivative(t, q, p_params, &mut work.dpdt);
     *nfev += 1;
     for (pi, dpdt_i) in p.iter_mut().zip(work.dpdt.iter()) {
         *pi += (0.5 * w1) * h * *dpdt_i;

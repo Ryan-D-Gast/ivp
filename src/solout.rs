@@ -58,6 +58,7 @@ pub trait SolOut {
         xold: Float,
         x: &mut Float,
         y: &mut [Float],
+        p: &mut [Float],
         interpolant: Option<&StepInterpolant<'_>>,
     ) -> ControlFlag;
 }

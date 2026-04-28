@@ -204,6 +204,7 @@ impl LSODA {
         system: &F,
         x0: Float,
         y0: &[Float],
+        p: &mut [Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -296,7 +297,7 @@ impl LSODA {
         let mut work = Work::new(n, lmax);
         let mut y = y0.to_vec();
 
-        system.derivative(x0, &y, &mut work.savf);
+        system.derivative(x0, &y, p, &mut work.savf);
         common.nfe += 1;
         work.yh[..n].copy_from_slice(&y);
 
@@ -329,7 +330,7 @@ impl LSODA {
         }
 
         if let Some(sol) = solout.as_mut() {
-            match sol.solout(x0, &mut common.tn, &mut y, None) {
+            match sol.solout(x0, &mut common.tn, &mut y, p, None) {
                 ControlFlag::Continue | ControlFlag::XOut(_) => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -345,7 +346,7 @@ impl LSODA {
                 }
                 ControlFlag::ModifiedSolution => {
                     work.yh[..n].copy_from_slice(&y);
-                    system.derivative(common.tn, &y, &mut work.savf);
+                    system.derivative(common.tn, &y, p, &mut work.savf);
                     common.nfe += 1;
                     for i in 0..n {
                         work.yh[n + i] = common.h * work.savf[i];
@@ -370,7 +371,7 @@ impl LSODA {
             }
 
             let xold = common.tn;
-            stoda(system, &mut y, &rtol, &atol, &mut work, &mut common)?;
+            stoda(system, &mut y, p, &rtol, &atol, &mut work, &mut common)?;
 
             if common.kflag == -1 {
                 status = Status::StepSizeTooSmall;
@@ -388,7 +389,7 @@ impl LSODA {
             let interpolant = StepInterpolant::new(&cont, xold, common.hu, Self::interpolate);
 
             if let Some(sol) = solout.as_mut() {
-                match sol.solout(xold, &mut common.tn, &mut y, Some(&interpolant)) {
+                match sol.solout(xold, &mut common.tn, &mut y, p, Some(&interpolant)) {
                     ControlFlag::Continue | ControlFlag::XOut(_) => {
                         work.yh[..n].copy_from_slice(&y);
                     }
@@ -400,7 +401,7 @@ impl LSODA {
                     ControlFlag::ModifiedSolution => {
                         work.yh[..n].copy_from_slice(&y);
                         common.tn = xold + common.hu;
-                        restart_after_modification(system, &mut common, &mut work)?;
+                        restart_after_modification(system, p, &mut common, &mut work)?;
                     }
                 }
             }
@@ -465,13 +466,14 @@ impl LSODA {
 
 fn restart_after_modification<F>(
     system: &F,
+    p: &[Float],
     common: &mut Common,
     work: &mut Work,
 ) -> Result<(), Error>
 where
     F: FirstOrderSystem,
 {
-    system.derivative(common.tn, &work.yh[..common.n], &mut work.savf);
+    system.derivative(common.tn, &work.yh[..common.n], p, &mut work.savf);
     common.nfe += 1;
     common.meth = MethodFamily::Adams;
     common.miter = 0;
@@ -779,7 +781,7 @@ fn stoda_get_predicted_values(state: &mut Common, yh: &mut [Float]) {
     }
 }
 
-fn prja<F>(system: &F, y: &[Float], work: &mut Work, state: &mut Common)
+fn prja<F>(system: &F, y: &[Float], p: &[Float], work: &mut Work, state: &mut Common)
 where
     F: FirstOrderSystem,
 {
@@ -790,7 +792,7 @@ where
 
     if state.miter == 1 {
         work.jac.fill(0.0);
-        system.jac(state.tn, y, &mut work.jac);
+        system.jac(state.tn, y, p, &mut work.jac);
         for col in 0..state.n {
             for row in 0..state.n {
                 work.wm[2 + row + col * state.n] = -hl0 * work.jac[(row, col)];
@@ -809,7 +811,7 @@ where
             let r = (srur * yj.abs()).max(r0 / work.ewt[j]);
             y_fd[j] = yj + r;
             fac = -hl0 / r;
-            system.derivative(state.tn, &y_fd, &mut work.ftem);
+            system.derivative(state.tn, &y_fd, p, &mut work.ftem);
             state.nfe += 1;
             for i in 0..state.n {
                 work.wm[2 + i + j * state.n] = (work.ftem[i] - work.savf[i]) * fac;
@@ -844,6 +846,7 @@ fn solsy(rhs: &mut [Float], work: &Work, state: &mut Common) {
 fn stoda_corrector_loop<F>(
     system: &F,
     y: &mut [Float],
+    p: &[Float],
     work: &mut Work,
     state: &mut Common,
 ) -> CorrectorOutput
@@ -851,11 +854,11 @@ where
     F: FirstOrderSystem,
 {
     y.copy_from_slice(&work.yh[..state.n]);
-    system.derivative(state.tn, y, &mut work.savf);
+    system.derivative(state.tn, y, p, &mut work.savf);
     state.nfe += 1;
 
     if state.ipup > 0 {
-        prja(system, y, work, state);
+        prja(system, y, p, work, state);
         state.ipup = 0;
         state.rc = 1.0;
         state.nslp = state.nst;
@@ -958,7 +961,7 @@ where
             };
         }
         delp = del;
-        system.derivative(state.tn, y, &mut work.savf);
+        system.derivative(state.tn, y, p, &mut work.savf);
         state.nfe += 1;
     }
 
@@ -1007,6 +1010,7 @@ fn retract_yh(state: &Common, yh: &mut [Float]) {
 fn stoda<F>(
     system: &F,
     y: &mut [Float],
+    p: &[Float],
     rtol: &Tolerance,
     atol: &Tolerance,
     work: &mut Work,
@@ -1059,9 +1063,8 @@ where
     let mut ncf = 0usize;
 
     loop {
-        let corrector = stoda_corrector_loop(system, y, work, state);
-        match corrector.status {
-            CorrectorStatus::Retry => continue,
+        let corrector = stoda_corrector_loop(system, y, p, work, state);
+        match corrector.status {            CorrectorStatus::Retry => continue,
             CorrectorStatus::NoConvergence => {
                 if !stoda_handle_corrector_failure(state, work, told, &mut ncf) {
                     state.hold = state.h;
@@ -1102,7 +1105,7 @@ where
                 let rh = (0.1 as Float).max(state.hmin / state.h.abs());
                 state.h *= rh;
                 y.copy_from_slice(&work.yh[..state.n]);
-                system.derivative(state.tn, y, &mut work.savf);
+                system.derivative(state.tn, y, p, &mut work.savf);
                 state.nfe += 1;
                 for i in 0..state.n {
                     work.yh[state.n + i] = state.h * work.savf[i];

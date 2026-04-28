@@ -96,7 +96,6 @@ impl DOP853 {
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing [`FirstOrderSystem`].
     /// - `x0`: Initial independent variable value.
-    /// - `xend`: Final independent variable value.
     /// - `y0`: Slice containing the initial state.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
     ///
@@ -119,6 +118,7 @@ impl DOP853 {
         f: &F,
         x0: Float,
         y0: &[Float],
+        p: &mut [Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -234,21 +234,21 @@ impl DOP853 {
         let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.derivative(x, &y, &mut k1);
+        f.derivative(x, &y, p, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, x, &y, posneg, &k1, &mut k2, &mut y1, 8, h_max, &atol, &rtol,
+                    f, x, &y, p, posneg, &k1, &mut k2, &mut y1, 8, h_max, &atol, &rtol,
                 )
             }
         };
 
         // Initial call to SolOut
         if let Some(solout) = solout.as_mut() {
-            match solout.solout(xold, &mut x, &mut y, None) {
+            match solout.solout(xold, &mut x, &mut y, p, None) {
                 ControlFlag::Interrupt => {
                     status = Status::UserInterrupt;
                     return Ok(IntegrationResult {
@@ -260,7 +260,7 @@ impl DOP853 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.derivative(x, &y, &mut k1);
+                    f.derivative(x, &y, p, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -298,43 +298,43 @@ impl DOP853 {
             for i in 0..n {
                 y1[i] = y[i] + h * A21 * k1[i];
             }
-            f.derivative(x + C2 * h, &y1, &mut k2);
+            f.derivative(x + C2 * h, &y1, p, &mut k2);
             // Stage 3
             for i in 0..n {
                 y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
             }
-            f.derivative(x + C3 * h, &y1, &mut k3);
+            f.derivative(x + C3 * h, &y1, p, &mut k3);
 
             // Stage 4
             for i in 0..n {
                 y1[i] = y[i] + h * (A41 * k1[i] + A43 * k3[i]);
             }
-            f.derivative(x + C4 * h, &y1, &mut k4);
+            f.derivative(x + C4 * h, &y1, p, &mut k4);
 
             // Stage 5
             for i in 0..n {
                 y1[i] = y[i] + h * (A51 * k1[i] + A53 * k3[i] + A54 * k4[i]);
             }
-            f.derivative(x + C5 * h, &y1, &mut k5);
+            f.derivative(x + C5 * h, &y1, p, &mut k5);
 
             // Stage 6
             for i in 0..n {
                 y1[i] = y[i] + h * (A61 * k1[i] + A64 * k4[i] + A65 * k5[i]);
             }
-            f.derivative(x + C6 * h, &y1, &mut k6);
+            f.derivative(x + C6 * h, &y1, p, &mut k6);
 
             // Stage 7
             for i in 0..n {
                 y1[i] = y[i] + h * (A71 * k1[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
             }
-            f.derivative(x + C7 * h, &y1, &mut k7);
+            f.derivative(x + C7 * h, &y1, p, &mut k7);
 
             // Stage 8
             for i in 0..n {
                 y1[i] = y[i]
                     + h * (A81 * k1[i] + A84 * k4[i] + A85 * k5[i] + A86 * k6[i] + A87 * k7[i]);
             }
-            f.derivative(x + C8 * h, &y1, &mut k8);
+            f.derivative(x + C8 * h, &y1, p, &mut k8);
 
             // Stage 9
             for i in 0..n {
@@ -346,7 +346,7 @@ impl DOP853 {
                         + A97 * k7[i]
                         + A98 * k8[i]);
             }
-            f.derivative(x + C9 * h, &y1, &mut k9);
+            f.derivative(x + C9 * h, &y1, p, &mut k9);
 
             // Stage 10
             for i in 0..n {
@@ -359,7 +359,7 @@ impl DOP853 {
                         + A108 * k8[i]
                         + A109 * k9[i]);
             }
-            f.derivative(x + C10 * h, &y1, &mut k10);
+            f.derivative(x + C10 * h, &y1, p, &mut k10);
 
             // Stage 11
             for i in 0..n {
@@ -373,7 +373,7 @@ impl DOP853 {
                         + A119 * k9[i]
                         + A1110 * k10[i]);
             }
-            f.derivative(x + C11 * h, &y1, &mut k2);
+            f.derivative(x + C11 * h, &y1, p, &mut k2);
 
             // Stage 12
             xph = x + h;
@@ -389,7 +389,7 @@ impl DOP853 {
                         + A1210 * k10[i]
                         + A1211 * k2[i]);
             }
-            f.derivative(xph, &y1, &mut k3);
+            f.derivative(xph, &y1, p, &mut k3);
             evals.ode += 11;
 
             for i in 0..n {
@@ -443,7 +443,7 @@ impl DOP853 {
                 // Step accepted
                 facold = err.max(1.0e-4);
                 steps.accepted += 1;
-                f.derivative(xph, &k5, &mut k4);
+                f.derivative(xph, &k5, p, &mut k4);
                 evals.ode += 1;
 
                 // Stiffness detection
@@ -533,7 +533,7 @@ impl DOP853 {
                                 + A1412 * k3[i]
                                 + A1413 * k4[i]);
                     }
-                    f.derivative(x + C14 * h, &y1, &mut k10);
+                    f.derivative(x + C14 * h, &y1, p, &mut k10);
 
                     for i in 0..n {
                         y1[i] = y[i]
@@ -546,7 +546,7 @@ impl DOP853 {
                                 + A1513 * k4[i]
                                 + A1514 * k10[i]);
                     }
-                    f.derivative(x + C15 * h, &y1, &mut k2);
+                    f.derivative(x + C15 * h, &y1, p, &mut k2);
 
                     for i in 0..n {
                         y1[i] = y[i]
@@ -559,7 +559,7 @@ impl DOP853 {
                                 + A1614 * k10[i]
                                 + A1615 * k2[i]);
                     }
-                    f.derivative(x + C16 * h, &y1, &mut k3);
+                    f.derivative(x + C16 * h, &y1, p, &mut k3);
                     evals.ode += 3;
 
                     // Add contributions of last three stages
@@ -608,14 +608,14 @@ impl DOP853 {
                     } else {
                         None
                     };
-                    match solout.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
+                    match solout.solout(xold, &mut x, &mut y, p, interpolant.as_ref()) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.derivative(x, &y, &mut k1);
+                            f.derivative(x, &y, p, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {

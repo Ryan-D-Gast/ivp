@@ -19,11 +19,13 @@ pub(crate) fn solve_first_order_impl<F>(
     x0: Float,
     xend: Float,
     y0: &[Float],
-    config: FirstOrderConfig,
+    mut config: FirstOrderConfig,
 ) -> Result<Solution, Error>
 where
     F: FirstOrderSystem,
 {
+    let p = &mut config.p;
+
     // Handle zero-interval case: when x0 == xend, return immediately with initial state
     if (xend - x0).abs() < 1e-15 {
         // If t_eval is provided, return all t_eval points that match x0
@@ -52,6 +54,7 @@ where
             y,
             t_events: vec![Vec::new(); f.n_events()],
             y_events: vec![Vec::new(); f.n_events()],
+            quad: vec![0.0; f.n_quadrature()],
             nfev: 0,
             njev: 0,
             nlu: 0,
@@ -83,6 +86,7 @@ where
             y,
             t_events: vec![Vec::new(); f.n_events()],
             y_events: vec![Vec::new(); f.n_events()],
+            quad: vec![0.0; f.n_quadrature()],
             nfev: 0,
             njev: 0,
             nlu: 0,
@@ -112,7 +116,7 @@ where
             let solver = RK4::builder()
                 .max_steps(config.max_steps.unwrap_or(usize::MAX))
                 .build();
-            solver.solve(f, x0, y0, xend, h, Some(&mut default_solout))
+            solver.solve(f, x0, y0, p, xend, h, Some(&mut default_solout))
         }
         Method::RK23 => {
             let solver = RK23::builder()
@@ -124,6 +128,7 @@ where
                 f,
                 x0,
                 y0,
+                p,
                 xend,
                 config.rtol,
                 config.atol,
@@ -140,6 +145,7 @@ where
                 f,
                 x0,
                 y0,
+                p,
                 xend,
                 config.rtol,
                 config.atol,
@@ -156,6 +162,7 @@ where
                 f,
                 x0,
                 y0,
+                p,
                 xend,
                 config.rtol,
                 config.atol,
@@ -178,6 +185,7 @@ where
                 f,
                 x0,
                 y0,
+                p,
                 xend,
                 config.rtol,
                 config.atol,
@@ -196,6 +204,7 @@ where
                 f,
                 x0,
                 y0,
+                p,
                 xend,
                 config.rtol,
                 config.atol,
@@ -215,6 +224,7 @@ where
                 f,
                 x0,
                 y0,
+                p,
                 xend,
                 config.rtol,
                 config.atol,
@@ -225,7 +235,7 @@ where
 
     match result {
         Ok(sol) => {
-            let (t, y, t_events, y_events, dense_raw) = default_solout.into_payload();
+            let (t, y, t_events, y_events, dense_raw, quad) = default_solout.into_payload();
             let continuous_sol = if config.dense_output {
                 Some(ContinuousOutput::from_segments(
                     config.method,
@@ -240,6 +250,7 @@ where
                 y,
                 t_events,
                 y_events,
+                quad,
                 nfev: sol.evals.ode,
                 njev: sol.evals.jac,
                 nlu: sol.evals.lu,

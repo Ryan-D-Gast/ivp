@@ -92,6 +92,7 @@ impl BDF {
         f: &F,
         x0: Float,
         y0: &[Float],
+        p: &mut [Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -150,11 +151,11 @@ impl BDF {
 
         // Workspace vectors
         let mut f0 = vec![0.0; n];
-        f.derivative(x, &y, &mut f0);
+        f.derivative(x, &y, p, &mut f0);
         evals.ode += 1;
 
         let mut jac = Matrix::from_storage(n, n, self.jac_storage.clone());
-        f.jac(x, &y, &mut jac);
+        f.jac(x, &y, p, &mut jac);
         evals.jac += 1;
 
         // Track when LU decomposition is current
@@ -204,7 +205,7 @@ impl BDF {
             let mut f1 = vec![0.0; n];
             let mut y1 = vec![0.0; n];
             let guess = hinit(
-                f, x, &y, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
+                f, x, &y, p, direction, &f0, &mut f1, &mut y1, 1, hmax, &atol, &rtol,
             );
             // Ensure x + h isn't larger than xend
             let diff = xend - x;
@@ -246,7 +247,7 @@ impl BDF {
         let mut cont = vec![0.0; n * CONT_BLOCK];
         // Initial callback
         if let Some(sol) = solout.as_mut() {
-            match sol.solout(x, &mut x, &mut y, None) {
+            match sol.solout(x, &mut x, &mut y, p, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -258,7 +259,7 @@ impl BDF {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.derivative(x, &y, &mut f0);
+                    f.derivative(x, &y, p, &mut f0);
                     evals.ode += 1;
                     d[0].copy_from_slice(&y);
                     for i in 0..n {
@@ -269,7 +270,7 @@ impl BDF {
                     }
                     order = 1;
                     n_equal_steps = 0;
-                    f.jac(x, &y, &mut jac);
+                    f.jac(x, &y, p, &mut jac);
                     evals.jac += 1;
                     lu_is_current = false;
                 }
@@ -393,7 +394,7 @@ impl BDF {
             let mut dy_norm_prev: Option<Float> = None;
             let mut iters = 0usize;
             while iters < newton_maxiter_val {
-                f.derivative(x_new, &y_new, &mut rhs);
+                f.derivative(x_new, &y_new, p, &mut rhs);
                 evals.ode += 1;
                 for i in 0..n {
                     rhs[i] = c * rhs[i] - psi[i] - delta[i];
@@ -451,7 +452,7 @@ impl BDF {
             }
             if !converged {
                 // Always refresh Jacobian on Newton failure to handle discontinuities
-                f.jac(x_new, &y_predict, &mut jac);
+                f.jac(x_new, &y_predict, p, &mut jac);
                 evals.jac += 1;
                 lu_is_current = false;
 
@@ -520,7 +521,7 @@ impl BDF {
             // Callback
             if let Some(sol) = solout.as_mut() {
                 let interpolant = StepInterpolant::new(&cont, x_start, h_signed, Self::interpolate);
-                match sol.solout(x - h_signed, &mut x, &mut y, Some(&interpolant)) {
+                match sol.solout(x - h_signed, &mut x, &mut y, p, Some(&interpolant)) {
                     ControlFlag::Continue => {}
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
@@ -528,7 +529,7 @@ impl BDF {
                     }
                     ControlFlag::ModifiedSolution => {
                         // Update derivatives at new (x, y).
-                        f.derivative(x, &y, &mut f0);
+                        f.derivative(x, &y, p, &mut f0);
                         evals.ode += 1;
                         d[0].copy_from_slice(&y);
                         for i in 0..n {
@@ -539,7 +540,7 @@ impl BDF {
                         }
                         order = 1;
                         n_equal_steps = 0;
-                        f.jac(x, &y, &mut jac);
+                        f.jac(x, &y, p, &mut jac);
                         evals.jac += 1;
                         lu_is_current = false;
                     }
@@ -604,7 +605,7 @@ impl BDF {
                 lu_is_current = false; // Order or step changed
 
                 if new_order != old_order {
-                    f.jac(x, &y, &mut jac);
+                    f.jac(x, &y, p, &mut jac);
                     evals.jac += 1;
                 }
             }

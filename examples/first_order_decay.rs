@@ -7,7 +7,7 @@ struct ExponentialDecay {
 }
 
 impl FirstOrderSystem for ExponentialDecay {
-    fn derivative(&self, _t: f64, y: &[f64], dydt: &mut [f64]) {
+    fn derivative(&self, _t: f64, y: &[f64], _p: &[f64], dydt: &mut [f64]) {
         dydt[0] = -self.rate * y[0];
     }
 }

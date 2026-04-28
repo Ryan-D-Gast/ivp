@@ -126,6 +126,7 @@ impl DOPRI5 {
         f: &F,
         x0: Float,
         y0: &[Float],
+        p: &mut [Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -229,21 +230,21 @@ impl DOPRI5 {
         let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.derivative(x, &y, &mut k1);
+        f.derivative(x, &y, p, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, x, &y, posneg, &k1, &mut k2, &mut k3, 5, h_max, &atol, &rtol,
+                    f, x, &y, p, posneg, &k1, &mut k2, &mut k3, 5, h_max, &atol, &rtol,
                 )
             }
         };
 
         // Initial SolOut call
         if let Some(solout) = solout.as_mut() {
-            match solout.solout(xold, &mut x, &mut y, None) {
+            match solout.solout(xold, &mut x, &mut y, p, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -254,7 +255,7 @@ impl DOPRI5 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Recompute k1 at new (x, y).
-                    f.derivative(x, &y, &mut k1);
+                    f.derivative(x, &y, p, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -290,25 +291,25 @@ impl DOPRI5 {
             for i in 0..n {
                 y1[i] = y[i] + h * A21 * k1[i];
             }
-            f.derivative(x + C2 * h, &y1, &mut k2);
+            f.derivative(x + C2 * h, &y1, p, &mut k2);
 
             // Stage 3
             for i in 0..n {
                 y1[i] = y[i] + h * (A31 * k1[i] + A32 * k2[i]);
             }
-            f.derivative(x + C3 * h, &y1, &mut k3);
+            f.derivative(x + C3 * h, &y1, p, &mut k3);
 
             // Stage 4
             for i in 0..n {
                 y1[i] = y[i] + h * (A41 * k1[i] + A42 * k2[i] + A43 * k3[i]);
             }
-            f.derivative(x + C4 * h, &y1, &mut k4);
+            f.derivative(x + C4 * h, &y1, p, &mut k4);
 
             // Stage 5
             for i in 0..n {
                 y1[i] = y[i] + h * (A51 * k1[i] + A52 * k2[i] + A53 * k3[i] + A54 * k4[i]);
             }
-            f.derivative(x + C5 * h, &y1, &mut k5);
+            f.derivative(x + C5 * h, &y1, p, &mut k5);
 
             // Stage 6 (ysti)
             for i in 0..n {
@@ -316,14 +317,14 @@ impl DOPRI5 {
                     + h * (A61 * k1[i] + A62 * k2[i] + A63 * k3[i] + A64 * k4[i] + A65 * k5[i]);
             }
             xph = x + h;
-            f.derivative(xph, &y1, &mut k6);
+            f.derivative(xph, &y1, p, &mut k6);
 
             // Final stage
             for i in 0..n {
                 y1[i] = y[i]
                     + h * (A71 * k1[i] + A73 * k3[i] + A74 * k4[i] + A75 * k5[i] + A76 * k6[i]);
             }
-            f.derivative(xph, &y1, &mut k2);
+            f.derivative(xph, &y1, p, &mut k2);
             evals.ode += 6;
 
             // Prepare last segment of dense output before recalculating k4
@@ -426,14 +427,14 @@ impl DOPRI5 {
                     } else {
                         None
                     };
-                    match solout.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
+                    match solout.solout(xold, &mut x, &mut y, p, interpolant.as_ref()) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.derivative(x, &y, &mut k1);
+                            f.derivative(x, &y, p, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {

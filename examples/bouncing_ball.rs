@@ -8,13 +8,13 @@ struct BouncingBall {
 }
 
 impl FirstOrderSystem for BouncingBall {
-    fn derivative(&self, _t: f64, state: &[f64], dsdt: &mut [f64]) {
+    fn derivative(&self, _t: f64, state: &[f64], _p: &[f64], dsdt: &mut [f64]) {
         let vy = state[1];
         dsdt[0] = vy;
         dsdt[1] = -self.gravity - self.drag * vy * vy.abs();
     }
 
-    fn events(&self, _t: f64, state: &[f64], out: &mut [f64]) {
+    fn events(&self, _t: f64, state: &[f64], _p: &[f64], out: &mut [f64]) {
         out[0] = state[0]; // Ground impact when y = 0
     }
 

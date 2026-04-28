@@ -94,6 +94,8 @@ pub enum JacobianSource {
 
 /// Internal options for first-order solving.
 pub(crate) struct FirstOrderConfig {
+    /// Parameters passed to the system functions.
+    pub p: Vec<Float>,
     /// Integration method. Choose an explicit RK (RK23/DOPRI5/DOP853/RK4) for non‑stiff
     /// problems or an implicit RK (RADAU) for stiff/DAE systems. Default: DOPRI5 (aka RK45).
     pub method: Method,

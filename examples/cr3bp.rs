@@ -21,7 +21,7 @@ impl CR3BP {
 }
 
 impl FirstOrderSystem for CR3BP {
-    fn derivative(&self, _t: f64, sv: &[f64], dsdt: &mut [f64]) {
+    fn derivative(&self, _t: f64, sv: &[f64], _p: &[f64], dsdt: &mut [f64]) {
         let (x, y, z, vx, vy, vz) = (sv[0], sv[1], sv[2], sv[3], sv[4], sv[5]);
         let r1 = ((x + self.mu).powi(2) + y.powi(2) + z.powi(2)).sqrt();
         let r2 = ((x - 1.0 + self.mu).powi(2) + y.powi(2) + z.powi(2)).sqrt();

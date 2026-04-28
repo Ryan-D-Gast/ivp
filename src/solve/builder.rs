@@ -19,7 +19,7 @@ use super::{
 pub struct Ivp;
 
 impl Ivp {
-    /// Create a builder for a first-order system `y' = f(t, y)`.
+    /// Create a builder for a first-order system `y' = f(t, y, p)`.
     pub fn first_order<'a, F>(
         system: &'a F,
         t0: Float,
@@ -34,6 +34,7 @@ impl Ivp {
             t0,
             tf,
             y0,
+            p: Vec::new(),
             method: Method::DOPRI5,
             rtol: Tolerance::Scalar(1e-3),
             atol: Tolerance::Scalar(1e-6),
@@ -52,7 +53,7 @@ impl Ivp {
         }
     }
 
-    /// Create a builder for a second-order system `q'' = a(t, q)`.
+    /// Create a builder for a second-order system `q'' = a(t, q, p)`.
     pub fn second_order<'a, F>(
         system: &'a F,
         t0: Float,
@@ -69,6 +70,7 @@ impl Ivp {
             tf,
             q0,
             v0,
+            p: Vec::new(),
             method: SymplecticMethod::VelocityVerlet,
             step_size: None,
             max_steps: None,
@@ -94,6 +96,7 @@ impl Ivp {
             tf,
             q0,
             p0,
+            p: Vec::new(),
             method: SymplecticMethod::VelocityVerlet,
             step_size: None,
             max_steps: None,
@@ -110,6 +113,7 @@ pub struct FirstOrderIvp<'a, F> {
     t0: Float,
     tf: Float,
     y0: &'a [Float],
+    p: Vec<Float>,
     method: Method,
     rtol: Tolerance,
     atol: Tolerance,
@@ -265,6 +269,20 @@ impl<'a, F> FirstOrderIvp<'a, F> {
         self.nind3 = Some(nind3);
         self
     }
+
+    /// Set the parameters passed to the system functions.
+    pub fn p(mut self, p: Vec<Float>) -> Self {
+        self.p = p;
+        self
+    }
+
+    #[cfg_attr(not(feature = "python"), allow(dead_code))]
+    pub(crate) fn maybe_p(mut self, p: Option<Vec<Float>>) -> Self {
+        if let Some(p) = p {
+            self.p = p;
+        }
+        self
+    }
 }
 
 impl<F> FirstOrderIvp<'_, F>
@@ -274,6 +292,7 @@ where
     /// Solve the configured first-order IVP.
     pub fn solve(self) -> Result<Solution, Error> {
         let config = FirstOrderConfig {
+            p: self.p,
             method: self.method,
             rtol: self.rtol,
             atol: self.atol,
@@ -302,6 +321,7 @@ pub struct SecondOrderIvp<'a, F> {
     tf: Float,
     q0: &'a [Float],
     v0: &'a [Float],
+    p: Vec<Float>,
     method: SymplecticMethod,
     step_size: Option<Float>,
     max_steps: Option<usize>,
@@ -357,6 +377,20 @@ impl<'a, F> SecondOrderIvp<'a, F> {
         self.dense_output = dense_output;
         self
     }
+
+    /// Set the parameters passed to the system functions.
+    pub fn p(mut self, p: Vec<Float>) -> Self {
+        self.p = p;
+        self
+    }
+
+    #[cfg_attr(not(feature = "python"), allow(dead_code))]
+    pub(crate) fn maybe_p(mut self, p: Option<Vec<Float>>) -> Self {
+        if let Some(p) = p {
+            self.p = p;
+        }
+        self
+    }
 }
 
 impl<F> SecondOrderIvp<'_, F>
@@ -373,6 +407,7 @@ where
             max_steps: self.max_steps,
             t_eval: self.t_eval,
             dense_output: self.dense_output,
+            p: self.p,
         };
         solve_second_order_impl(self.system, self.t0, self.tf, self.q0, self.v0, config)
     }
@@ -386,6 +421,7 @@ pub struct HamiltonianIvp<'a, F> {
     tf: Float,
     q0: &'a [Float],
     p0: &'a [Float],
+    p: Vec<Float>,
     method: SymplecticMethod,
     step_size: Option<Float>,
     max_steps: Option<usize>,
@@ -441,6 +477,20 @@ impl<'a, F> HamiltonianIvp<'a, F> {
         self.dense_output = dense_output;
         self
     }
+
+    /// Set the parameters passed to the system functions.
+    pub fn p(mut self, p: Vec<Float>) -> Self {
+        self.p = p;
+        self
+    }
+
+    #[cfg_attr(not(feature = "python"), allow(dead_code))]
+    pub(crate) fn maybe_p(mut self, p: Option<Vec<Float>>) -> Self {
+        if let Some(p) = p {
+            self.p = p;
+        }
+        self
+    }
 }
 
 impl<F> HamiltonianIvp<'_, F>
@@ -457,6 +507,7 @@ where
             max_steps: self.max_steps,
             t_eval: self.t_eval,
             dense_output: self.dense_output,
+            p: self.p,
         };
         solve_hamiltonian_impl(self.system, self.t0, self.tf, self.q0, self.p0, config)
     }

@@ -29,15 +29,18 @@ pub(crate) struct SymplecticConfig {
     pub t_eval: Option<Vec<Float>>,
     /// Store per-step dense interpolants for cheap post-run evaluation.
     pub dense_output: bool,
+    /// Parameters passed to the system functions.
+    pub p: Vec<Float>,
 }
 
 struct SecondOrderAdapter<'a, F> {
     problem: &'a F,
+    p: &'a [Float],
 }
 
 impl<'a, F> SecondOrderAdapter<'a, F> {
-    fn new(problem: &'a F) -> Self {
-        Self { problem }
+    fn new(problem: &'a F, p: &'a [Float]) -> Self {
+        Self { problem, p }
     }
 }
 
@@ -45,12 +48,12 @@ impl<F> SeparableHamiltonianSystem for SecondOrderAdapter<'_, F>
 where
     F: SecondOrderSystem,
 {
-    fn position_derivative(&self, _t: Float, p: &[Float], dqdt: &mut [Float]) {
-        dqdt.copy_from_slice(p);
+    fn position_derivative(&self, _t: Float, p_state: &[Float], _p: &[Float], dqdt: &mut [Float]) {
+        dqdt.copy_from_slice(p_state);
     }
 
-    fn momentum_derivative(&self, t: Float, q: &[Float], dpdt: &mut [Float]) {
-        self.problem.acceleration(t, q, dpdt);
+    fn momentum_derivative(&self, t: Float, q: &[Float], _p: &[Float], dpdt: &mut [Float]) {
+        self.problem.acceleration(t, q, self.p, dpdt);
     }
 }
 
@@ -67,7 +70,8 @@ where
     F: SeparableHamiltonianSystem,
 {
     validate_dimensions(q0, p0)?;
-    solve_separable_impl(f, t0, tf, q0, p0, config)
+    let p_params = config.p.clone();
+    solve_separable_impl(f, t0, tf, q0, p0, &p_params, config)
 }
 
 /// Solve a second-order system `q'' = a(t, q)` using a fixed-step symplectic method.
@@ -83,8 +87,9 @@ where
     F: SecondOrderSystem,
 {
     validate_dimensions(q0, v0)?;
-    let adapter = SecondOrderAdapter::new(f);
-    solve_separable_impl(&adapter, t0, tf, q0, v0, config)
+    let p_params = config.p.clone();
+    let adapter = SecondOrderAdapter::new(f, &p_params);
+    solve_separable_impl(&adapter, t0, tf, q0, v0, &p_params, config)
 }
 
 fn solve_separable_impl<F>(
@@ -93,6 +98,7 @@ fn solve_separable_impl<F>(
     tf: Float,
     q0: &[Float],
     p0: &[Float],
+    p_params: &[Float],
     config: SymplecticConfig,
 ) -> Result<Solution, Error>
 where
@@ -142,7 +148,7 @@ where
     let mut status = Status::Success;
     let mut dense_segments = config.dense_output.then_some(Vec::<DenseSegment>::new());
     let mut start_derivative = if config.dense_output {
-        Some(compute_flat_derivative(f, t, &q, &p, &mut work, &mut nfev))
+        Some(compute_flat_derivative(f, t, &q, &p, p_params, &mut work, &mut nfev))
     } else {
         None
     };
@@ -157,12 +163,12 @@ where
             let h = bounded_step(t, tf, config.step_size);
             let q_old = q.clone();
             let p_old = p.clone();
-            step_once(config.method, f, t, h, &mut q, &mut p, &mut work, &mut nfev);
+            step_once(config.method, f, t, h, &mut q, &mut p, p_params, &mut work, &mut nfev);
             let t_next = t + h;
             if let (Some(segs), Some((dq0, dp0))) =
                 (dense_segments.as_mut(), start_derivative.as_ref())
             {
-                let end = compute_flat_derivative(f, t_next, &q, &p, &mut work, &mut nfev);
+                let end = compute_flat_derivative(f, t_next, &q, &p, p_params, &mut work, &mut nfev);
                 segs.push(build_dense_segment(
                     t, h, &q_old, &p_old, dq0, dp0, &q, &p, &end.0, &end.1,
                 ));
@@ -193,12 +199,12 @@ where
                 let h = bounded_step(t, target, config.step_size);
                 let q_old = q.clone();
                 let p_old = p.clone();
-                step_once(config.method, f, t, h, &mut q, &mut p, &mut work, &mut nfev);
+                step_once(config.method, f, t, h, &mut q, &mut p, p_params, &mut work, &mut nfev);
                 let t_next = t + h;
                 if let (Some(segs), Some((dq0, dp0))) =
                     (dense_segments.as_mut(), start_derivative.as_ref())
                 {
-                    let end = compute_flat_derivative(f, t_next, &q, &p, &mut work, &mut nfev);
+                    let end = compute_flat_derivative(f, t_next, &q, &p, p_params, &mut work, &mut nfev);
                     segs.push(build_dense_segment(
                         t, h, &q_old, &p_old, dq0, dp0, &q, &p, &end.0, &end.1,
                     ));
@@ -229,6 +235,7 @@ where
         y: y_out,
         t_events: Vec::new(),
         y_events: Vec::new(),
+        quad: Vec::new(),
         nfev,
         njev: 0,
         nlu: 0,
@@ -249,17 +256,18 @@ fn step_once<F>(
     h: Float,
     q: &mut [Float],
     p: &mut [Float],
+    p_params: &[Float],
     work: &mut SymplecticWork,
     nfev: &mut usize,
 ) where
     F: SeparableHamiltonianSystem,
 {
     match method {
-        SymplecticMethod::SymplecticEulerKickDrift => kick_drift_step(f, t, h, q, p, work, nfev),
-        SymplecticMethod::SymplecticEulerDriftKick => drift_kick_step(f, t, h, q, p, work, nfev),
-        SymplecticMethod::VelocityVerlet => velocity_verlet_step(f, t, h, q, p, work, nfev),
-        SymplecticMethod::Ruth3 => ruth3_step(f, t, h, q, p, work, nfev),
-        SymplecticMethod::Yoshida4 => yoshida4_step(f, t, h, q, p, work, nfev),
+        SymplecticMethod::SymplecticEulerKickDrift => kick_drift_step(f, t, h, q, p, p_params, work, nfev),
+        SymplecticMethod::SymplecticEulerDriftKick => drift_kick_step(f, t, h, q, p, p_params, work, nfev),
+        SymplecticMethod::VelocityVerlet => velocity_verlet_step(f, t, h, q, p, p_params, work, nfev),
+        SymplecticMethod::Ruth3 => ruth3_step(f, t, h, q, p, p_params, work, nfev),
+        SymplecticMethod::Yoshida4 => yoshida4_step(f, t, h, q, p, p_params, work, nfev),
     }
 }
 
@@ -357,6 +365,7 @@ fn constant_solution(
         y,
         t_events: Vec::new(),
         y_events: Vec::new(),
+        quad: Vec::new(),
         nfev: 0,
         njev: 0,
         nlu: 0,
@@ -373,15 +382,16 @@ fn compute_flat_derivative<F>(
     t: Float,
     q: &[Float],
     p: &[Float],
+    p_params: &[Float],
     work: &mut SymplecticWork,
     nfev: &mut usize,
 ) -> (Vec<Float>, Vec<Float>)
 where
     F: SeparableHamiltonianSystem,
 {
-    f.position_derivative(t, p, &mut work.dqdt);
+    f.position_derivative(t, p, p_params, &mut work.dqdt);
     *nfev += 1;
-    f.momentum_derivative(t, q, &mut work.dpdt);
+    f.momentum_derivative(t, q, p_params, &mut work.dpdt);
     *nfev += 1;
     (work.dqdt.clone(), work.dpdt.clone())
 }

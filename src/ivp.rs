@@ -25,19 +25,19 @@ use crate::{
 /// }
 /// ```
 pub trait FirstOrderSystem {
-    /// Compute the derivative dydx at (x, y).
-    fn derivative(&self, x: Float, y: &[Float], dydx: &mut [Float]);
+    /// Compute the derivative dydx at (x, y, p).
+    fn derivative(&self, x: Float, y: &[Float], p: &[Float], dydx: &mut [Float]);
 
     /// Compute event function values.
     ///
     /// This function is called after each successful step to check for events.
-    /// The solver will find an accurate value of event(x, y) = 0 using root finding.
+    /// The solver will find an accurate value of event(x, y, p) = 0 using root finding.
     /// When the event is found it will be recorded in the solution.
     ///
     /// The `out` slice has length equal to `n_events()`.
     #[inline]
     #[allow(unused_variables)]
-    fn events(&self, x: Float, y: &[Float], out: &mut [Float]) {}
+    fn events(&self, x: Float, y: &[Float], p: &[Float], out: &mut [Float]) {}
 
     /// Number of event functions.
     #[inline]
@@ -52,6 +52,20 @@ pub trait FirstOrderSystem {
         EventConfig::default()
     }
 
+    /// Compute quadrature outputs g(x, y, p).
+    ///
+    /// The results are integrated over the step and returned in the solution.
+    /// The `out` slice has length equal to `n_quadrature()`.
+    #[inline]
+    #[allow(unused_variables)]
+    fn quadrature(&self, x: Float, y: &[Float], p: &[Float], out: &mut [Float]) {}
+
+    /// Number of quadrature outputs.
+    #[inline]
+    fn n_quadrature(&self) -> usize {
+        0
+    }
+
     /// Jacobian matrix J = df/dy
     ///
     /// The jacobian matrix is a matrix of partial derivatives of a vector-valued function.
@@ -64,7 +78,7 @@ pub trait FirstOrderSystem {
     ///
     /// By default, this method uses a finite difference approximation.
     /// Users can override this with an analytical implementation for better efficiency.
-    fn jac(&self, x: Float, y: &[Float], j: &mut Matrix) {
+    fn jac(&self, x: Float, y: &[Float], p: &[Float], j: &mut Matrix) {
         debug_assert!(
             !matches!(j.storage, MatrixStorage::Banded { .. }),
             "Banded Jacobian not supported in default implementation"
@@ -77,7 +91,7 @@ pub trait FirstOrderSystem {
         let mut f_origin = vec![0.0; dim];
 
         // Compute the unperturbed derivative
-        self.derivative(x, y, &mut f_origin);
+        self.derivative(x, y, p, &mut f_origin);
 
         // Use sqrt of machine epsilon for finite differences
         let eps = Float::EPSILON.sqrt();
@@ -94,7 +108,7 @@ pub trait FirstOrderSystem {
             y_perturbed[col] = y_original_j + perturbation;
 
             // Evaluate function with perturbed value
-            self.derivative(x, &y_perturbed, &mut f_perturbed);
+            self.derivative(x, &y_perturbed, p, &mut f_perturbed);
 
             // Restore original value
             y_perturbed[col] = y_original_j;
@@ -106,11 +120,41 @@ pub trait FirstOrderSystem {
         }
     }
 
-    /// Mass matrix M in the system M y' = f(x, y).
+    /// Parameter Jacobian matrix Jp = df/dp
+    ///
+    /// The parameter Jacobian is required for forward sensitivity analysis.
+    /// The matrix `dfdp` is pre-allocated with shape `dim_y x dim_p`.
+    ///
+    /// By default, this method uses a finite difference approximation.
+    fn parameter_derivative(&self, x: Float, y: &[Float], p: &[Float], dfdp: &mut Matrix) {
+        let dim_y = y.len();
+        let dim_p = p.len();
+        let mut p_perturbed = p.to_vec();
+        let mut f_perturbed = vec![0.0; dim_y];
+        let mut f_origin = vec![0.0; dim_y];
+
+        self.derivative(x, y, p, &mut f_origin);
+
+        let eps = Float::EPSILON.sqrt();
+
+        for col in 0..dim_p {
+            let p_original_j = p[col];
+            let perturbation = eps * p_original_j.abs().max(1.0);
+            p_perturbed[col] = p_original_j + perturbation;
+            self.derivative(x, y, &p_perturbed, &mut f_perturbed);
+            p_perturbed[col] = p_original_j;
+
+            for row in 0..dim_y {
+                dfdp[(row, col)] = (f_perturbed[row] - f_origin[row]) / perturbation;
+            }
+        }
+    }
+
+    /// Mass matrix M in the system M y' = f(x, y, p).
     ///
     /// The mass matrix is only supported for non-explicit solvers.
     /// e.g., Radau and BDF. By default, this is the identity matrix,
-    /// which results in the standard form y' = f(x, y).
+    /// which results in the standard form y' = f(x, y, p).
     ///
     /// The mass matrix `m` is a pre-allocated `dim x dim` matrix,
     /// where `dim` is the length of `y`. The user can fill the matrix via Index/IndexMut,
@@ -122,20 +166,20 @@ pub trait FirstOrderSystem {
 
 /// Separable Hamiltonian system in canonical form.
 ///
-/// The state is represented as `(q, p)` with split dynamics
-/// `q' = dT/dp(p)` and `p' = -dV/dq(q)`.
+/// The state is represented as `(q, p_state)` with split dynamics
+/// `q' = dT/dp(p_state, p)` and `p_state' = -dV/dq(q, p)`.
 pub trait SeparableHamiltonianSystem {
-    /// Evaluate the position derivative `q' = dT/dp(p)`.
-    fn position_derivative(&self, t: Float, p: &[Float], dqdt: &mut [Float]);
+    /// Evaluate the position derivative `q' = dT/dp(p_state, p)`.
+    fn position_derivative(&self, t: Float, p_state: &[Float], p: &[Float], dqdt: &mut [Float]);
 
-    /// Evaluate the momentum derivative `p' = -dV/dq(q)`.
-    fn momentum_derivative(&self, t: Float, q: &[Float], dpdt: &mut [Float]);
+    /// Evaluate the momentum derivative `p_state' = -dV/dq(q, p)`.
+    fn momentum_derivative(&self, t: Float, q: &[Float], p: &[Float], dpdt: &mut [Float]);
 }
 
-/// Second-order system `q'' = a(t, q)`.
+/// Second-order system `q'' = a(t, q, p)`.
 ///
 /// This is a convenience problem definition for structured symplectic methods.
 pub trait SecondOrderSystem {
-    /// Evaluate the acceleration `q'' = a(t, q)`.
-    fn acceleration(&self, t: Float, q: &[Float], a: &mut [Float]);
+    /// Evaluate the acceleration `q'' = a(t, q, p)`.
+    fn acceleration(&self, t: Float, q: &[Float], p: &[Float], a: &mut [Float]);
 }

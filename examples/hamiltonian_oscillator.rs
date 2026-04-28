@@ -5,11 +5,11 @@ use ivp::prelude::*;
 struct HarmonicHamiltonian;
 
 impl SeparableHamiltonianSystem for HarmonicHamiltonian {
-    fn position_derivative(&self, _t: f64, p: &[f64], dqdt: &mut [f64]) {
-        dqdt[0] = p[0];
+    fn position_derivative(&self, _t: f64, p_state: &[f64], _p: &[f64], dqdt: &mut [f64]) {
+        dqdt[0] = p_state[0];
     }
 
-    fn momentum_derivative(&self, _t: f64, q: &[f64], dpdt: &mut [f64]) {
+    fn momentum_derivative(&self, _t: f64, q: &[f64], _p: &[f64], dpdt: &mut [f64]) {
         dpdt[0] = -q[0];
     }
 }

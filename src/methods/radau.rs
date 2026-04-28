@@ -104,6 +104,7 @@ impl RADAU {
     /// - `f`: Right‑hand side implementing [`FirstOrderSystem`] (optionally providing `jac`, `mass`).
     /// - `x0`: Initial abscissa; `xend`: final abscissa.
     /// - `y0`: Initial state.
+    /// - `p`: Parameters passed to the system and callback.
     /// - `rtol`, `atol`: Relative/absolute tolerances (scalar or vector).
     ///
     /// ## Output Control
@@ -118,6 +119,7 @@ impl RADAU {
         f: &F,
         x0: Float,
         y0: &[Float],
+        p: &mut [Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -328,7 +330,7 @@ impl RADAU {
         // --- Initializations ---
 
         let mut f0 = vec![0.0; n];
-        f.derivative(x, &y, &mut f0);
+        f.derivative(x, &y, p, &mut f0);
         evals.ode += 1;
 
         // Optional output scheduling
@@ -336,7 +338,7 @@ impl RADAU {
 
         // Initial callback (xold=xc; no interpolant yet)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout(xold, &mut x, &mut y, None) {
+            match sol.solout(xold, &mut x, &mut y, p, None) {
                 ControlFlag::Continue => {}
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult::new(
@@ -348,7 +350,7 @@ impl RADAU {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Update derivatives at new (x, y).
-                    f.derivative(x, &y, &mut f0);
+                    f.derivative(x, &y, p, &mut f0);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -369,7 +371,7 @@ impl RADAU {
         'main: loop {
             if call_jac {
                 // Jacobian and mass at (x, y)
-                f.jac(x, &y, &mut jac);
+                f.jac(x, &y, p, &mut jac);
                 evals.jac += 1;
             }
 
@@ -499,15 +501,15 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] = y[i] + z1[i];
                 }
-                f.derivative(x + C1 * h, &cont[..n], &mut z1);
+                f.derivative(x + C1 * h, &cont[..n], p, &mut z1);
                 for i in 0..n {
                     cont[i] = y[i] + z2[i];
                 }
-                f.derivative(x + C2 * h, &cont[..n], &mut z2);
+                f.derivative(x + C2 * h, &cont[..n], p, &mut z2);
                 for i in 0..n {
                     cont[i] = y[i] + z3[i];
                 }
-                f.derivative(xph, &cont[..n], &mut z3);
+                f.derivative(xph, &cont[..n], p, &mut z3);
                 evals.ode += 3;
 
                 // --- Solve the linear systems ---
@@ -650,7 +652,7 @@ impl RADAU {
                 for i in 0..n {
                     cont[i] += y[i];
                 }
-                f.derivative(x, &cont[..n], &mut f1);
+                f.derivative(x, &cont[..n], p, &mut f1);
                 evals.ode += 1;
 
                 // contv = f1 + f2; solve again
@@ -708,7 +710,7 @@ impl RADAU {
                 }
 
                 // New derivative at x+h
-                f.derivative(x, &y, &mut f0);
+                f.derivative(x, &y, p, &mut f0);
                 evals.ode += 1;
 
                 // Compute error scale
@@ -725,7 +727,7 @@ impl RADAU {
                     } else {
                         None
                     };
-                    match sol.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
+                    match sol.solout(xold, &mut x, &mut y, p, interpolant.as_ref()) {
                         ControlFlag::Continue => {}
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
@@ -733,7 +735,7 @@ impl RADAU {
                         }
                         ControlFlag::ModifiedSolution => {
                             // Update derivatives at new (x, y).
-                            f.derivative(x, &y, &mut f0);
+                            f.derivative(x, &y, p, &mut f0);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {

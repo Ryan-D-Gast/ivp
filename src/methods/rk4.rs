@@ -36,7 +36,7 @@ impl Default for RK4 {
 impl RK4 {
     /// Classical explicit Runge–Kutta 4 (RK4) — fixed-step solver with optional dense output.
     ///
-    /// This function integrates the autonomous system `y' = f(x, y)` from `x` to
+    /// This function integrates the autonomous system `y' = f(x, y, p)` from `x` to
     /// `xend` using a constant step size `h`, advancing the state buffer `y`
     /// in-place. It can optionally provide dense-output coefficients for continuous
     /// interpolation inside each step and call a user-provided `SolOut` hook.
@@ -48,6 +48,7 @@ impl RK4 {
     /// - `x`: Initial independent variable value.
     /// - `xend`: Final independent variable value.
     /// - `y`: Mutable slice for the initial state; on success contains the state at `xend`.
+    /// - `p`: Mutable slice for parameters.
     /// - `h`: Fixed step size (its sign must match `xend - x`).
     ///
     /// ## Output Control
@@ -68,6 +69,7 @@ impl RK4 {
         f: &F,
         x0: Float,
         y0: &[Float],
+        p: &mut [Float],
         xend: Float,
         h: Float,
         mut solout: Option<&mut S>,
@@ -115,11 +117,11 @@ impl RK4 {
         let mut xout: Option<Float> = None;
 
         // --- Initializations ---
-        f.derivative(x, &y, &mut k1);
+        f.derivative(x, &y, p, &mut k1);
 
         // Initial SolOut call (no interpolator yet; xold == x)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout(xold, &mut x, &mut y, None) {
+            match sol.solout(xold, &mut x, &mut y, p, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -129,7 +131,7 @@ impl RK4 {
                     });
                 }
                 ControlFlag::ModifiedSolution => {
-                    f.derivative(x, &y, &mut k1);
+                    f.derivative(x, &y, p, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -157,17 +159,17 @@ impl RK4 {
             for i in 0..n {
                 yt[i] = y[i] + h * A21 * k1[i];
             }
-            f.derivative(x + C2 * h, &yt, &mut k2);
+            f.derivative(x + C2 * h, &yt, p, &mut k2);
 
             for i in 0..n {
                 yt[i] = y[i] + h * A32 * k2[i];
             }
-            f.derivative(x + C3 * h, &yt, &mut k3);
+            f.derivative(x + C3 * h, &yt, p, &mut k3);
 
             for i in 0..n {
                 yt[i] = y[i] + h * A43 * k3[i];
             }
-            f.derivative(x + C4 * h, &yt, &mut k4);
+            f.derivative(x + C4 * h, &yt, p, &mut k4);
 
             xold = x;
             yt.copy_from_slice(&y);
@@ -177,7 +179,7 @@ impl RK4 {
             for i in 0..n {
                 y[i] += h * (B1 * k1[i] + B2 * k2[i] + B3 * k3[i] + B4 * k4[i]);
             }
-            f.derivative(x, &y, &mut k1);
+            f.derivative(x, &y, p, &mut k1);
 
             evals.ode += 4;
             steps.total += 1;
@@ -200,14 +202,14 @@ impl RK4 {
                 } else {
                     None
                 };
-                match sol.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
+                match sol.solout(xold, &mut x, &mut y, p, interpolant.as_ref()) {
                     ControlFlag::Interrupt => {
                         status = Status::UserInterrupt;
                         break;
                     }
                     ControlFlag::ModifiedSolution => {
                         // Recompute k1 at new (x, y).
-                        f.derivative(x, &y, &mut k1);
+                        f.derivative(x, &y, p, &mut k1);
                         evals.ode += 1;
                     }
                     ControlFlag::XOut(xo) => {
@@ -229,6 +231,7 @@ impl RK4 {
 
     /// Continuous output function for RK4 using cubic Hermite interpolation.
     pub fn interpolate(xi: Float, yi: &mut [Float], cont: &[Float], xold: Float, h: Float) {
+        let n = cont.len() / 4;
         let t = (xi - xold) / h;
         let t2 = t * t;
         let t3 = t2 * t;
@@ -236,8 +239,8 @@ impl RK4 {
         let h10 = t3 - 2.0 * t2 + t;
         let h01 = -2.0 * t3 + 3.0 * t2;
         let h11 = t3 - t2;
-        let n = yi.len();
-        for i in 0..n {
+        let n_states = yi.len();
+        for i in 0..n_states {
             yi[i] = h00 * cont[i]
                 + h10 * h * cont[n + i]
                 + h01 * cont[3 * n + i]

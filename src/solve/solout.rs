@@ -59,6 +59,8 @@ where
     y_mid_buf: Vec<Float>,
     /// Buffer for midpoint event values during bisection
     g_mid_buf: Vec<Float>,
+    /// Current values of quadrature integrals
+    quad: Vec<Float>,
 }
 
 type SolOutPayload = (
@@ -67,6 +69,7 @@ type SolOutPayload = (
     Vec<Vec<Float>>,
     Vec<Vec<Vec<Float>>>,
     Vec<(Vec<Float>, Float, Float)>,
+    Vec<Float>, // Quadrature results
 );
 
 impl<'a, F> DefaultSolOut<'a, F>
@@ -87,6 +90,8 @@ where
         for i in 0..n_events {
             event_config.push(ode.event_config(i));
         }
+
+        let n_quad = ode.n_quadrature();
 
         Self {
             ode,
@@ -110,6 +115,7 @@ where
             g_curr_buf: vec![0.0; n_events],
             y_mid_buf: vec![0.0; n_states],
             g_mid_buf: vec![0.0; n_events],
+            quad: vec![0.0; n_quad],
         }
     }
 
@@ -121,7 +127,53 @@ where
             self.t_events,
             self.y_events,
             self.dense_segs,
+            self.quad,
         )
+    }
+
+    /// Perform numerical quadrature over a step [xold, x] using the interpolant.
+    ///
+    /// Uses a 5-point Gauss-Legendre quadrature rule.
+    fn integrate_quadrature(
+        &mut self,
+        xold: Float,
+        x: Float,
+        p: &[Float],
+        interpolant: &StepInterpolant<'_>,
+    ) {
+        let n_quad = self.ode.n_quadrature();
+        if n_quad == 0 {
+            return;
+        }
+
+        // 5-point Gauss-Legendre weights and nodes on [-1, 1]
+        const W: [Float; 5] = [
+            0.23692688505618908,
+            0.47862867049936647,
+            0.5688888888888889,
+            0.47862867049936647,
+            0.23692688505618908,
+        ];
+        const X: [Float; 5] = [
+            -0.906179845938664,
+            -0.5384693101056831,
+            0.0,
+            0.5384693101056831,
+            0.906179845938664,
+        ];
+
+        let h = x - xold;
+        let mut g_val = vec![0.0; n_quad];
+        let mut y_interp = vec![0.0; self.y_mid_buf.len()];
+
+        for i in 0..5 {
+            let t = xold + 0.5 * h * (X[i] + 1.0);
+            interpolant.interpolate(t, &mut y_interp);
+            self.ode.quadrature(t, &y_interp, p, &mut g_val);
+            for j in 0..n_quad {
+                self.quad[j] += 0.5 * h * W[i] * g_val[j];
+            }
+        }
     }
 }
 
@@ -131,8 +183,16 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
         xold: Float,
         x: &mut Float,
         y: &mut [Float],
+        p: &mut [Float],
         interpolant: Option<&StepInterpolant<'_>>,
     ) -> ControlFlag {
+        // ============================================================================
+        // Quadrature Integration
+        // ============================================================================
+        if let Some(interp) = interpolant {
+            self.integrate_quadrature(xold, *x, p, interp);
+        }
+
         // ============================================================================
         // Dense Output Collection
         // ============================================================================
@@ -161,7 +221,7 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
 
         let n_events = self.ode.n_events();
         if n_events > 0 {
-            self.ode.events(*x, y, &mut self.g_curr_buf);
+            self.ode.events(*x, y, p, &mut self.g_curr_buf);
 
             // If this is the first step (yold is empty), just initialize prev_event
             if self.yold.is_empty() {
@@ -241,15 +301,15 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
                                     if a == c {
                                         // Linear interpolation (secant)
                                         s = fb / fa;
-                                        let p = 2.0 * xm * s;
-                                        let q = 1.0 - s;
-                                        let (p, q) = if q > 0.0 { (-p, q) } else { (p, -q) };
+                                        let p_val = 2.0 * xm * s;
+                                        let q_val = 1.0 - s;
+                                        let (p_val, q_val) = if q_val > 0.0 { (-p_val, q_val) } else { (p_val, -q_val) };
 
-                                        if 2.0 * p
-                                            < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs())
+                                        if 2.0 * p_val
+                                            < (3.0 * xm * q_val - (tol1 * q_val).abs()).min((e * q_val).abs())
                                         {
                                             e = d;
-                                            d = p / q;
+                                            d = p_val / q_val;
                                         } else {
                                             d = xm;
                                             e = d;
@@ -259,17 +319,17 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
                                         let q_val = fa / fc;
                                         let r = fb / fc;
                                         s = fb / fa;
-                                        let p = s
+                                        let p_val = s
                                             * (2.0 * xm * q_val * (q_val - r)
                                                 - (b - a) * (r - 1.0));
-                                        let q = (q_val - 1.0) * (r - 1.0) * (s - 1.0);
-                                        let (p, q) = if q > 0.0 { (-p, q) } else { (p, -q) };
+                                        let q_val = (q_val - 1.0) * (r - 1.0) * (s - 1.0);
+                                        let (p_val, q_val) = if q_val > 0.0 { (-p_val, q_val) } else { (p_val, -q_val) };
 
-                                        if 2.0 * p
-                                            < (3.0 * xm * q - (tol1 * q).abs()).min((e * q).abs())
+                                        if 2.0 * p_val
+                                            < (3.0 * xm * q_val - (tol1 * q_val).abs()).min((e * q_val).abs())
                                         {
                                             e = d;
-                                            d = p / q;
+                                            d = p_val / q_val;
                                         } else {
                                             d = xm;
                                             e = d;
@@ -292,7 +352,7 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
 
                                 // Evaluate function at new point
                                 interpolant.unwrap().interpolate(b, &mut self.y_mid_buf);
-                                self.ode.events(b, &self.y_mid_buf, &mut self.g_mid_buf);
+                                self.ode.events(b, &self.y_mid_buf, p, &mut self.g_mid_buf);
                                 fb = self.g_mid_buf[i];
                             }
 

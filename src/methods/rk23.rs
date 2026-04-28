@@ -64,8 +64,9 @@ impl RK23 {
     /// ## Defining the Problem
     /// - `f`: Right‑hand side implementing [`FirstOrderSystem`].
     /// - `x0`: Initial independent variable value.
-    /// - `xend`: Final independent variable value.
     /// - `y0`: Slice containing the initial state.
+    /// - `p`: Parameters passed to the system and callback.
+    /// - `xend`: Final independent variable value.
     /// - `rtol`, `atol`: Relative and absolute tolerances (see [`Tolerance`]).
     ///
     /// ## Output Control
@@ -85,6 +86,7 @@ impl RK23 {
         f: &F,
         x0: Float,
         y0: &[Float],
+        p: &mut [Float],
         xend: Float,
         rtol: Tolerance,
         atol: Tolerance,
@@ -153,20 +155,20 @@ impl RK23 {
         let posneg = (xend - x).signum();
 
         // --- Initializations ---
-        f.derivative(x, &y, &mut k1);
+        f.derivative(x, &y, p, &mut k1);
         evals.ode += 1;
         let mut h = match self.first_step {
             Some(h0) => h0.abs() * posneg,
             None => {
                 evals.ode += 1;
                 hinit(
-                    f, x, &y, posneg, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
+                    f, x, &y, p, posneg, &k1, &mut k2, &mut k3, 3, hmax, &atol, &rtol,
                 )
             }
         };
         // Initial SolOut call (no interpolator yet; xold == x)
         if let Some(sol) = solout.as_mut() {
-            match sol.solout(xold, &mut x, &mut y, None) {
+            match sol.solout(xold, &mut x, &mut y, p, None) {
                 ControlFlag::Interrupt => {
                     return Ok(IntegrationResult {
                         h,
@@ -177,7 +179,7 @@ impl RK23 {
                 }
                 ControlFlag::ModifiedSolution => {
                     // Recompute k1 at new (x, y).
-                    f.derivative(x, &y, &mut k1);
+                    f.derivative(x, &y, p, &mut k1);
                     evals.ode += 1;
                 }
                 ControlFlag::XOut(xo) => {
@@ -204,13 +206,13 @@ impl RK23 {
             for i in 0..n {
                 yt[i] = y[i] + h * A21 * k1[i];
             }
-            f.derivative(x + C2 * h, &yt, &mut k2);
+            f.derivative(x + C2 * h, &yt, p, &mut k2);
 
             // Stage 3
             for i in 0..n {
                 yt[i] = y[i] + h * A32 * k2[i];
             }
-            f.derivative(x + C3 * h, &yt, &mut k3);
+            f.derivative(x + C3 * h, &yt, p, &mut k3);
 
             // Compute solution and error estimate
             for i in 0..n {
@@ -218,7 +220,7 @@ impl RK23 {
             }
 
             // Stage 4/1: derivative at new point, also used as k1 if accepted.
-            f.derivative(x + h, &yt, &mut k4);
+            f.derivative(x + h, &yt, p, &mut k4);
 
             evals.ode += 3;
 
@@ -264,7 +266,7 @@ impl RK23 {
                     } else {
                         None
                     };
-                    match sol.solout(xold, &mut x, &mut y, interpolant.as_ref()) {
+                    match sol.solout(xold, &mut x, &mut y, p, interpolant.as_ref()) {
                         ControlFlag::Interrupt => {
                             status = Status::UserInterrupt;
                             break;
@@ -272,7 +274,7 @@ impl RK23 {
                         ControlFlag::ModifiedSolution => {
                             // Update with modified solution
                             // Recompute k1 at new (x, y).
-                            f.derivative(x, &y, &mut k1);
+                            f.derivative(x, &y, p, &mut k1);
                             evals.ode += 1;
                         }
                         ControlFlag::XOut(xo) => {

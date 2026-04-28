@@ -4,7 +4,7 @@ use ivp::prelude::*;
 struct HarmonicSecondOrder;
 
 impl SecondOrderSystem for HarmonicSecondOrder {
-    fn acceleration(&self, _t: f64, q: &[f64], a: &mut [f64]) {
+    fn acceleration(&self, _t: f64, q: &[f64], _p: &[f64], a: &mut [f64]) {
         a[0] = -q[0];
     }
 }
@@ -12,11 +12,11 @@ impl SecondOrderSystem for HarmonicSecondOrder {
 struct HarmonicHamiltonian;
 
 impl SeparableHamiltonianSystem for HarmonicHamiltonian {
-    fn position_derivative(&self, _t: f64, p: &[f64], dqdt: &mut [f64]) {
+    fn position_derivative(&self, _t: f64, p: &[f64], _params: &[f64], dqdt: &mut [f64]) {
         dqdt[0] = p[0];
     }
 
-    fn momentum_derivative(&self, _t: f64, q: &[f64], dpdt: &mut [f64]) {
+    fn momentum_derivative(&self, _t: f64, q: &[f64], _params: &[f64], dpdt: &mut [f64]) {
         dpdt[0] = -q[0];
     }
 }
