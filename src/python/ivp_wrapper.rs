@@ -395,7 +395,12 @@ impl<'py> PythonIVP<'py> {
     }
 
     /// Build call arguments tuple: (t, y, p, *args)
-    fn build_call_args(&self, x: Float, y_arr: Bound<'py, PyArray1<Float>>, p_arr: Bound<'py, PyArray1<Float>>) -> Bound<'py, PyTuple> {
+    fn build_call_args(
+        &self,
+        x: Float,
+        y_arr: Bound<'py, PyArray1<Float>>,
+        p_arr: Bound<'py, PyArray1<Float>>,
+    ) -> Bound<'py, PyTuple> {
         build_call_args(self.py, self.args.as_ref(), x, y_arr, p_arr)
     }
 

@@ -85,7 +85,7 @@ use ivp::prelude::*;
 struct ExponentialDecay;
 
 impl FirstOrderSystem for ExponentialDecay {
-    fn derivative(&self, _t: f64, y: &[f64], dydt: &mut [f64]) {
+    fn derivative(&self, _t: f64, y: &[f64], _p: &[f64], dydt: &mut [f64]) {
         dydt[0] = -0.5 * y[0];
     }
 }
@@ -121,7 +121,7 @@ use ivp::prelude::*;
 struct HarmonicOscillator;
 
 impl SecondOrderSystem for HarmonicOscillator {
-    fn acceleration(&self, _t: f64, q: &[f64], a: &mut [f64]) {
+    fn acceleration(&self, _t: f64, q: &[f64], _p: &[f64], a: &mut [f64]) {
         a[0] = -q[0];
     }
 }

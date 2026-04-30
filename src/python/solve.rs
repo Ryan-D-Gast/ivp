@@ -140,11 +140,12 @@ pub fn solve_ivp_py<'py>(
                     let mut y0_augmented = vec![0.0; dim_y + dim_y * dim_p];
                     y0_augmented[0..dim_y].copy_from_slice(&y0_vec);
 
-                    let sensitivity_system = crate::solve::sensitivity::ForwardSensitivitySystem::new(
-                        &python_ivp,
-                        dim_y,
-                        dim_p,
-                    );
+                    let sensitivity_system =
+                        crate::solve::sensitivity::ForwardSensitivitySystem::new(
+                            &python_ivp,
+                            dim_y,
+                            dim_p,
+                        );
 
                     Ivp::first_order(&sensitivity_system, t0, tf, &y0_augmented)
                         .p(p_vec.clone())
@@ -220,20 +221,18 @@ pub fn solve_ivp_py<'py>(
         };
 
         match result {
-            Ok((sol, has_events, is_constant_jac)) => {
-                build_result(
-                    py,
-                    sol,
-                    has_events,
-                    is_constant_jac,
-                    dim_y,
-                    dim_p,
-                    forward_sensitivity,
-                    fun.clone().unbind(),
-                    args.clone().map(|a| a.unbind()),
-                    p.clone().map(|pv| pv.unbind()),
-                )
-            }
+            Ok((sol, has_events, is_constant_jac)) => build_result(
+                py,
+                sol,
+                has_events,
+                is_constant_jac,
+                dim_y,
+                dim_p,
+                forward_sensitivity,
+                fun.clone().unbind(),
+                args.clone().map(|a| a.unbind()),
+                p.clone().map(|pv| pv.unbind()),
+            ),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Solver failed: {:?}",
                 e
@@ -650,8 +649,16 @@ fn build_result<'py>(
             }
         }
         (
-            PyArray1::from_vec(py, y_vals).reshape((dim_y, n_steps))?.into_any().unbind(),
-            Some(PyArray1::from_vec(py, s_vals).reshape((dim_p, dim_y, n_steps))?.into_any().unbind()),
+            PyArray1::from_vec(py, y_vals)
+                .reshape((dim_y, n_steps))?
+                .into_any()
+                .unbind(),
+            Some(
+                PyArray1::from_vec(py, s_vals)
+                    .reshape((dim_p, dim_y, n_steps))?
+                    .into_any()
+                    .unbind(),
+            ),
         )
     } else {
         let n_states = if n_steps > 0 { sol.y[0].len() } else { 0 };
@@ -662,7 +669,10 @@ fn build_result<'py>(
             }
         }
         (
-            PyArray1::from_vec(py, y_transposed).reshape((n_states, n_steps))?.into_any().unbind(),
+            PyArray1::from_vec(py, y_transposed)
+                .reshape((n_states, n_steps))?
+                .into_any()
+                .unbind(),
             None,
         )
     };

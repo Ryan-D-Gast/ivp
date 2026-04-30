@@ -1,11 +1,7 @@
 //! Adjoint sensitivity analysis implementation.
 
 use crate::{
-    Float,
-    error::Error,
-    ivp::FirstOrderSystem,
-    matrix::Matrix,
-    solve::solution::Solution,
+    Float, error::Error, ivp::FirstOrderSystem, matrix::Matrix, solve::solution::Solution,
 };
 
 /// Adjoint sensitivity solver.
@@ -41,13 +37,18 @@ impl<'a, F: FirstOrderSystem> AdjointSolver<'a, F> {
     {
         let dim_y = lambda_tf.len();
         let dim_p = p.len();
-        let (t0, tf) = self.forward_sol.sol_span().ok_or(crate::error::Error::Interpolation(crate::error::InterpolationError::NotEnabled))?;
+        let (t0, tf) = self
+            .forward_sol
+            .sol_span()
+            .ok_or(crate::error::Error::Interpolation(
+                crate::error::InterpolationError::NotEnabled,
+            ))?;
 
         // Adjoint state lambda + gradient quadrature
         // State is [lambda (dim_y), gradient (dim_p)]
         let mut y0_adj = vec![0.0; dim_y + dim_p];
         y0_adj[0..dim_y].copy_from_slice(lambda_tf);
-        
+
         // Initial gradient contribution from terminal cost
         let mut dhdp_val = vec![0.0; dim_p];
         let y_tf = self.forward_sol.sol(tf)?;
@@ -67,8 +68,7 @@ impl<'a, F: FirstOrderSystem> AdjointSolver<'a, F> {
         };
 
         // Solve backward from tf to t0
-        let sol = crate::solve::Ivp::first_order(&adjoint_system, tf, t0, &y0_adj)
-            .solve()?;
+        let sol = crate::solve::Ivp::first_order(&adjoint_system, tf, t0, &y0_adj).solve()?;
 
         let last_y = &sol.y[sol.y.len() - 1];
         let gradient = last_y[dim_y..dim_y + dim_p].to_vec();
@@ -98,7 +98,10 @@ where
         let (dlambda, dgrad) = dydt_adj.split_at_mut(self.dim_y);
 
         // 1. Interpolate forward solution at t and extract base state
-        let y_full = self.forward_sol.sol(t).unwrap_or_else(|_| vec![0.0; self.forward_sol.y[0].len()]);
+        let y_full = self
+            .forward_sol
+            .sol(t)
+            .unwrap_or_else(|_| vec![0.0; self.forward_sol.y[0].len()]);
         let y = &y_full[0..self.dim_y];
 
         // 2. Jacobian J = df/dy
@@ -121,7 +124,8 @@ where
         // 5. Gradient quadrature: grad' = -(lambda^T * df/dp + dg/dp)
         // Negated because we integrate backwards from tf to t0.
         let mut dfdp = Matrix::full(self.dim_y, self.dim_p);
-        self.base.parameter_derivative(t, y, &self.p_params, &mut dfdp);
+        self.base
+            .parameter_derivative(t, y, &self.p_params, &mut dfdp);
 
         let mut dgdp_val = vec![0.0; self.dim_p];
         (self.dgdp)(t, y, &self.p_params, &mut dgdp_val);

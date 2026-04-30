@@ -303,10 +303,15 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
                                         s = fb / fa;
                                         let p_val = 2.0 * xm * s;
                                         let q_val = 1.0 - s;
-                                        let (p_val, q_val) = if q_val > 0.0 { (-p_val, q_val) } else { (p_val, -q_val) };
+                                        let (p_val, q_val) = if q_val > 0.0 {
+                                            (-p_val, q_val)
+                                        } else {
+                                            (p_val, -q_val)
+                                        };
 
                                         if 2.0 * p_val
-                                            < (3.0 * xm * q_val - (tol1 * q_val).abs()).min((e * q_val).abs())
+                                            < (3.0 * xm * q_val - (tol1 * q_val).abs())
+                                                .min((e * q_val).abs())
                                         {
                                             e = d;
                                             d = p_val / q_val;
@@ -323,10 +328,15 @@ impl<'a, F: FirstOrderSystem> SolOut for DefaultSolOut<'a, F> {
                                             * (2.0 * xm * q_val * (q_val - r)
                                                 - (b - a) * (r - 1.0));
                                         let q_val = (q_val - 1.0) * (r - 1.0) * (s - 1.0);
-                                        let (p_val, q_val) = if q_val > 0.0 { (-p_val, q_val) } else { (p_val, -q_val) };
+                                        let (p_val, q_val) = if q_val > 0.0 {
+                                            (-p_val, q_val)
+                                        } else {
+                                            (p_val, -q_val)
+                                        };
 
                                         if 2.0 * p_val
-                                            < (3.0 * xm * q_val - (tol1 * q_val).abs()).min((e * q_val).abs())
+                                            < (3.0 * xm * q_val - (tol1 * q_val).abs())
+                                                .min((e * q_val).abs())
                                         {
                                             e = d;
                                             d = p_val / q_val;

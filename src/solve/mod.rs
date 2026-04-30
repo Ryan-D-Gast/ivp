@@ -1,15 +1,15 @@
 //! High-level solve module: SciPy-like API pieces split into submodules.
 
+pub mod adjoint;
 mod builder;
 pub mod cont;
 pub mod event;
 mod first_order;
 mod options;
+pub mod sensitivity;
 mod solout;
 pub mod solution;
 mod symplectic;
-pub mod sensitivity;
-pub mod adjoint;
 
 // Required exports for the public solve APIs.
 pub use builder::{FirstOrderIvp, HamiltonianIvp, Ivp, SecondOrderIvp};
