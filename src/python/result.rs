@@ -1,18 +1,18 @@
 //! Result object for Python.
 //!
-//! Provides the `OdeResult` class that contains the solution and metadata,
+//! Provides the `OdeResult` class that contains the solution,
 //! matching SciPy's return value structure.
 
-use pyo3::prelude::*;
-use pyo3::types::PyTuple;
 use numpy::{PyArray1, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use pyo3::types::PyTuple;
 
+use super::conversion::extract_float_array;
+use super::ivp_wrapper::PythonIVP;
+use super::solution::PyOdeSolution;
 use crate::Float;
 use crate::solve::adjoint::AdjointSolver;
-use super::solution::PyOdeSolution;
-use super::ivp_wrapper::PythonIVP;
-use super::conversion::extract_float_array;
 
 /// Result object returned by `solve_ivp`.
 ///
@@ -250,6 +250,10 @@ fn extract_vector_to_slice(result: &Bound<'_, PyAny>, out: &mut [Float]) {
     if vec.len() == out.len() {
         out.copy_from_slice(&vec);
     } else {
-        panic!("Callback returned vector of wrong size: expected {}, got {}", out.len(), vec.len());
+        panic!(
+            "Callback returned vector of wrong size: expected {}, got {}",
+            out.len(),
+            vec.len()
+        );
     }
 }

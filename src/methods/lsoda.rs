@@ -1064,7 +1064,8 @@ where
 
     loop {
         let corrector = stoda_corrector_loop(system, y, p, work, state);
-        match corrector.status {            CorrectorStatus::Retry => continue,
+        match corrector.status {
+            CorrectorStatus::Retry => continue,
             CorrectorStatus::NoConvergence => {
                 if !stoda_handle_corrector_failure(state, work, told, &mut ncf) {
                     state.hold = state.h;

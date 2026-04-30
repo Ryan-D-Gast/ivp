@@ -1,10 +1,6 @@
 //! Forward sensitivity analysis implementation.
 
-use crate::{
-    Float,
-    ivp::FirstOrderSystem,
-    matrix::Matrix,
-};
+use crate::{Float, ivp::FirstOrderSystem, matrix::Matrix};
 
 /// Wrapper that augments a system with forward sensitivity equations.
 ///

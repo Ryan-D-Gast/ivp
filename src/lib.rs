@@ -19,7 +19,7 @@
 //!
 //! struct SHO;
 //! impl FirstOrderSystem for SHO {
-//!     fn derivative(&self, _x: f64, y: &[f64], dydx: &mut [f64]) {
+//!     fn derivative(&self, _x: f64, y: &[f64], _p: &[f64], dydx: &mut [f64]) {
 //!         dydx[0] = y[1];
 //!         dydx[1] = -y[0];
 //!     }
@@ -60,7 +60,7 @@
 //!
 //! struct HarmonicOscillator;
 //! impl SecondOrderSystem for HarmonicOscillator {
-//!     fn acceleration(&self, _t: f64, q: &[f64], a: &mut [f64]) {
+//!     fn acceleration(&self, _t: f64, q: &[f64], _p: &[f64], a: &mut [f64]) {
 //!         a[0] = -q[0];
 //!     }
 //! }

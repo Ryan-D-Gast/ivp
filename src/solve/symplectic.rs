@@ -148,7 +148,9 @@ where
     let mut status = Status::Success;
     let mut dense_segments = config.dense_output.then_some(Vec::<DenseSegment>::new());
     let mut start_derivative = if config.dense_output {
-        Some(compute_flat_derivative(f, t, &q, &p, p_params, &mut work, &mut nfev))
+        Some(compute_flat_derivative(
+            f, t, &q, &p, p_params, &mut work, &mut nfev,
+        ))
     } else {
         None
     };
@@ -163,12 +165,23 @@ where
             let h = bounded_step(t, tf, config.step_size);
             let q_old = q.clone();
             let p_old = p.clone();
-            step_once(config.method, f, t, h, &mut q, &mut p, p_params, &mut work, &mut nfev);
+            step_once(
+                config.method,
+                f,
+                t,
+                h,
+                &mut q,
+                &mut p,
+                p_params,
+                &mut work,
+                &mut nfev,
+            );
             let t_next = t + h;
             if let (Some(segs), Some((dq0, dp0))) =
                 (dense_segments.as_mut(), start_derivative.as_ref())
             {
-                let end = compute_flat_derivative(f, t_next, &q, &p, p_params, &mut work, &mut nfev);
+                let end =
+                    compute_flat_derivative(f, t_next, &q, &p, p_params, &mut work, &mut nfev);
                 segs.push(build_dense_segment(
                     t, h, &q_old, &p_old, dq0, dp0, &q, &p, &end.0, &end.1,
                 ));
@@ -199,12 +212,23 @@ where
                 let h = bounded_step(t, target, config.step_size);
                 let q_old = q.clone();
                 let p_old = p.clone();
-                step_once(config.method, f, t, h, &mut q, &mut p, p_params, &mut work, &mut nfev);
+                step_once(
+                    config.method,
+                    f,
+                    t,
+                    h,
+                    &mut q,
+                    &mut p,
+                    p_params,
+                    &mut work,
+                    &mut nfev,
+                );
                 let t_next = t + h;
                 if let (Some(segs), Some((dq0, dp0))) =
                     (dense_segments.as_mut(), start_derivative.as_ref())
                 {
-                    let end = compute_flat_derivative(f, t_next, &q, &p, p_params, &mut work, &mut nfev);
+                    let end =
+                        compute_flat_derivative(f, t_next, &q, &p, p_params, &mut work, &mut nfev);
                     segs.push(build_dense_segment(
                         t, h, &q_old, &p_old, dq0, dp0, &q, &p, &end.0, &end.1,
                     ));
@@ -263,9 +287,15 @@ fn step_once<F>(
     F: SeparableHamiltonianSystem,
 {
     match method {
-        SymplecticMethod::SymplecticEulerKickDrift => kick_drift_step(f, t, h, q, p, p_params, work, nfev),
-        SymplecticMethod::SymplecticEulerDriftKick => drift_kick_step(f, t, h, q, p, p_params, work, nfev),
-        SymplecticMethod::VelocityVerlet => velocity_verlet_step(f, t, h, q, p, p_params, work, nfev),
+        SymplecticMethod::SymplecticEulerKickDrift => {
+            kick_drift_step(f, t, h, q, p, p_params, work, nfev)
+        }
+        SymplecticMethod::SymplecticEulerDriftKick => {
+            drift_kick_step(f, t, h, q, p, p_params, work, nfev)
+        }
+        SymplecticMethod::VelocityVerlet => {
+            velocity_verlet_step(f, t, h, q, p, p_params, work, nfev)
+        }
         SymplecticMethod::Ruth3 => ruth3_step(f, t, h, q, p, p_params, work, nfev),
         SymplecticMethod::Yoshida4 => yoshida4_step(f, t, h, q, p, p_params, work, nfev),
     }

@@ -36,7 +36,11 @@ impl Solution {
         let (start, end) = dense
             .t_span()
             .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
-        let (lo, hi) = if start < end { (start, end) } else { (end, start) };
+        let (lo, hi) = if start < end {
+            (start, end)
+        } else {
+            (end, start)
+        };
         if t < lo || t > hi {
             return Err(Error::Interpolation(InterpolationError::OutOfRange {
                 t,
@@ -63,7 +67,11 @@ impl Solution {
         let (start, end) = dense
             .t_span()
             .ok_or(Error::Interpolation(InterpolationError::NotEnabled))?;
-        let (lo, hi) = if start < end { (start, end) } else { (end, start) };
+        let (lo, hi) = if start < end {
+            (start, end)
+        } else {
+            (end, start)
+        };
         for &t in ts {
             if t < lo || t > hi {
                 return Err(Error::Interpolation(InterpolationError::OutOfRange {
@@ -74,7 +82,10 @@ impl Solution {
             }
         }
         let results = dense.evaluate_many(ts);
-        Ok(results.into_iter().map(|opt: Option<Vec<Float>>| opt.unwrap()).collect())
+        Ok(results
+            .into_iter()
+            .map(|opt: Option<Vec<Float>>| opt.unwrap())
+            .collect())
     }
 
     /// Return the time span covered by the dense output if available.
